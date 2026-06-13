@@ -7,13 +7,13 @@ import {
   Linkedin,
   Globe,
 } from 'lucide-react';
-import RecruitEdgeLogo from './RecruitEdgeLogo';
+import PamtenLogo from './PamtenLogo';
 
 export default function Footer() {
   return (
     <footer className="w-full px-4 py-10 bg-white dark:bg-zinc-900 text-gray-900 dark:text-gray-300 border-t border-gray-200 dark:border-zinc-800 transition-colors duration-300">
       <div className="max-w-6xl mx-auto text-center space-y-6">
-        <h2 className="flex items-center justify-center gap-2 text-gray-900 dark:text-white text-lg font-semibold"><RecruitEdgeLogo className="w-6 h-6" />RecruitEdge</h2>
+        <h2 className="flex items-center justify-center gap-2 text-gray-900 dark:text-white text-lg font-semibold"><PamtenLogo width={60} height={30} className="h-6 w-auto" />RecruitEdge</h2>
         <p className="text-sm text-gray-600 dark:text-gray-400">Stay updated with RecruitEdge</p>
 
         <form className="flex justify-center gap-2 max-w-md mx-auto">

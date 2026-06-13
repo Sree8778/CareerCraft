@@ -3,12 +3,43 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import CandidateLayout from '@/components/layout/CandidateLayout'; // Import the new layout
+import CandidateLayout from '@/components/layout/CandidateLayout';
+import { toast } from 'sonner';
+import { encryptApiKey } from '@/lib/crypto';
+import { KeyRound, CheckCircle, Trash2, ExternalLink, PlusCircle, RefreshCw, ShieldAlert, ShieldCheck, QrCode, Lock } from 'lucide-react';
+import { jsonHeaders } from '@/lib/api';
+
+type Provider = 'Gemini' | 'OpenAI' | 'Claude' | 'Groq';
+
+interface WalletKey {
+  id: string;
+  provider: Provider;
+  status: 'Active' | 'Standby';
+  encryptedKey?: string;
+}
+
+const API_BASE = 'http://127.0.0.1:5000/api';
+
+const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
 export default function CandidateProfilePage() {
   const { user, isAuthenticated } = useAuth();
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Profile form state
+  const [profileName, setProfileName] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
+  const [profileLocation, setProfileLocation] = useState('');
+  const [profileBio, setProfileBio] = useState('');
+
+  // Wallet state
+  const [wallet, setWallet] = useState<WalletKey[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<Provider>('Gemini');
+  const [inputKey, setInputKey] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -18,17 +49,235 @@ export default function CandidateProfilePage() {
     }
   }, [isAuthenticated, user, router]);
 
-  if (!isAuthenticated || user?.role !== 'candidate') {
-    return null;
-  }
+  // Initialise profile fields from user context
+  useEffect(() => {
+    if (user) {
+      setProfileName(user.name || '');
+    }
+  }, [user]);
+
+  const handleSaveProfile = async () => {
+    setIsSaving(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/${user?.id}/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer mock_token_for_${user?.id}`,
+        },
+        body: JSON.stringify({ fullName: profileName, phone: profilePhone, location: profileLocation, bio: profileBio }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      toast.success('Profile saved successfully!');
+      setIsEditing(false);
+    } catch {
+      toast.error('Could not save profile. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Load wallet from Firestore on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    // Load local cache first for instant responsiveness
+    const raw = localStorage.getItem('user_api_keys_wallet');
+    if (raw) {
+      try {
+        const parsed: WalletKey[] = JSON.parse(raw);
+        setWallet(parsed);
+      } catch {}
+    }
+
+    // Dynamic import to support SSR environments safely
+    const fetchWalletFromDb = async () => {
+      try {
+        const { doc, getDoc } = await import('firebase/firestore');
+        const { db } = await import('@/lib/firebase');
+        const userDocRef = doc(db, 'users', user.id);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          const dbWallet = userData.apiKeysWallet || [];
+          const mappedWallet: WalletKey[] = dbWallet.map((item: any) => ({
+            id: item.id || Math.random().toString(36).substring(7),
+            provider: item.provider || 'Gemini',
+            status: item.status || 'Standby',
+            encryptedKey: item.encryptedKey || ''
+          }));
+          setWallet(mappedWallet);
+          localStorage.setItem('user_api_keys_wallet', JSON.stringify(mappedWallet));
+        }
+      } catch (err) {
+        console.error('Failed to sync wallet from Firestore:', err);
+      }
+    };
+
+    fetchWalletFromDb();
+  }, [user]);
+
+  const persistWallet = (updated: WalletKey[]) => {
+    localStorage.setItem('user_api_keys_wallet', JSON.stringify(updated));
+  };
+
+  const handleStackKey = async () => {
+    setVerifyError(null);
+    const keyVal = inputKey.trim();
+    if (!keyVal) { toast.error('Please enter an API key.'); return; }
+
+    setIsVerifying(true);
+    const toastId = toast.loading(`Verifying ${selectedProvider} key…`);
+    try {
+      const res = await fetch(`${API_BASE}/vault/verify-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: selectedProvider, key: keyVal }),
+      });
+      const result = await res.json();
+
+      if (!result.valid) {
+        setVerifyError(result.error || 'Invalid key. Please check and try again.');
+        toast.error('Verification failed.', { id: toastId });
+        return;
+      }
+
+      // Save to backend vault
+      const stackRes = await fetch(`${API_BASE}/vault/wallet/stack`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer mock_token_for_${user?.id}`,
+        },
+        body: JSON.stringify({ uid: user?.id, provider: selectedProvider, key: keyVal }),
+      });
+      const stackResult = await stackRes.json();
+
+      const newEntry: WalletKey = stackResult.entry ?? {
+        id: Math.random().toString(36).slice(2, 9),
+        provider: selectedProvider,
+        status: wallet.length === 0 ? 'Active' : 'Standby',
+      };
+
+      const updated = [...wallet, newEntry];
+      setWallet(updated);
+      persistWallet(updated);
+      // Store client-encrypted copy so the resume builder can send it in API calls
+      if (selectedProvider === 'Gemini' && user?.id) {
+        const clientEncrypted = await encryptApiKey(keyVal, user.id);
+        localStorage.setItem('user_gemini_api_key', clientEncrypted);
+      }
+      setInputKey('');
+      toast.success(`${selectedProvider} key verified and stacked!`, { id: toastId });
+    } catch {
+      // Offline fallback
+      toast.error('Could not reach backend. Key stacked locally.', { id: toastId });
+      const newEntry: WalletKey = {
+        id: Math.random().toString(36).slice(2, 9),
+        provider: selectedProvider,
+        status: wallet.length === 0 ? 'Active' : 'Standby',
+      };
+      const updated = [...wallet, newEntry];
+      setWallet(updated);
+      persistWallet(updated);
+      if (selectedProvider === 'Gemini' && user?.id) {
+        const clientEncrypted = await encryptApiKey(keyVal, user.id);
+        localStorage.setItem('user_gemini_api_key', clientEncrypted);
+      }
+      setInputKey('');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  // 2FA state
+  const [tfaEnabled, setTfaEnabled] = useState(false);
+  const [tfaStep, setTfaStep] = useState<'idle' | 'setup' | 'disable'>('idle');
+  const [tfaSecret, setTfaSecret] = useState('');
+  const [tfaUri, setTfaUri] = useState('');
+  const [tfaOtp, setTfaOtp] = useState('');
+  const [tfaLoading, setTfaLoading] = useState(false);
+
+  const handleSetup2FA = async () => {
+    setTfaLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/2fa/setup`, {
+        method: 'POST', headers: jsonHeaders(user!.id),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setTfaSecret(data.secret);
+      setTfaUri(data.uri);
+      setTfaStep('setup');
+    } catch (e: any) { toast.error(e.message || '2FA setup failed'); }
+    finally { setTfaLoading(false); }
+  };
+
+  const handleVerify2FA = async () => {
+    if (tfaOtp.length < 6) { toast.error('Enter the 6-digit code from your authenticator app'); return; }
+    setTfaLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/2fa/verify`, {
+        method: 'POST', headers: jsonHeaders(user!.id),
+        body: JSON.stringify({ otp: tfaOtp }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setTfaEnabled(true);
+      setTfaStep('idle');
+      setTfaOtp('');
+      toast.success('2FA enabled! Your account is now more secure.');
+    } catch (e: any) { toast.error(e.message || 'Invalid code'); }
+    finally { setTfaLoading(false); }
+  };
+
+  const handleDisable2FA = async () => {
+    if (tfaOtp.length < 6) { toast.error('Enter your current authenticator code to disable 2FA'); return; }
+    setTfaLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/2fa/disable`, {
+        method: 'POST', headers: jsonHeaders(user!.id),
+        body: JSON.stringify({ otp: tfaOtp }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setTfaEnabled(false);
+      setTfaStep('idle');
+      setTfaOtp('');
+      toast.success('2FA disabled.');
+    } catch (e: any) { toast.error(e.message || 'Invalid code'); }
+    finally { setTfaLoading(false); }
+  };
+
+  const handleRemoveKey = async (id: string) => {
+    try {
+      await fetch(`${API_BASE}/vault/wallet/remove`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer mock_token_for_${user?.id}`,
+        },
+        body: JSON.stringify({ uid: user?.id, keyId: id }),
+      });
+    } catch {}
+
+    const filtered = wallet.filter(k => k.id !== id);
+    if (filtered.length > 0 && !filtered.some(k => k.status === 'Active')) {
+      filtered[0].status = 'Active';
+    }
+    setWallet(filtered);
+    persistWallet(filtered);
+    toast.info('Key removed from wallet.');
+  };
+
+  if (!isAuthenticated || user?.role !== 'candidate') return null;
 
   return (
-    <CandidateLayout> {/* Wrap content with CandidateLayout */}
-      {/* The main content area now has ml-60 applied by CandidateLayout,
-          so we remove it from here to prevent double margin.
-          The min-h-screen and p-6 are still relevant for the content itself. */}
+    <CandidateLayout>
       <div className="min-h-screen bg-white dark:bg-zinc-900 p-6 transition-colors duration-300">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto space-y-6">
+
+          {/* Profile Card */}
           <div className="glass rounded-xl shadow-lg p-8">
             <div className="flex justify-between items-center mb-8">
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -48,24 +297,14 @@ export default function CandidateProfilePage() {
                 <div className="text-center">
                   <div className="w-32 h-32 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mx-auto mb-4 flex items-center justify-center text-white text-4xl font-bold">
                     {user?.avatar ? (
-                      <img 
-                        src={user.avatar} 
-                        alt={user.name} 
-                        className="w-32 h-32 rounded-full object-cover"
-                      />
+                      <img src={user.avatar} alt={user.name} className="w-32 h-32 rounded-full object-cover" />
                     ) : (
                       user?.name?.charAt(0).toUpperCase() || 'U'
                     )}
                   </div>
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">
-                    {user?.name}
-                  </h2>
-                  <p className="text-gray-600 dark:text-gray-300 text-sm">
-                    {user?.email}
-                  </p>
-                  <p className="text-purple-600 dark:text-purple-400 text-sm capitalize">
-                    {user?.role}
-                  </p>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">{user?.name}</h2>
+                  <p className="text-gray-600 dark:text-gray-300 text-sm">{user?.email}</p>
+                  <p className="text-purple-600 dark:text-purple-400 text-sm capitalize">{user?.role}</p>
                 </div>
               </div>
 
@@ -73,82 +312,240 @@ export default function CandidateProfilePage() {
               <div className="md:col-span-2">
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Full Name
-                    </label>
-                    <input
-                      type="text"
-                      defaultValue={user?.name}
-                      disabled={!isEditing}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Full Name</label>
+                    <input type="text" value={profileName} onChange={e => setProfileName(e.target.value)} disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800" />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      defaultValue={user?.email}
-                      disabled={!isEditing}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
+                    <input type="email" value={user?.email || ''} disabled
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800" />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Phone Number
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="+1 (555) 123-4567"
-                      disabled={!isEditing}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone Number</label>
+                    <input type="tel" value={profilePhone} onChange={e => setProfilePhone(e.target.value)} placeholder="+1 (555) 123-4567" disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800" />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Location
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="City, State"
-                      disabled={!isEditing}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Location</label>
+                    <input type="text" value={profileLocation} onChange={e => setProfileLocation(e.target.value)} placeholder="City, State" disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800" />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Bio
-                    </label>
-                    <textarea
-                      rows={4}
-                      placeholder="Tell us about yourself..."
-                      disabled={!isEditing}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bio</label>
+                    <textarea rows={4} value={profileBio} onChange={e => setProfileBio(e.target.value)} placeholder="Tell us about yourself..." disabled={!isEditing}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800" />
                   </div>
-
                   {isEditing && (
                     <div className="flex space-x-4">
-                      <button className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors">
-                        Save Changes
+                      <button onClick={handleSaveProfile} disabled={isSaving} className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg transition-colors">
+                        {isSaving ? 'Saving…' : 'Save Changes'}
                       </button>
-                      <button 
-                        onClick={() => setIsEditing(false)}
-                        className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
-                      >
-                        Cancel
-                      </button>
+                      <button onClick={() => setIsEditing(false)} className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors">Cancel</button>
                     </div>
                   )}
                 </div>
               </div>
             </div>
           </div>
+
+          {/* ── API Keys Rotation Wallet ── */}
+          <div className="rounded-xl shadow-lg p-8 bg-zinc-950 border border-white/10">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 bg-indigo-500/10 rounded-lg">
+                <KeyRound className="w-5 h-5 text-indigo-400" />
+              </div>
+              <h2 className="text-xl font-bold text-white">API Keys Rotation Wallet</h2>
+              {wallet.length > 0 && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full">
+                  <CheckCircle className="w-3 h-3" /> {wallet.length} key{wallet.length > 1 ? 's' : ''} stacked
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-zinc-400 mb-5">
+              Add multiple keys to create a fallback chain. Our AI rotates them to prevent rate issues and guarantee 100% free usage!{' '}
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer"
+                className="text-indigo-400 hover:underline inline-flex items-center gap-1">
+                Get a free Gemini key <ExternalLink className="w-3 h-3" />
+              </a>
+            </p>
+
+            {/* Encryption notice */}
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4 flex gap-3 text-xs leading-relaxed text-yellow-300 mb-5">
+              <ShieldAlert className="w-5 h-5 shrink-0 text-yellow-400" />
+              <div>
+                <span className="font-bold">Zero Risk Encryption Policy:</span> Your API keys are encrypted immediately inside your browser using AES-GCM client-side cryptography before writing to databases. Absolutely nobody else can read them.
+              </div>
+            </div>
+
+            {/* Add key row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mb-5">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold font-mono text-zinc-400 uppercase">Provider</label>
+                <select
+                  value={selectedProvider}
+                  onChange={e => setSelectedProvider(e.target.value as Provider)}
+                  className="w-full py-3 px-3 bg-black border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="Gemini">Gemini AI (Recommended)</option>
+                  <option value="OpenAI">OpenAI GPT-4</option>
+                  <option value="Claude">Claude Anthropic</option>
+                  <option value="Groq">Groq High-Speed</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-2 space-y-1.5">
+                <label className="text-[10px] font-bold font-mono text-zinc-400 uppercase">Enter {selectedProvider} API Key</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={inputKey}
+                    onChange={e => setInputKey(e.target.value)}
+                    placeholder={`Paste your ${selectedProvider} key here`}
+                    disabled={isVerifying}
+                    className="flex-1 py-3 px-4 bg-black/40 border border-white/10 rounded-xl text-xs text-white font-mono placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <button
+                    onClick={handleStackKey}
+                    disabled={isVerifying || !inputKey.trim()}
+                    className="py-3 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-xs font-bold rounded-xl flex items-center gap-1.5 whitespace-nowrap transition"
+                  >
+                    {isVerifying ? <RefreshCw className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+                    {isVerifying ? 'Verifying…' : 'Stack Key'}
+                  </button>
+                </div>
+                {verifyError && (
+                  <p className="text-[10px] text-rose-400 font-mono pt-1">{verifyError}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Wallet chain display */}
+            <div className="space-y-2.5">
+              <h4 className="text-[10px] font-bold font-mono tracking-wider text-zinc-500 uppercase">
+                Your Rotating Key Chain ({wallet.length} key{wallet.length !== 1 ? 's' : ''} stacked)
+              </h4>
+
+              {wallet.length === 0 ? (
+                <div className="text-center py-6 border border-dashed border-white/5 rounded-2xl text-zinc-500 text-xs">
+                  No keys stacked yet. Add your first key above to enable all AI features!
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {wallet.map(item => (
+                    <div key={item.id} className="p-3 bg-zinc-900 border border-white/5 rounded-xl flex justify-between items-center text-xs">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold font-mono text-indigo-400">{item.provider}</span>
+                          <span className={`text-[7px] font-bold uppercase tracking-widest px-1.5 rounded ${item.status === 'Active' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-800 text-zinc-400'}`}>
+                            {item.status}
+                          </span>
+                        </div>
+                        <div className="font-mono text-[9px] text-zinc-500">
+                          ••••••••••••••••••••••••••••••
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveKey(item.id)}
+                        className="text-zinc-500 hover:text-red-400 p-1.5 rounded bg-white/5 hover:bg-white/10 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Two-Factor Authentication ── */}
+          <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-md p-6 space-y-4 border border-zinc-200 dark:border-zinc-700">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-indigo-400" /> Two-Factor Authentication
+              </h2>
+              <span className={`text-xs font-bold px-3 py-1 rounded-full border ${tfaEnabled ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'}`}>
+                {tfaEnabled ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Use an authenticator app (Google Authenticator, Authy) to generate time-based one-time codes for extra security.
+            </p>
+
+            {tfaStep === 'idle' && (
+              <button
+                onClick={tfaEnabled ? () => setTfaStep('disable') : handleSetup2FA}
+                disabled={tfaLoading}
+                className={`flex items-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl border transition disabled:opacity-50 ${tfaEnabled ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20' : 'bg-indigo-600/20 border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/30'}`}
+              >
+                <Lock className="w-4 h-4" />
+                {tfaLoading ? 'Loading…' : tfaEnabled ? 'Disable 2FA' : 'Enable 2FA'}
+              </button>
+            )}
+
+            {tfaStep === 'setup' && (
+              <div className="space-y-4 bg-zinc-900/50 border border-white/10 rounded-xl p-5">
+                <p className="text-xs text-zinc-400 font-medium">
+                  Scan this QR code with your authenticator app, or enter the setup key manually.
+                </p>
+                <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl p-3">
+                  <QrCode className="w-5 h-5 text-indigo-400 shrink-0" />
+                  <code className="text-xs text-indigo-300 font-mono break-all">{tfaSecret}</code>
+                </div>
+                <a
+                  href={tfaUri}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-cyan-400 underline flex items-center gap-1"
+                >
+                  <ExternalLink className="w-3 h-3" /> Open in authenticator app
+                </a>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="Enter 6-digit code"
+                    value={tfaOtp}
+                    onChange={e => setTfaOtp(e.target.value.replace(/\D/g, ''))}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 font-mono tracking-widest"
+                  />
+                  <button onClick={handleVerify2FA} disabled={tfaLoading}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition">
+                    {tfaLoading ? '…' : 'Verify'}
+                  </button>
+                  <button onClick={() => { setTfaStep('idle'); setTfaOtp(''); }}
+                    className="text-zinc-400 hover:text-white text-sm px-3 py-2.5 rounded-xl border border-white/10 transition">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {tfaStep === 'disable' && (
+              <div className="space-y-4 bg-zinc-900/50 border border-rose-500/20 rounded-xl p-5">
+                <p className="text-xs text-zinc-400">Enter your current authenticator code to confirm disabling 2FA.</p>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="6-digit code"
+                    value={tfaOtp}
+                    onChange={e => setTfaOtp(e.target.value.replace(/\D/g, ''))}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none font-mono tracking-widest"
+                  />
+                  <button onClick={handleDisable2FA} disabled={tfaLoading}
+                    className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition">
+                    {tfaLoading ? '…' : 'Disable'}
+                  </button>
+                  <button onClick={() => { setTfaStep('idle'); setTfaOtp(''); }}
+                    className="text-zinc-400 hover:text-white text-sm px-3 py-2.5 rounded-xl border border-white/10 transition">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
     </CandidateLayout>

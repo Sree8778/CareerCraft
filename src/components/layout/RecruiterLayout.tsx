@@ -10,7 +10,7 @@ interface RecruiterLayoutProps {
 
 export default function RecruiterLayout({ children }: RecruiterLayoutProps) {
   return (
-    <div className="flex h-screen w-full overflow-hidden">
+    <div className="flex min-h-screen w-full">
       {/* Sidebar */}
       <Sidebar />
 
@@ -20,6 +20,7 @@ export default function RecruiterLayout({ children }: RecruiterLayoutProps) {
           {children}
         </main>
       </div>
+
     </div>
   );
 }

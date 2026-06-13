@@ -56,15 +56,45 @@
         }
 
         /* --- Critical Fixes for Blank Space --- */
+        /* Reduce paragraph margin to minimum, let content define spacing */
         p {
-            margin: 0 0 3px 0; /* Reduced bottom margin on paragraphs */
+            margin: 0;
+            padding: 0;
         }
-        div, p {
-            white-space: pre-wrap; 
+
+        /* Ensure UL/LI have minimal default margins/paddings as well */
+        ul {
+            margin: 0;
+            padding: 0;
+            list-style-position: inside; /* Ensures bullets are inside text flow */
         }
+        li {
+            margin: 0; /* Changed from 0 0 3px 0; for tighter list */
+            padding: 0;
+            text-indent: -1em; /* For basic bullet appearance if list-style-type is outside */
+            padding-left: 1em; /* To align text after bullet */
+        }
+        li:before {
+            content: '• '; /* Fallback bullet for some PDF engines */
+        }
+
+
+        /* For plain text areas where newlines should be preserved */
+        pre {
+            white-space: pre-wrap; /* Preserve whitespace and wrap text */
+            word-wrap: break-word; /* Break long words */
+            margin: 0;
+            padding: 0;
+            border: none;
+            background: none;
+            font-family: inherit; /* Inherit font from body */
+            font-size: inherit; /* Inherit font size from body */
+            color: inherit; /* Inherit color from body */
+        }
+        
         /* This finds any generated div or p tag that is empty 
            and completely removes its margins and padding, collapsing the blank space. */
-        div:empty, p:empty {
+        div:empty:not([class*="tiptap-editor"]), p:empty { /* Added :not([class*="tiptap-editor"]) to avoid hiding Tiptap editor placeholders */
             margin: 0;
             padding: 0;
             display: none;
@@ -74,7 +104,14 @@
 <body>
     <div class="header">
         <h1 class="accent-color">{{ personal.name }}</h1>
-        <p>{{ [personal.email, personal.phone, personal.location, (personal.legalStatus if personal.legalStatus and personal.legalStatus != 'Prefer not to say')] | select('ne', none) | join(' | ') }}</p>
+        <p>
+            {% set contact_parts = [] %}
+            {% if personal.email %}{% set _ = contact_parts.append(personal.email) %}{% endif %}
+            {% if personal.phone %}{% set _ = contact_parts.append(personal.phone) %}{% endif %}
+            {% if personal.location %}{% set _ = contact_parts.append(personal.location) %}{% endif %}
+            {% if personal.legalStatus and personal.legalStatus != 'Prefer not to say' %}{% set _ = contact_parts.append(personal.legalStatus) %}{% endif %}
+            {{ contact_parts | join(' | ') }}
+        </p>
     </div>
 
     {% if summary and summary|striptags|trim %}
@@ -118,7 +155,7 @@
     <div class="section">
         <h2 class="accent-color">Skills</h2>
         {% for skill in skills %}
-        <p><span class="skills-category">{{ skill.category }}:</span> {{ skill.skills_list }}</p>
+        <p><span class="skills-category">{{ skill.category }}:</span> <pre>{{ skill.skills_list }}</pre></p>
         {% endfor %}
     </div>
     {% endif %}

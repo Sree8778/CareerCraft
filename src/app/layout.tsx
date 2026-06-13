@@ -1,3 +1,4 @@
+// src/app/layout.tsx
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -24,7 +25,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} font-sans`}>
-      <body className="bg-white dark:bg-[#0f0f10] text-gray-900 dark:text-white transition-colors duration-200">
+      <body
+        className="bg-white dark:bg-[#0f0f10] text-gray-900 dark:text-white transition-colors duration-200"
+        suppressHydrationWarning={true} // Add this prop
+      >
         <ThemeProvider>
           <AuthProvider>
             <LoginModalProvider>
@@ -35,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <div className="absolute bottom-[-4rem] right-[-4rem] w-[25rem] h-[25rem] bg-pink-500 opacity-20 blur-[100px] animate-blob2 rounded-full" />
                 </div>
                 <Navbar />
-                <main className="flex-1">{children}</main>
+                <main className="flex-1 pt-16">{children}</main>
                 <LoginModal />
               </div>
             </LoginModalProvider>

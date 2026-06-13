@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
-import RecruitEdgeLogo from "@/components/RecruitEdgeLogo";
+import PamtenLogo from "@/components/PamtenLogo";
 
 const navItems = [
   { name: "Dashboard", href: "/recruiter/dashboard" },
@@ -24,7 +24,7 @@ export default function DashboardNavbar() {
     >
       <div className="max-w-6xl mx-auto flex justify-between items-center">
         <Link href="/" className="flex items-center gap-2 text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
-          <RecruitEdgeLogo className="w-7 h-7" />
+          <PamtenLogo width={70} height={35} className="h-7 w-auto" />
           RecruitEdge
         </Link>
 

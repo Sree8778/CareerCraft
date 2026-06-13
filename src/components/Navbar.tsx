@@ -6,7 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { ModalContext } from '@/contexts/LoginModalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import ThemeToggle from '@/components/ThemeToggle';
-import RecruitEdgeLogo from '@/components/RecruitEdgeLogo';
+import PamtenLogo from '@/components/PamtenLogo';
 import Link from 'next/link'; // Make sure Link is imported
 
 export default function Navbar() {
@@ -63,12 +63,12 @@ export default function Navbar() {
   const isOnDashboard = pathname.includes('/recruiter/') || pathname.includes('/candidate/');
 
   return (
-    <nav className="w-full px-6 py-4 flex justify-between items-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-gray-200/50 dark:border-white/10 relative z-[9999]">
+    <nav className="fixed top-0 left-0 right-0 w-full px-6 py-4 flex justify-between items-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-gray-200/50 dark:border-white/10 z-[9999]">
       <div 
         className="flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-white cursor-pointer hover:opacity-80 transition-opacity"
         onClick={handleLogoClick}
       >
-        <RecruitEdgeLogo className="w-8 h-8" />
+        <PamtenLogo width={80} height={40} className="h-8 w-auto" />
         RecruitEdge
       </div>
       
@@ -152,12 +152,13 @@ export default function Navbar() {
           </div>
         ) : (
           <>
-            <button
-              onClick={() => openModal('signup')}
-              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded text-white hover:opacity-90"
-            >
-              Try it Free
-            </button>
+            <Link href="/signup">
+              <button
+                className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded text-white hover:opacity-90"
+              >
+                Try it Free
+              </button>
+            </Link>
             <button
               onClick={() => openModal('login')}
               className="px-4 py-2 bg-transparent border border-gray-300 dark:border-white rounded text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-white hover:text-black dark:hover:text-black transition"

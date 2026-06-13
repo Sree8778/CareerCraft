@@ -4,7 +4,7 @@ import io
 from bs4 import BeautifulSoup
 
 # Import our new AI function
-from .gemini_utils import structure_text_with_ai # Corrected relative import
+from ollama_utils import structure_text_with_ai
 
 def parse_resume_file(file_storage):
     """
@@ -42,11 +42,12 @@ def parse_resume_file(file_storage):
         # --- This is the new, live AI call ---
         # Replace the old placeholder data with a call to the AI utility
         print("--- Sending extracted text to AI for structuring... ---")
-        structured_data = structure_text_with_ai(raw_text) # Uses the imported function
-        print("--- AI processing complete. Returning structured data. ---")
-        
+        structured_data = structure_text_with_ai(raw_text)
+        print("--- AI processing complete. ---")
         return {"parsedData": structured_data}
 
+    except RuntimeError:
+        raise  # Let the route handler surface the Gemini error directly
     except Exception as e:
         print(f"Error in parse_resume_file: {e}")
         return {"error": f"An error occurred while parsing the file: {e}"}

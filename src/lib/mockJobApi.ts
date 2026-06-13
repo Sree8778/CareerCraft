@@ -73,7 +73,7 @@ export const mockJobApi = {
   },
 
   // Add a new job
-  addJob: async (newJobData: Omit<Job, 'id' | 'postedDate' | 'emoji' | 'benefits' | 'requirements' | 'company'> & { companyName: string; salaryRange: [number, number] }): Promise<Job> => {
+  addJob: async (newJobData: Omit<Job, 'id' | 'postedDate' | 'emoji' | 'benefits' | 'requirements' | 'company'> & { companyName: string; salaryRange: [number, number]; requirements?: string[]; benefits?: string[] }): Promise<Job> => {
     await new Promise((resolve) => setTimeout(resolve, 300));
     // Simulate adding a few default requirements/benefits and an emoji
     const addedJob: Job = {

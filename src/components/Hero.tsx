@@ -10,6 +10,8 @@ import {
   ActivitySquareIcon,
 } from 'lucide-react';
 
+import PamtenMotiveAnimation from './PamtenMotiveAnimation';
+
 const benefits = [
   {
     title: 'Top Talent Pool',
@@ -37,26 +39,34 @@ export default function Hero() {
   const { openModal } = useContext(ModalContext);
 
   return (
-    <section className="relative z-10 w-full pt-32 pb-20 text-gray-900 dark:text-white">
-      <div className="text-center px-4">
-        <motion.h1
-          className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          Your Next Career Starts Here
-        </motion.h1>
-        <p className="text-lg text-gray-600 dark:text-gray-300 mt-4 max-w-xl mx-auto">
-          Connecting top talent with leading companies worldwide. Find your dream job or the perfect candidate today.
-        </p>
-        <div className="mt-8 flex justify-center gap-4">
-          <button
-            onClick={() => openModal()}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-md text-sm"
+    <section className="relative z-10 w-full pt-32 pb-10 text-gray-900 dark:text-white">
+      <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+        {/* Left Column: Heading and Details */}
+        <div className="lg:col-span-7 text-left">
+          <motion.h1
+            className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-gray-900 dark:text-white leading-tight"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
           >
-            Find Jobs
-          </button>
+            Driven to Transform <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-cyan-500">Your Career</span>
+          </motion.h1>
+          <p className="text-lg text-gray-600 dark:text-gray-300 mt-6 max-w-xl leading-relaxed">
+            Connecting top talent with leading employers globally. Built on the core motive of service first and dedicated to making a positive difference in technology.
+          </p>
+          <div className="mt-8 flex gap-4">
+            <button
+              onClick={() => openModal()}
+              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90 text-white font-semibold px-8 py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-500/20"
+            >
+              Get Started Now
+            </button>
+          </div>
+        </div>
+
+        {/* Right Column: Interactive 3D Motive Animation */}
+        <div className="lg:col-span-5 w-full">
+          <PamtenMotiveAnimation />
         </div>
       </div>
 

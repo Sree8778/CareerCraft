@@ -6,92 +6,134 @@ import RequisitionCard from '@/components/recruiter/RequisitionCard';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { mockJobApi, Job } from '@/lib/mockJobApi';  // Import mockJobApi and Job type
-import Link from 'next/link'; // Import Link
+import Link from 'next/link';
+import { RefreshCw, Plus, Briefcase } from 'lucide-react';
 
-type RequisitionStatus = "Open" | "Closed" | "In Review";
+type StatusFilter = 'All' | 'Open' | 'Archived' | 'Closed' | 'In Review';
 
 export default function RequisitionListPage() {
-  const [filter, setFilter] = useState<RequisitionStatus | 'All'>('All');
-  const [jobs, setJobs] = useState<Job[]>([]); // Use Job type from mockJobApi
+  const [filter, setFilter] = useState<StatusFilter>('All');
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const { user, isAuthenticated } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/');
-    } else if (user?.role !== 'recruiter') {
-      router.push('/');
-    } else {
-      // Fetch jobs when component mounts or user/auth changes
-      const fetchJobs = async () => {
-        try {
-          const fetchedJobs = await mockJobApi.getJobs(); // Fetch jobs using mockJobApi
-          // Map mockJobApi's Job type to RequisitionCard's props
-          const formattedJobs = fetchedJobs.map(job => ({
-            id: job.id, // Use job.id directly which is a string now
-            title: job.title,
-            location: job.location,
-            postedDate: job.postedDate,
-            status: 'Open' as RequisitionStatus, // Default all fetched jobs to 'Open' for simplicity
-            applicants: Math.floor(Math.random() * 50) + 1, // Mock applicants
-          }));
-          setJobs(formattedJobs as any); // Type assertion for now due to status mapping
-        } catch (error) {
-          console.error('Failed to fetch jobs:', error);
-        }
-      };
-      fetchJobs();
-    }
+    if (!isAuthenticated || user?.role !== 'recruiter') { router.push('/'); return; }
+
+    const fetchJobs = async () => {
+      setLoading(true);
+      try {
+        // Fetch jobs and their application counts in parallel
+        const res = await fetch(`http://127.0.0.1:5000/api/jobs?recruiterId=${user.id}`, {
+          headers: { 'Authorization': `Bearer mock_token_for_${user.id}` },
+        });
+        const data = await res.json();
+        const jobList: any[] = data.jobs || [];
+
+        // Fetch applicant counts for each job
+        const withCounts = await Promise.all(
+          jobList.map(async (job: any) => {
+            try {
+              const appsRes = await fetch(`http://127.0.0.1:5000/api/jobs/${job.id}/applications`, {
+                headers: { 'Authorization': `Bearer mock_token_for_${user.id}` },
+              });
+              const appsData = await appsRes.json();
+              return { ...job, applicants: (appsData.applications || []).length };
+            } catch {
+              return { ...job, applicants: 0 };
+            }
+          })
+        );
+        setJobs(withCounts);
+      } catch {
+        setJobs([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchJobs();
   }, [isAuthenticated, user, router]);
 
-  if (!isAuthenticated || user?.role !== 'recruiter') {
-    return null;
-  }
+  if (!isAuthenticated || user?.role !== 'recruiter') return null;
 
-  // Filter based on the status, assuming all mock jobs are 'Open' for now.
-  // In a real app, you'd store the status in the backend/mockJobApi.
-  const filtered =
-    filter === 'All'
-      ? jobs
-      : jobs.filter((job) => job.status === filter);
+  const filtered = filter === 'All' ? jobs : jobs.filter(j => (j.status || 'Open') === filter);
 
+  const statusCounts = jobs.reduce<Record<string, number>>((acc, j) => {
+    const s = j.status || 'Open';
+    acc[s] = (acc[s] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <RecruiterLayout>
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Requisitions</h1>
-        <Link href="/recruiter/requisitions/new" passHref>
-          <button className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition">
-            + New Requisition
-          </button>
-        </Link>
-      </div>
+      <div className="text-white space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">My Requisitions</h1>
+            <p className="text-zinc-400 text-sm mt-1">{jobs.length} job posting{jobs.length !== 1 ? 's' : ''}</p>
+          </div>
+          <Link href="/recruiter/requisitions/new"
+            className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition">
+            <Plus className="w-4 h-4" />New Requisition
+          </Link>
+        </div>
 
-      <div className="flex gap-4 mb-6">
-        {['All', 'Open', 'Closed', 'In Review'].map((s) => ( // Use string array for statuses
-          <button
-            key={s}
-            onClick={() => setFilter(s as RequisitionStatus | 'All')}
-            className={`px-4 py-1 rounded-full text-sm border hover:bg-white hover:text-black transition ${
-              filter === s ? 'bg-white text-black' : 'bg-transparent text-white border-white/40'
-            }`}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+        {/* Filters */}
+        <div className="flex flex-wrap gap-2">
+          {(['All', 'Open', 'In Review', 'Closed', 'Archived'] as StatusFilter[]).map(s => (
+            <button key={s} onClick={() => setFilter(s)}
+              className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${
+                filter === s ? 'bg-purple-600 border-purple-500 text-white' : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white'
+              }`}>
+              {s}
+              {s !== 'All' && statusCounts[s] !== undefined && (
+                <span className="ml-1.5 text-xs opacity-70">{statusCounts[s]}</span>
+              )}
+              {s === 'All' && <span className="ml-1.5 text-xs opacity-70">{jobs.length}</span>}
+            </button>
+          ))}
+        </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filtered.map((req) => (
-          // Ensure RequisitionCard can handle string IDs if its prop type is number
-          // For now, casting req.id to string if it's expected as number in RequisitionCard
-          <RequisitionCard key={req.id} {...req} id={req.id as string} />
-        ))}
-        {filtered.length === 0 && <p className="text-gray-400">No requisitions found.</p>}
+        {loading ? (
+          <div className="flex items-center justify-center py-20 gap-3 text-zinc-400">
+            <RefreshCw className="w-5 h-5 animate-spin text-purple-400" />Loading your jobs...
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="glass rounded-xl p-12 border border-white/10 text-center text-zinc-500">
+            <Briefcase className="w-12 h-12 mx-auto mb-4 text-zinc-700" />
+            <p className="font-semibold text-lg">
+              {filter === 'All' ? "No job postings yet" : `No ${filter} jobs`}
+            </p>
+            {filter === 'All' && (
+              <p className="text-sm mt-2 mb-6">Post your first job to start receiving applications.</p>
+            )}
+            {filter === 'All' && (
+              <Link href="/recruiter/requisitions/new"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition">
+                <Plus className="w-4 h-4" />Post a Job
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filtered.map(job => (
+              <RequisitionCard
+                key={job.id}
+                id={job.id}
+                title={job.title}
+                location={job.location || 'Remote'}
+                postedDate={job.postedDate || ''}
+                status={job.status || 'Open'}
+                applicants={job.applicants || 0}
+                department={job.department}
+                jobType={job.jobType}
+              />
+            ))}
+          </div>
+        )}
       </div>
-    </div>
     </RecruiterLayout>
   );
 }

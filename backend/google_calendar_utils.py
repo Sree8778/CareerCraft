@@ -32,9 +32,9 @@ def get_google_calendar_service():
                 raise FileNotFoundError("credentials.json missing for Google Calendar API.")
             
             flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-            # IMPORTANT: Changed port=0 to a fixed port (e.g., 5000) for consistent redirect URI
+            # IMPORTANT: Changed port=5000 to 5003 to prevent port collision with Flask backend
             # Ensure this port is registered in Google Cloud Console -> OAuth client ID -> Authorized redirect URIs
-            creds = flow.run_local_server(port=5000, success_message='Authentication complete. You can close this window.') 
+            creds = flow.run_local_server(port=5003, success_message='Authentication complete. You can close this window.') 
         # Save the credentials for the next run
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)
