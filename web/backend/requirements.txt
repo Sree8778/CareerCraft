@@ -1,4 +1,5 @@
 # backend/requirements.txt
+gunicorn
 Flask
 Flask-Cors
 python-dotenv

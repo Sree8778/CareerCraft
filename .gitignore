@@ -49,6 +49,9 @@ android application/**/*.py[cod]
 test_out.docx
 test_out.pdf
 
+# Cloud deployment secrets
+.env.cloud
+
 # Miscellaneous
 .DS_Store
 *.pem
