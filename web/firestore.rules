@@ -1,0 +1,67 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if the user is accessing their own document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Helper function to check if user is a recruiter
+    function isRecruiter() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter' ||
+         request.auth.token.role == 'recruiter');
+    }
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      // Users can read their own profile; recruiters can view any candidate's profile to review application details
+      allow read: if isOwner(userId) || isRecruiter();
+      // Users can only create or update their own profile details
+      allow write: if isOwner(userId);
+    }
+
+    // --- Resumes Collection ---
+    match /resumes/{userId} {
+      // Candidates can read their own resume; recruiters can read resumes for candidate evaluation
+      allow read: if isOwner(userId) || isRecruiter();
+      // Only the candidate owner can create or edit their resume
+      allow write: if isOwner(userId);
+    }
+
+    // --- Jobs Collection ---
+    match /jobs/{jobId} {
+      // Job postings are readable by anyone authenticated (candidates searching for jobs)
+      allow read: if isAuthenticated();
+      // Only authenticated recruiters can write, update, or delete job postings
+      allow write: if isRecruiter();
+    }
+
+    // --- Applications Collection ---
+    match /applications/{applicationId} {
+      // Candidates can read their own applications; recruiters can read all applications
+      allow read: if isAuthenticated() && (resource.data.candidateId == request.auth.uid || isRecruiter());
+      // Candidates can create applications; recruiters can update application status (e.g. shortlisting, interviewing)
+      allow create: if isAuthenticated() && request.resource.data.candidateId == request.auth.uid;
+      allow update: if isRecruiter() || (isAuthenticated() && resource.data.candidateId == request.auth.uid);
+      allow delete: if isOwner(resource.data.candidateId);
+    }
+
+    // --- Interviews Collection ---
+    match /interviews/{interviewId} {
+      // Candidates can read their own interview; recruiters can read any candidate's interview
+      allow read: if isAuthenticated() && (resource.data.candidateId == request.auth.uid || isRecruiter());
+      // Candidates can create or update their own interview session; recruiters can update summaries/scores
+      allow create: if isAuthenticated() && request.resource.data.candidateId == request.auth.uid;
+      allow update: if isRecruiter() || (isAuthenticated() && (resource.data.candidateId == request.auth.uid || request.resource.data.candidateId == request.auth.uid));
+      allow delete: if isRecruiter();
+    }
+  }
+}

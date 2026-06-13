@@ -1,0 +1,22 @@
+# backend/requirements.txt
+Flask
+Flask-Cors
+python-dotenv
+google-generativeai
+python-docx
+PyMuPDF
+reportlab
+Pillow
+requests
+weasyprint
+beautifulsoup4
+jinja2
+pypdf
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+firebase-admin
+resend
+pyotp
+qrcode[pil]
+azure-ai-inference

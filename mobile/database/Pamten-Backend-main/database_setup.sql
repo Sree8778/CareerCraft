@@ -1,0 +1,341 @@
+-- -- Complete Database Setup Script for Recruitment Platform
+-- -- Run this script after dropping all existing tables
+--
+-- USE Recruitment_Platform;
+-- GO
+--
+-- -- 1. Roles (Lookup table)
+-- CREATE TABLE Roles (
+--     role_id INT IDENTITY(1,1) PRIMARY KEY,
+--     role_name VARCHAR(50) UNIQUE NOT NULL,
+--     created_at DATETIME2 DEFAULT GETDATE(),
+--     updated_at DATETIME2 DEFAULT GETDATE()
+-- );
+--
+-- -- 2. Gender (Lookup table to normalize gender data)
+-- CREATE TABLE Gender (
+--     gender_id INT IDENTITY(1,1) PRIMARY KEY,
+--     gender_name VARCHAR(20) UNIQUE NOT NULL
+-- );
+--
+-- -- 3. Users (Core user table)
+-- CREATE TABLE Users (
+--     user_id VARCHAR(64) PRIMARY KEY,
+--     role_id INT NOT NULL,
+--     email VARCHAR(255) UNIQUE NOT NULL,
+--     password_hash VARCHAR(255) NOT NULL,
+--     phone VARCHAR(20),
+--     full_name VARCHAR(255) NOT NULL,
+--     qr_code VARBINARY(MAX),
+--     authenticator VARBINARY(MAX),
+--     is_active BIT DEFAULT 1,
+--     profile_completed BIT DEFAULT 0, -- Track if profile is completed
+--     created_at DATETIME2 DEFAULT GETDATE(),
+--     updated_at DATETIME2 DEFAULT GETDATE(),
+--     FOREIGN KEY (role_id) REFERENCES Roles(role_id)
+-- );
+--
+-- -- 4. Industries (Lookup table)
+-- CREATE TABLE Industries (
+--     industry_id INT IDENTITY(1,1) PRIMARY KEY,
+--     industry_name VARCHAR(100) UNIQUE NOT NULL,
+--     description NVARCHAR(MAX)
+-- );
+--
+-- -- 5. Candidates
+-- CREATE TABLE Candidates (
+--     candidate_id INT IDENTITY(1,1) PRIMARY KEY,
+--     user_id VARCHAR(64) UNIQUE NOT NULL,
+--     first_name VARCHAR(100) NOT NULL,
+--     last_name VARCHAR(100) NOT NULL,
+--     date_of_birth DATE NOT NULL,
+--     gender_id INT,
+--     experience_years INT,
+--     linkedin_url VARCHAR(500),
+--     github_username VARCHAR(100),
+--     created_at DATETIME2 DEFAULT GETDATE(),
+--     updated_at DATETIME2 DEFAULT GETDATE(),
+--     FOREIGN KEY (user_id) REFERENCES Users(user_id),
+--     FOREIGN KEY (gender_id) REFERENCES Gender(gender_id)
+-- );
+--
+-- -- 6. Employers (Updated with unique 5-digit number)
+-- CREATE TABLE Employers (
+--     employer_id INT IDENTITY(1,1) PRIMARY KEY,
+--     employer_number VARCHAR(5) UNIQUE NOT NULL, -- Unique 5-digit number
+--     user_id VARCHAR(64) UNIQUE NOT NULL,
+--     hr_name VARCHAR(255) NOT NULL,
+--     hr_email VARCHAR(255) NOT NULL,
+--     gender_id INT,
+--     organization_name VARCHAR(255) NOT NULL,
+--     end_client VARCHAR(255),
+--     vendor_name VARCHAR(255),
+--     created_at DATETIME2 DEFAULT GETDATE(),
+--     updated_at DATETIME2 DEFAULT GETDATE(),
+--     FOREIGN KEY (user_id) REFERENCES Users(user_id),
+--     FOREIGN KEY (gender_id) REFERENCES Gender(gender_id)
+-- );
+--
+-- -- 7. Recruiters
+-- CREATE TABLE Recruiters (
+--     recruiter_id INT IDENTITY(1,1) PRIMARY KEY,
+--     user_id VARCHAR(64) UNIQUE NOT NULL,
+--     employer_id INT NOT NULL,
+--     industry_id INT,
+--     date_of_birth DATE,
+--     gender_id INT,
+--     created_at DATETIME2 DEFAULT GETDATE(),
+--     updated_at DATETIME2 DEFAULT GETDATE(),
+--     FOREIGN KEY (user_id) REFERENCES Users(user_id),
+--     FOREIGN KEY (employer_id) REFERENCES Employers(employer_id),
+--     FOREIGN KEY (industry_id) REFERENCES Industries(industry_id),
+--     FOREIGN KEY (gender_id) REFERENCES Gender(gender_id)
+-- );
+--
+-- -- 8. Locations
+-- CREATE TABLE Locations (
+--     location_id INT IDENTITY(1,1) PRIMARY KEY,
+--     region VARCHAR(100),
+--     street_address VARCHAR(255),
+--     city VARCHAR(100) NOT NULL,
+--     state VARCHAR(100) NOT NULL,
+--     zip_code VARCHAR(20) NOT NULL,
+--     country VARCHAR(100) DEFAULT 'USA',
+--     created_at DATETIME2 DEFAULT GETDATE()
+-- );
+--
+-- -- 9. Time Zones (Lookup table)
+-- CREATE TABLE TimeZones (
+--     timezone_id INT IDENTITY(1,1) PRIMARY KEY,
+--     timezone_name VARCHAR(50) UNIQUE NOT NULL,
+--     timezone_offset VARCHAR(10) NOT NULL,
+--     description VARCHAR(255)
+-- );
+--
+-- -- 10. Location Time Zones (Junction table)
+-- CREATE TABLE LocationTimeZones (
+--     location_id INT,
+--     timezone_id INT,
+--     PRIMARY KEY (location_id, timezone_id),
+--     FOREIGN KEY (location_id) REFERENCES Locations(location_id),
+--     FOREIGN KEY (timezone_id) REFERENCES TimeZones(timezone_id)
+-- );
+--
+-- -- 11. Jobs
+-- CREATE TABLE Jobs (
+--     job_id INT IDENTITY(1,1) PRIMARY KEY,
+--     employer_id INT NOT NULL,
+--     location_id INT,
+--     job_type VARCHAR(50) NOT NULL,
+--     title VARCHAR(255) NOT NULL,
+--     description NVARCHAR(MAX),
+--     required_skills NVARCHAR(MAX),
+--     posted_date DATE DEFAULT GETDATE(),
+--     posted_by VARCHAR(255),
+--     bill_rate DECIMAL(10,2),
+--     duration_months INT,
+--     is_active BIT DEFAULT 1,
+--     created_at DATETIME2 DEFAULT GETDATE(),
+--     updated_at DATETIME2 DEFAULT GETDATE(),
+--     FOREIGN KEY (employer_id) REFERENCES Employers(employer_id),
+--     FOREIGN KEY (location_id) REFERENCES Locations(location_id)
+-- );
+--
+-- -- 12. Job Industries (Junction table for many-to-many relationship)
+-- CREATE TABLE JobIndustries (
+--     job_id INT,
+--     industry_id INT,
+--     PRIMARY KEY (job_id, industry_id),
+--     FOREIGN KEY (job_id) REFERENCES Jobs(job_id),
+--     FOREIGN KEY (industry_id) REFERENCES Industries(industry_id)
+-- );
+--
+-- -- 13. Application Status (Lookup table)
+-- CREATE TABLE ApplicationStatus (
+--     status_id INT IDENTITY(1,1) PRIMARY KEY,
+--     status_name VARCHAR(50) UNIQUE NOT NULL,
+--     description VARCHAR(255)
+-- );
+--
+-- -- 14. Applications
+-- CREATE TABLE Applications (
+--     application_id INT IDENTITY(1,1) PRIMARY KEY,
+--     job_id INT NOT NULL,
+--     candidate_id INT NOT NULL,
+--     application_date DATE DEFAULT GETDATE(),
+--     status_id INT NOT NULL,
+--     notes NVARCHAR(MAX),
+--     created_at DATETIME2 DEFAULT GETDATE(),
+--     updated_at DATETIME2 DEFAULT GETDATE(),
+--     FOREIGN KEY (job_id) REFERENCES Jobs(job_id),
+--     FOREIGN KEY (candidate_id) REFERENCES Candidates(candidate_id),
+--     FOREIGN KEY (status_id) REFERENCES ApplicationStatus(status_id),
+--     UNIQUE (job_id, candidate_id) -- Prevent duplicate applications
+-- );
+--
+-- -- 15. Resumes
+-- CREATE TABLE Resumes (
+--     resume_id INT IDENTITY(1,1) PRIMARY KEY,
+--     candidate_id INT NOT NULL,
+--     file_name VARCHAR(255) NOT NULL,
+--     file_path VARCHAR(500) NOT NULL,
+--     file_size BIGINT,
+--     upload_date DATETIME2 DEFAULT GETDATE(),
+--     is_active BIT DEFAULT 1,
+--     FOREIGN KEY (candidate_id) REFERENCES Candidates(candidate_id)
+-- );
+--
+-- -- 16. Document Types (Lookup table)
+-- CREATE TABLE DocumentTypes (
+--     document_type_id INT IDENTITY(1,1) PRIMARY KEY,
+--     type_name VARCHAR(100) UNIQUE NOT NULL,
+--     description VARCHAR(255)
+-- );
+--
+-- -- 17. Legal Documents
+-- CREATE TABLE LegalDocuments (
+--     document_id INT IDENTITY(1,1) PRIMARY KEY,
+--     candidate_id INT NOT NULL,
+--     document_type_id INT NOT NULL,
+--     document_number_hash VARCHAR(255) NOT NULL,
+--     expiration_date DATE,
+--     is_valid BIT DEFAULT 1,
+--     created_at DATETIME2 DEFAULT GETDATE(),
+--     updated_at DATETIME2 DEFAULT GETDATE(),
+--     FOREIGN KEY (candidate_id) REFERENCES Candidates(candidate_id),
+--     FOREIGN KEY (document_type_id) REFERENCES DocumentTypes(document_type_id)
+-- );
+--
+-- -- 18. Activity Logs
+-- CREATE TABLE ActivityLogs (
+--     log_id INT IDENTITY(1,1) PRIMARY KEY,
+--     user_id VARCHAR(64),
+--     action VARCHAR(100) NOT NULL,
+--     table_name VARCHAR(100),
+--     record_id VARCHAR(100),
+--     old_values NVARCHAR(MAX),
+--     new_values NVARCHAR(MAX),
+--     ip_address VARCHAR(45),
+--     user_agent NVARCHAR(MAX),
+--     timestamp DATETIME2 DEFAULT GETDATE(),
+--     FOREIGN KEY (user_id) REFERENCES Users(user_id)
+-- );
+--
+-- -- Insert initial data
+-- PRINT 'Inserting initial data...';
+--
+-- -- Insert Roles
+-- INSERT INTO Roles (role_name) VALUES
+-- ('Candidate'),
+-- ('Recruiter'),
+-- ('Admin');
+--
+-- -- Insert Gender options
+-- INSERT INTO Gender (gender_name) VALUES
+-- ('Male'),
+-- ('Female'),
+-- ('Other'),
+-- ('Prefer not to say');
+--
+-- -- Insert Application Status options
+-- INSERT INTO ApplicationStatus (status_name, description) VALUES
+-- ('Applied', 'Application submitted'),
+-- ('Under Review', 'Application being reviewed'),
+-- ('Shortlisted', 'Candidate shortlisted for interview'),
+-- ('Interview Scheduled', 'Interview has been scheduled'),
+-- ('Interview Completed', 'Interview has been completed'),
+-- ('Offer Made', 'Job offer has been made'),
+-- ('Offer Accepted', 'Job offer has been accepted'),
+-- ('Offer Declined', 'Job offer has been declined'),
+-- ('Rejected', 'Application has been rejected'),
+-- ('Withdrawn', 'Application has been withdrawn');
+--
+-- -- Insert Document Types
+-- INSERT INTO DocumentTypes (type_name, description) VALUES
+-- ('Work Authorization', 'Work authorization document'),
+-- ('Visa', 'Visa documentation'),
+-- ('Passport', 'Passport documentation'),
+-- ('Driver License', 'Driver license'),
+-- ('Other', 'Other legal document');
+--
+-- -- Insert sample Industries
+-- INSERT INTO Industries (industry_name, description) VALUES
+-- ('Technology', 'Information Technology and Software Development'),
+-- ('Healthcare', 'Healthcare and Medical Services'),
+-- ('Finance', 'Banking and Financial Services'),
+-- ('Manufacturing', 'Manufacturing and Industrial'),
+-- ('Education', 'Education and Training'),
+-- ('Retail', 'Retail and Consumer Services'),
+-- ('Consulting', 'Professional Services and Consulting'),
+-- ('Government', 'Government and Public Sector');
+--
+-- -- Insert sample Time Zones
+-- INSERT INTO TimeZones (timezone_name, timezone_offset, description) VALUES
+-- ('EST', '-05:00', 'Eastern Standard Time'),
+-- ('CST', '-06:00', 'Central Standard Time'),
+-- ('MST', '-07:00', 'Mountain Standard Time'),
+-- ('PST', '-08:00', 'Pacific Standard Time'),
+-- ('UTC', '+00:00', 'Coordinated Universal Time');
+--
+-- -- Create indexes for better performance
+-- PRINT 'Creating indexes...';
+--
+-- CREATE INDEX idx_users_email ON Users(email);
+-- CREATE INDEX idx_users_role ON Users(role_id);
+-- CREATE INDEX idx_users_profile_completed ON Users(profile_completed);
+-- CREATE INDEX idx_candidates_user ON Candidates(user_id);
+-- CREATE INDEX idx_recruiters_user ON Recruiters(user_id);
+-- CREATE INDEX idx_employers_user ON Employers(user_id);
+-- CREATE INDEX idx_employers_number ON Employers(employer_number);
+-- CREATE INDEX idx_jobs_employer ON Jobs(employer_id);
+-- CREATE INDEX idx_jobs_location ON Jobs(location_id);
+-- CREATE INDEX idx_jobs_active ON Jobs(is_active);
+-- CREATE INDEX idx_applications_job ON Applications(job_id);
+-- CREATE INDEX idx_applications_candidate ON Applications(candidate_id);
+-- CREATE INDEX idx_applications_status ON Applications(status_id);
+-- CREATE INDEX idx_activity_logs_user ON ActivityLogs(user_id);
+-- CREATE INDEX idx_activity_logs_timestamp ON ActivityLogs(timestamp);
+-- CREATE INDEX idx_resumes_candidate ON Resumes(candidate_id);
+-- CREATE INDEX idx_resumes_active ON Resumes(is_active);
+--
+-- -- Create a default admin user (password: admin123 - you should change this in production)
+-- PRINT 'Creating default admin user...';
+--
+-- INSERT INTO Users (user_id, role_id, email, password_hash, phone, full_name, is_active, profile_completed)
+-- VALUES (
+--     'admin-' + CAST(NEWID() AS VARCHAR(36)),
+--     (SELECT role_id FROM Roles WHERE role_name = 'Admin'),
+--     'admin@pamten.com',
+--     '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDa', -- admin123
+--     '+1234567890',
+--     'System Administrator',
+--     1,
+--     1
+-- );
+--
+-- -- Create function to generate unique 5-digit employer numbers
+-- CREATE FUNCTION GenerateEmployerNumber()
+-- RETURNS VARCHAR(5)
+-- AS
+-- BEGIN
+--     DECLARE @number VARCHAR(5)
+--     DECLARE @counter INT = 10000 -- Start from 10000
+--
+--     WHILE @counter <= 99999
+--     BEGIN
+--         SET @number = CAST(@counter AS VARCHAR(5))
+--
+--         IF NOT EXISTS (SELECT 1 FROM Employers WHERE employer_number = @number)
+--             RETURN @number
+--
+--         SET @counter = @counter + 1
+--     END
+--
+--     RETURN NULL -- No available numbers
+-- END
+--
+-- PRINT 'Database setup completed successfully!';
+-- PRINT 'Default admin credentials:';
+-- PRINT 'Email: admin@pamten.com';
+-- PRINT 'Password: admin123';
+-- PRINT 'Please change the admin password after first login.';

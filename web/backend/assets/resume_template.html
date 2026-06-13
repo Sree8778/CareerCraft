@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ personal.name }}'s Resume</title>
+    <style>
+        /* --- General Body and Font Styles --- */
+        body {
+            font-family: {{ styleOptions.fontFamily | default('Calibri, sans-serif') }};
+            font-size: {{ styleOptions.fontSize | default(11) }}pt;
+            line-height: 1.4; /* Reduced line-height for a tighter feel */
+            color: #333;
+        }
+
+        /* --- Color and Header Styles --- */
+        .accent-color {
+            color: {{ styleOptions.accentColor | default('#34495e') }};
+        }
+        .header {
+            text-align: center;
+            border-bottom: 1.5px solid #e0e0e0; /* Thinner border */
+            padding-bottom: 10px;
+            margin-bottom: 15px; /* Reduced margin */
+        }
+        h1 {
+            font-size: 2.2em; /* Slightly smaller H1 */
+            margin-bottom: 0;
+        }
+        h2 {
+            font-size: 1.1em;
+            font-weight: bold;
+            border-bottom: 1.5px solid {{ styleOptions.accentColor | default('#34495e') }};
+            padding-bottom: 4px;
+            margin-top: 20px; /* Reduced margin */
+            margin-bottom: 10px; /* Reduced margin */
+        }
+        
+        /* --- Section and Entry Styling --- */
+        .section {
+            margin-bottom: 10px; /* Reduced margin */
+        }
+        .entry {
+            margin-bottom: 10px; /* Reduced margin */
+            page-break-inside: avoid; /* Prevents a single entry from splitting across pages */
+        }
+        .job-title, .degree, .project-title, .cert-name, .pub-title {
+            font-weight: bold;
+        }
+        .company, .institution, .project-date, .cert-issuer, .pub-authors {
+            font-style: italic;
+            color: #555;
+        }
+        .skills-category {
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        /* --- Critical Fixes for Blank Space --- */
+        /* Reduce paragraph margin to minimum, let content define spacing */
+        p {
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Ensure UL/LI have minimal default margins/paddings as well */
+        ul {
+            margin: 0;
+            padding: 0;
+            list-style-position: inside; /* Ensures bullets are inside text flow */
+        }
+        li {
+            margin: 0; /* Changed from 0 0 3px 0; for tighter list */
+            padding: 0;
+            text-indent: -1em; /* For basic bullet appearance if list-style-type is outside */
+            padding-left: 1em; /* To align text after bullet */
+        }
+        li:before {
+            content: '• '; /* Fallback bullet for some PDF engines */
+        }
+
+
+        /* For plain text areas where newlines should be preserved */
+        pre {
+            white-space: pre-wrap; /* Preserve whitespace and wrap text */
+            word-wrap: break-word; /* Break long words */
+            margin: 0;
+            padding: 0;
+            border: none;
+            background: none;
+            font-family: inherit; /* Inherit font from body */
+            font-size: inherit; /* Inherit font size from body */
+            color: inherit; /* Inherit color from body */
+        }
+        
+        /* This finds any generated div or p tag that is empty 
+           and completely removes its margins and padding, collapsing the blank space. */
+        div:empty:not([class*="tiptap-editor"]), p:empty { /* Added :not([class*="tiptap-editor"]) to avoid hiding Tiptap editor placeholders */
+            margin: 0;
+            padding: 0;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 class="accent-color">{{ personal.name }}</h1>
+        <p>
+            {% set contact_parts = [] %}
+            {% if personal.email %}{% set _ = contact_parts.append(personal.email) %}{% endif %}
+            {% if personal.phone %}{% set _ = contact_parts.append(personal.phone) %}{% endif %}
+            {% if personal.location %}{% set _ = contact_parts.append(personal.location) %}{% endif %}
+            {% if personal.legalStatus and personal.legalStatus != 'Prefer not to say' %}{% set _ = contact_parts.append(personal.legalStatus) %}{% endif %}
+            {{ contact_parts | join(' | ') }}
+        </p>
+    </div>
+
+    {% if summary and summary|striptags|trim %}
+    <div class="section">
+        <h2 class="accent-color">Summary</h2>
+        <div>{{ summary | safe }}</div>
+    </div>
+    {% endif %}
+
+    {% if experience and experience[0].jobTitle %}
+    <div class="section">
+        <h2 class="accent-color">Experience</h2>
+        {% for exp in experience %}
+        <div class="entry">
+            <p><span class="job-title">{{ exp.jobTitle }}</span><br>
+               <span class="company">{{ exp.company }} | {{ exp.dates }}</span></p>
+            {% if exp.description and exp.description|striptags|trim %}
+                <div>{{ exp.description | safe }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+    {% if education and education[0].degree %}
+    <div class="section">
+        <h2 class="accent-color">Education</h2>
+        {% for edu in education %}
+        <div class="entry">
+            <p><span class="degree">{{ edu.degree }}</span>, <span class="institution">{{ edu.institution }}</span><br>
+               <span class="company">{{ edu.graduationYear }}{% if edu.gpa %} | GPA: {{ edu.gpa }}{% endif %}</span></p>
+            {% if edu.achievements and edu.achievements|striptags|trim %}
+                <div>{{ edu.achievements | safe }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if skills and skills[0].category %}
+    <div class="section">
+        <h2 class="accent-color">Skills</h2>
+        {% for skill in skills %}
+        <p><span class="skills-category">{{ skill.category }}:</span> <pre>{{ skill.skills_list }}</pre></p>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+    </body>
+</html>
