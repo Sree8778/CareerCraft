@@ -1,6 +1,8 @@
-// src/app/recruiter/applications/page.tsx
+﻿// src/app/recruiter/applications/page.tsx
 'use client';
 import React, { useState, useEffect } from 'react';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 import Link from 'next/link';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,7 +32,7 @@ export default function ApplicationsPage() {
     const fetch_ = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`http://127.0.0.1:5000/api/applications?recruiterId=${user.id}`, {
+        const res = await fetch(`${API_BASE}/applications?recruiterId=${user.id}`, {
           headers: { 'Authorization': `Bearer mock_token_for_${user.id}` },
         });
         const data = await res.json();

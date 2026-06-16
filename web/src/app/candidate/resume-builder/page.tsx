@@ -1,4 +1,4 @@
-// src/app/candidate/resume-builder/page.tsx
+﻿// src/app/candidate/resume-builder/page.tsx
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -939,7 +939,7 @@ export default function ResumeBuilder() {
     const [newBatchFrom, setNewBatchFrom] = useState(0); // index where the latest generated batch starts
     const [panelWidth, setPanelWidth] = useState(50);
     const isResizing = useRef(false);
-    const API_BASE_URL: string = 'http://127.0.0.1:5000/api';
+    const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
     const { user } = useAuth();
 
     useEffect(() => {
@@ -1032,6 +1032,10 @@ export default function ResumeBuilder() {
                 body: JSON.stringify({ resumeData: data }),
             });
             const result = await res.json();
+            if (res.status === 402 && result.error === 'no_api_keys') {
+                toast.warning('Add your API keys in Profile → Settings to generate AI summaries.', { duration: 6000 });
+                return;
+            }
             const newOnes: string[] = Array.isArray(result.summaries) ? result.summaries : [];
             if (newOnes.length === 0) { toast.error("No suggestions returned. Try again."); return; }
             if (append) {
@@ -1261,24 +1265,20 @@ export default function ResumeBuilder() {
 
         setEnhancementContext(context); setOriginalText(textToEnhance); setLoading(true); toast.info(`Enhancing ${sectionNameForApi}...`);
         try {
-            let customKey = '';
-            if (typeof window !== 'undefined' && user?.id) {
-                const savedEncryptedKey = localStorage.getItem('user_gemini_api_key') || '';
-                if (savedEncryptedKey) {
-                    customKey = await decryptApiKey(savedEncryptedKey, user.id);
-                }
-            }
             const response = await fetch(`${API_BASE_URL}/enhance-section`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
-                    'X-Gemini-API-Key': customKey
                 },
                 body: JSON.stringify({ sectionName: sectionNameForApi, textToEnhance })
             });
-            if (!response.ok) throw new Error('Enhancement failed');
             const result = await response.json();
+            if (response.status === 402 && result.error === 'no_api_keys') {
+                toast.warning('Add your API keys in Profile → Settings to use AI enhancement.', { duration: 6000 });
+                return;
+            }
+            if (!response.ok) throw new Error('Enhancement failed');
             if (Array.isArray(result.enhancedVersions) && result.enhancedVersions.length > 0) {
                 const processedVersions = result.enhancedVersions.map((v: string) => unescapeHtml(v));
                 setEnhancementVersions([textToEnhance, ...processedVersions]);
@@ -1305,24 +1305,20 @@ export default function ResumeBuilder() {
     const handleGeneratePitch = async () => {
         setLoading(true); toast.info("Generating Elevator Pitch...", {id: 'pitch'});
         try {
-            let customKey = '';
-            if (typeof window !== 'undefined' && user?.id) {
-                const savedEncryptedKey = localStorage.getItem('user_gemini_api_key') || '';
-                if (savedEncryptedKey) {
-                    customKey = await decryptApiKey(savedEncryptedKey, user.id);
-                }
-            }
             const response = await fetch(`${API_BASE_URL}/generate-elevator-pitch`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
-                    'X-Gemini-API-Key': customKey
                 },
                 body: JSON.stringify({ resumeData })
             });
-            if (!response.ok) throw new Error('Failed to generate pitch');
             const result = await response.json();
+            if (response.status === 402 && result.error === 'no_api_keys') {
+                toast.warning('Add your API keys in Profile → Settings to generate an elevator pitch.', { duration: 6000 });
+                return;
+            }
+            if (!response.ok) throw new Error('Failed to generate pitch');
             setPitchText(result.elevatorPitch);
             setShowPitchModal(true);
             toast.success("Elevator pitch generated!", {id: 'pitch'});

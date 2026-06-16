@@ -1,4 +1,4 @@
-// src/app/companies/page.tsx
+﻿// src/app/companies/page.tsx
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -10,7 +10,7 @@ import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { Building2, Search, Star, MapPin, Users, ChevronRight, Briefcase } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const API = 'http://127.0.0.1:5000/api';
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 export default function CompanyDirectoryPage() {
   const { user, isAuthenticated } = useAuth();

@@ -1,4 +1,4 @@
-// src/app/recruiter/requisitions/[id]/page.tsx
+﻿// src/app/recruiter/requisitions/[id]/page.tsx
 'use client';
 import React, { useEffect, useState } from 'react';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
@@ -12,7 +12,7 @@ import {
   RefreshCw, ChevronRight, CheckCircle, Clock, TrendingUp
 } from 'lucide-react';
 
-const API = 'http://127.0.0.1:5000/api';
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 const STATUS_COLORS: Record<string, string> = {
   Applied: 'bg-blue-500/20 text-blue-300 border-blue-500/30',

@@ -1,7 +1,9 @@
-// src/app/recruiter/webhooks/page.tsx
+﻿// src/app/recruiter/webhooks/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -33,7 +35,7 @@ export default function WebhooksPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/webhooks/subscriptions', {
+      const res = await fetch(`${API_BASE}/webhooks/subscriptions`, {
         headers: { 'Authorization': `Bearer mock_token_for_${user.id}` },
       });
       if (res.ok) {
@@ -67,7 +69,7 @@ export default function WebhooksPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/webhooks/subscribe', {
+      const res = await fetch(`${API_BASE}/webhooks/subscribe`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,7 +99,7 @@ export default function WebhooksPage() {
     if (!user) return;
     setPingStatus((prev) => ({ ...prev, [subUrl]: 'pinging' }));
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/webhooks/test-ping', {
+      const res = await fetch(`${API_BASE}/webhooks/test-ping`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

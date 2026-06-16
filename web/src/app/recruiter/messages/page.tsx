@@ -1,4 +1,4 @@
-// src/app/recruiter/messages/page.tsx
+﻿// src/app/recruiter/messages/page.tsx
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -13,7 +13,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
-const API = 'http://127.0.0.1:5000/api';
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 const getInitials = (name: string) => {
   if (!name) return 'U';

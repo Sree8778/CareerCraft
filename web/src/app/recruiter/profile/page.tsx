@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -18,7 +18,7 @@ interface WalletKey {
   encryptedKey?: string;
 }
 
-const API_BASE = 'http://127.0.0.1:5000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 export default function RecruiterProfilePage() {
   const { user, isAuthenticated } = useAuth();

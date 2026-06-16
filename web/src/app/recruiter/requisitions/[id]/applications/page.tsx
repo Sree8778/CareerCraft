@@ -1,7 +1,9 @@
-// src/app/recruiter/requisitions/[id]/applications/page.tsx
+﻿// src/app/recruiter/requisitions/[id]/applications/page.tsx
 'use client';
 
 import { useParams } from 'next/navigation';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 import Link from 'next/link';
 import React, { useEffect, useState } from 'react';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
@@ -45,8 +47,8 @@ export default function ApplicationsListPage() {
       setLoading(true);
       try {
         const [appsRes, jobRes] = await Promise.all([
-          fetch(`http://127.0.0.1:5000/api/jobs/${id}/applications`, { headers: authHeader }),
-          fetch(`http://127.0.0.1:5000/api/jobs/${id}`, { headers: authHeader }),
+          fetch(`${API_BASE}/jobs/${id}/applications`, { headers: authHeader }),
+          fetch(`${API_BASE}/jobs/${id}`, { headers: authHeader }),
         ]);
         const appsData = await appsRes.json();
         setApplications(appsData.applications || []);

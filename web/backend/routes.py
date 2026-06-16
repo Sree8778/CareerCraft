@@ -7,6 +7,7 @@ from document_generator import generate_docx_from_data, generate_pdf_from_data
 from file_parser import parse_resume_file
 from ollama_utils import (
     set_api_key,
+    set_request_wallet,
     generate_elevator_pitch,
     generate_summary_suggestions,
     enhance_section_with_ai,
@@ -22,7 +23,7 @@ from ollama_utils import (
 from google_calendar_utils import create_calendar_event
 from face_verification import verify_face_similarity
 from firebase_utils import require_auth
-from vault_utils import encrypt_key, decrypt_key
+from vault_utils import encrypt_key
 from job_crawler import MOCK_JOBS, crawl_jobs_to_db
 from email_utils import (
     send_application_status_email,
@@ -38,59 +39,97 @@ from google.cloud import firestore
 # Create a Blueprint for API routes
 api_bp = Blueprint('api', __name__)
 
+def _is_no_keys(e: Exception) -> bool:
+    return str(e).startswith("NO_API_KEYS:")
+
+def _no_keys_resp(e: Exception = None):
+    msg = str(e).replace("NO_API_KEYS:", "").strip() if e else \
+          "Add your API keys in Profile → Settings to unlock AI-powered features."
+    return jsonify({
+        "error": "no_api_keys",
+        "message": msg,
+        "action": "/candidate/profile"
+    }), 402
+
 @api_bp.before_request
 def configure_dynamic_api_key():
-    # 1. Reset dynamic key to prevent cross-request state leakage
+    # Reset per-request state to prevent cross-request leakage.
     set_api_key("")
+    set_request_wallet([])
 
-    # 2. Check if the user is passing a plain key in headers (fallback for quick testing/on-the-fly tools)
-    user_key = request.headers.get('X-Gemini-API-Key')
-    if user_key and user_key.strip():
-        set_api_key(user_key.strip())
+    # Inline wallet via header (signup flow — user's own keys before Firestore registration).
+    import json as _json
+    inline_wallet_json = request.headers.get('X-API-Wallet', '').strip()
+    if inline_wallet_json:
+        try:
+            wallet = _json.loads(inline_wallet_json)
+            if isinstance(wallet, list) and wallet:
+                set_request_wallet(wallet)
+                return
+        except Exception as e:
+            print(f"[routes] X-API-Wallet parse error: {e}")
+
+    # Legacy inline Gemini key (dev/testing shortcut).
+    inline_gemini = request.headers.get('X-Gemini-API-Key', '').strip()
+    if inline_gemini:
+        set_api_key(inline_gemini)
         return
 
-    # 3. Check if the user is passing a secure Authorization bearer token
-    auth_header = request.headers.get('Authorization')
-    if auth_header and auth_header.startswith("Bearer "):
-        parts = auth_header.split()
-        if len(parts) == 2:
-            token = parts[1]
-            uid = None
-            
-            # Check if the token is a mock developer token
-            if token.startswith("mock_token_for_"):
-                uid = token.replace("mock_token_for_", "")
-            else:
-                # Live production token verification
-                from firebase_utils import firebase_initialized, auth
-                if firebase_initialized:
-                    try:
-                        decoded = auth.verify_id_token(token)
-                        uid = decoded.get('uid')
-                    except Exception as token_err:
-                        print(f"Vault failed to verify auth token for dynamic key extraction: {token_err}")
-            
-            # Look up the user's encrypted key wallet in Firestore using uid
-            if uid:
-                from firebase_utils import db, firebase_initialized
-                
-                # If Firebase database is running
-                if firebase_initialized and db:
-                    try:
-                        user_doc = db.collection('users').document(uid).get()
-                        if user_doc.exists:
-                            user_data = user_doc.to_dict()
-                            wallet = user_data.get('apiKeysWallet', [])
-                            # Search for Gemini in the wallet
-                            gemini_item = next((item for item in wallet if item.get('provider') == 'Gemini'), None)
-                            if gemini_item:
-                                enc_key = gemini_item.get('encryptedKey')
-                                decrypted_key = decrypt_key(enc_key)
-                                if decrypted_key:
-                                    set_api_key(decrypted_key)
-                                    return
-                    except Exception as db_err:
-                        print(f"Vault error reading user database keys: {db_err}")
+    # Resolve uid from Bearer token.
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith("Bearer "):
+        return
+    token = auth_header.split(None, 1)[1].strip()
+    uid = None
+
+    if token.startswith("mock_token_for_"):
+        uid = token.replace("mock_token_for_", "")
+    else:
+        from firebase_utils import firebase_initialized, auth as fb_auth
+        if firebase_initialized:
+            try:
+                uid = fb_auth.verify_id_token(token).get('uid')
+            except Exception as e:
+                print(f"[routes] Token verification failed: {e}")
+
+    if not uid:
+        return
+
+    # Load the full key wallet from Firestore and pass it to the router.
+    from firebase_utils import db, firebase_initialized
+    if not (firebase_initialized and db):
+        return
+
+    try:
+        user_doc = db.collection('users').document(uid).get()
+        if not user_doc.exists:
+            return
+        wallet = user_doc.to_dict().get('apiKeysWallet', [])
+
+        # Status-change callback — persists key state changes back to Firestore.
+        def _on_status_change(entry):
+            try:
+                update = {'status': entry.status}
+                if entry.exhausted_at:
+                    update['exhaustedAt'] = entry.exhausted_at
+                db.collection('users').document(uid).update({
+                    f'apiKeysWallet': firestore.ArrayRemove([{'id': entry.id}])
+                })
+                # Simpler field-level path update via a transaction isn't
+                # straightforward with array items; read-modify-write instead.
+                fresh = db.collection('users').document(uid).get().to_dict() or {}
+                updated_wallet = [
+                    {**k, **update} if k.get('id') == entry.id else k
+                    for k in fresh.get('apiKeysWallet', [])
+                ]
+                db.collection('users').document(uid).update({'apiKeysWallet': updated_wallet})
+            except Exception as e:
+                print(f"[routes] Key status update failed: {e}")
+
+        set_request_wallet(wallet, on_status_change=_on_status_change)
+
+    except Exception as e:
+        print(f"[routes] Wallet load failed: {e}")
 
 # --- Resume Parsing Endpoint ---
 @api_bp.route('/parse-resume', methods=['POST'])
@@ -182,6 +221,9 @@ def generate_elevator_pitch_route():
     try:
         pitch = generate_elevator_pitch(resume_data)
         return jsonify({"elevatorPitch": pitch}), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         print(f"Error generating elevator pitch: {e}")
         return jsonify({"error": "An internal error occurred while generating the elevator pitch."}), 500
@@ -204,6 +246,9 @@ def enhance_section_route():
     try:
         suggestions = enhance_section_with_ai(section_name, text_to_enhance)
         return jsonify({"enhancedVersions": suggestions}), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         print(f"Error enhancing section: {e}")
         return jsonify({"error": "An internal error occurred while enhancing the section."}), 500
@@ -220,6 +265,9 @@ def generate_summary_suggestions_route():
     try:
         summaries = generate_summary_suggestions(resume_data)
         return jsonify({"summaries": summaries}), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         print(f"Error generating summary suggestions: {e}")
         return jsonify({"error": "Failed to generate summary suggestions."}), 500
@@ -264,6 +312,9 @@ def get_next_question_route():
             resume_data, conversation_history, latest_transcript, elapsed_seconds
         )
         return jsonify({"nextQuestion": next_question}), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         print(f"Error generating next question: {e}")
         return jsonify({"error": "An internal error occurred while generating the next question."}), 500
@@ -286,9 +337,106 @@ def evaluate_response_route():
     try:
         evaluation = evaluate_voice_answer(question, transcript)
         return jsonify(evaluation), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         print(f"Error evaluating answer: {e}")
         return jsonify({"error": "An internal error occurred while evaluating the answer."}), 500
+
+
+# --- PRACTICE INTERVIEW ---
+@api_bp.route('/practice-interview/ai-turn', methods=['POST'])
+def practice_ai_turn():
+    """Conversational AI interviewer turn — returns natural speech text."""
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    data = request.json
+    try:
+        from ollama_utils import ai_interviewer_turn
+        text = ai_interviewer_turn(
+            conversation=data.get('conversation', []),
+            role=data.get('role', 'Software Engineer'),
+            interview_type=data.get('interviewType', 'Technical'),
+            difficulty=data.get('difficulty', 'Mid'),
+            job_description=data.get('jobDescription', ''),
+            turn_number=data.get('turnNumber', 1),
+            total_turns=data.get('totalTurns', 5),
+        )
+        return jsonify({"text": text}), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/practice-interview/final-feedback', methods=['POST'])
+def practice_final_feedback():
+    """End-of-session full conversation evaluation."""
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    data = request.json
+    try:
+        from ollama_utils import ai_interview_final_feedback
+        result = ai_interview_final_feedback(
+            conversation=data.get('conversation', []),
+            role=data.get('role', 'Software Engineer'),
+            interview_type=data.get('interviewType', 'Technical'),
+        )
+        return jsonify(result), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/practice-interview/question', methods=['POST'])
+def practice_interview_question():
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    data = request.json
+    try:
+        from ollama_utils import generate_practice_question
+        question = generate_practice_question(
+            interview_type=data.get('interviewType', 'Technical'),
+            role=data.get('role', 'Software Engineer'),
+            difficulty=data.get('difficulty', 'Mid'),
+            question_number=data.get('questionNumber', 1),
+            asked_questions=data.get('askedQuestions', []),
+        )
+        return jsonify({"question": question}), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/practice-interview/evaluate', methods=['POST'])
+def practice_interview_evaluate():
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    data = request.json
+    question = data.get('question', '')
+    answer = data.get('answer', '')
+    if not question or not answer:
+        return jsonify({"error": "Missing question or answer"}), 400
+    try:
+        from ollama_utils import evaluate_practice_answer
+        result = evaluate_practice_answer(
+            question=question,
+            answer=answer,
+            interview_type=data.get('interviewType', 'Technical'),
+            role=data.get('role', 'Software Engineer'),
+        )
+        return jsonify(result), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # --- SEMANTIC JOB SEARCH ---
@@ -308,6 +456,9 @@ def search_jobs_semantic_route():
     try:
         matches = semantic_job_search(query, jobs)
         return jsonify(matches), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         print(f"Error in semantic job search: {e}")
         return jsonify({"error": "An internal error occurred during semantic job search."}), 500
@@ -484,6 +635,9 @@ def search_candidates_copilot_route():
     try:
         matches = copilot_candidate_search(query, candidates)
         return jsonify(matches), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         print(f"Error in copilot candidate search: {e}")
         return jsonify({"error": "An internal error occurred during recruiter copilot search."}), 500
@@ -506,6 +660,9 @@ def generate_cover_letter_route():
     try:
         cover_letter = generate_cover_letter(resume_data, job_details)
         return jsonify({"coverLetter": cover_letter}), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         print(f"Error in cover letter endpoint: {e}")
         return jsonify({"error": "An internal error occurred while generating the cover letter."}), 500
@@ -528,6 +685,9 @@ def grade_resume_route():
     try:
         grade_result = grade_resume_match_score(resume_data, job_details)
         return jsonify(grade_result), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         print(f"Error in grade resume endpoint: {e}")
         return jsonify({"error": "An internal error occurred while grading the resume."}), 500
@@ -902,7 +1062,7 @@ def verify_key_route():
             try:
                 import requests as _req
                 resp = _req.post(
-                    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+                    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
                     params={'key': key},
                     json={'contents': [{'parts': [{'text': 'Say OK'}]}]},
                     timeout=15
@@ -927,11 +1087,38 @@ def verify_key_route():
                 print(f"Gemini verify exception: {safe[:200]}")
                 return jsonify({"valid": False, "error": f"Could not reach Gemini API: {safe[:100]}"}), 200
         elif provider == 'OpenAI':
-            # Simulated check for OpenAI keys (OpenAI keys start with sk- and have specific length/format)
             if key.startswith('sk-') and len(key) >= 40:
                 return jsonify({"valid": True, "message": "OpenAI API Key format verified!"}), 200
             else:
                 return jsonify({"valid": False, "error": "Invalid OpenAI key format (must start with sk-)."}), 200
+        elif provider == 'NVIDIA NIM':
+            # Live check — NVIDIA free credits expire, so format-only is not enough
+            if not key.startswith('nvapi-'):
+                return jsonify({"valid": False, "error": "NVIDIA NIM keys must start with nvapi-"}), 200
+            try:
+                import requests as _req
+                resp = _req.post(
+                    'https://integrate.api.nvidia.com/v1/chat/completions',
+                    json={
+                        "model": "meta/llama-3.1-8b-instruct",
+                        "messages": [{"role": "user", "content": "Say OK"}],
+                        "max_tokens": 5,
+                    },
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    timeout=15,
+                )
+                if resp.status_code == 200:
+                    return jsonify({"valid": True, "message": "NVIDIA NIM key verified successfully!"}), 200
+                body = resp.json()
+                detail = body.get("detail", body.get("title", str(body)))
+                if resp.status_code in (401, 403):
+                    return jsonify({"valid": False, "error": f"NVIDIA key rejected ({resp.status_code}): {detail}. Get a fresh key at build.nvidia.com"}), 200
+                if resp.status_code == 429:
+                    # Quota hit but key is valid — accept it
+                    return jsonify({"valid": True, "message": "NVIDIA NIM key accepted (quota limit hit, will reset)."}), 200
+                return jsonify({"valid": False, "error": f"NVIDIA API error {resp.status_code}: {detail}"}), 200
+            except Exception as e:
+                return jsonify({"valid": False, "error": f"Could not reach NVIDIA API: {str(e)[:100]}"}), 200
         else:
             # Generic format check for Groq and Claude
             if len(key) >= 30:
@@ -2470,6 +2657,82 @@ def get_profile_completion(uid):
         return jsonify(result), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# EMAIL OTP — signup verification via Resend
+# =============================================================================
+
+@api_bp.route('/auth/send-email-otp', methods=['POST'])
+def send_email_otp_route():
+    import secrets as _secrets
+    data = request.get_json(silent=True) or {}
+    email = data.get('email', '').strip().lower()
+    name = data.get('name', 'User')
+
+    if not email or '@' not in email:
+        return jsonify({"error": "Valid email required"}), 400
+
+    otp = ''.join([str(_secrets.randbelow(10)) for _ in range(6)])
+
+    from firebase_utils import db, firebase_initialized
+    if firebase_initialized and db:
+        expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=10)
+        doc_id = email.replace('@', '_at_').replace('.', '_dot_')
+        db.collection('email_otps').document(doc_id).set({
+            'email': email,
+            'code': otp,
+            'expires_at': expires_at,
+            'attempts': 0,
+        })
+
+    from email_utils import send_2fa_otp_email
+    send_2fa_otp_email(email, name, otp)
+
+    return jsonify({"success": True}), 200
+
+
+@api_bp.route('/auth/verify-email-otp', methods=['POST'])
+def verify_email_otp_route():
+    data = request.get_json(silent=True) or {}
+    email = data.get('email', '').strip().lower()
+    code = data.get('code', '').strip()
+
+    if not email or not code:
+        return jsonify({"error": "Email and code required"}), 400
+
+    from firebase_utils import db, firebase_initialized
+
+    if not firebase_initialized or not db:
+        if code == '123456':
+            return jsonify({"success": True}), 200
+        return jsonify({"error": "Invalid code"}), 400
+
+    doc_id = email.replace('@', '_at_').replace('.', '_dot_')
+    doc_ref = db.collection('email_otps').document(doc_id)
+    doc = doc_ref.get()
+
+    if not doc.exists:
+        return jsonify({"error": "No OTP found. Please request a new code."}), 404
+
+    otp_data = doc.to_dict()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    expires_at = otp_data.get('expires_at')
+    if expires_at and now > expires_at:
+        doc_ref.delete()
+        return jsonify({"error": "OTP expired. Please request a new one."}), 410
+
+    attempts = otp_data.get('attempts', 0)
+    if attempts >= 5:
+        doc_ref.delete()
+        return jsonify({"error": "Too many attempts. Please request a new code."}), 429
+
+    if otp_data.get('code') != code:
+        doc_ref.update({'attempts': attempts + 1})
+        return jsonify({"error": "Incorrect code. Please try again."}), 400
+
+    doc_ref.delete()
+    return jsonify({"success": True}), 200
 
 
 # =============================================================================

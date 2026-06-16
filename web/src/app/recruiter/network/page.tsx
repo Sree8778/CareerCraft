@@ -1,4 +1,4 @@
-// src/app/recruiter/network/page.tsx
+﻿// src/app/recruiter/network/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { Network, Search, UserPlus, CheckCircle, RefreshCw, Mail, Phone, Users, Shield, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
-const API = 'http://127.0.0.1:5000/api';
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 export default function RecruiterNetworkPage() {
   const { user, isAuthenticated } = useAuth();

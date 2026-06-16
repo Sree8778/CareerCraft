@@ -1,4 +1,4 @@
-// src/app/candidate/jobs/[id]/page.tsx
+﻿// src/app/candidate/jobs/[id]/page.tsx
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -94,7 +94,7 @@ export default function JobDetailPage() {
     return 'shadow-rose-500/10 border-rose-500/30';
   };
 
-  const API_BASE_URL = 'http://127.0.0.1:5000/api';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
   useEffect(() => {
     if (!isAuthenticated || user?.role !== 'candidate') {
@@ -270,7 +270,6 @@ export default function JobDetailPage() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
-          'X-Gemini-API-Key': customKey
         },
         body: JSON.stringify({
           resumeData: resumeData,
@@ -282,24 +281,26 @@ export default function JobDetailPage() {
           }
         })
       });
-      
-      if (!gradeResponse.ok) {
-        throw new Error("Grade response failed");
-      }
-      
+
       const gradeResult = await gradeResponse.json();
+      if (gradeResponse.status === 402 && gradeResult.error === 'no_api_keys') {
+        toast.dismiss(toastId);
+        toast.warning('Add your API keys in Profile → Settings to use AI resume grading.', { duration: 6000 });
+        setAutopilotLoading(false); setAutopilotActive(false); return;
+      }
+      if (!gradeResponse.ok) throw new Error("Grade response failed");
+
       setAtsScore(gradeResult.score || 82);
       setMatchingSkills(gradeResult.matchingSkills || []);
       setMissingKeywords(gradeResult.missingKeywords || []);
       setOptimizationTips(gradeResult.optimizationTips || []);
-      
+
       // Call cover letter endpoint
       const letterResponse = await fetch(`${API_BASE_URL}/generate-cover-letter`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
-          'X-Gemini-API-Key': customKey
         },
         body: JSON.stringify({
           resumeData: resumeData,
@@ -311,15 +312,18 @@ export default function JobDetailPage() {
           }
         })
       });
-      
-      if (!letterResponse.ok) {
-        throw new Error("Letter response failed");
-      }
-      
+
       const letterResult = await letterResponse.json();
+      if (letterResponse.status === 402 && letterResult.error === 'no_api_keys') {
+        toast.dismiss(toastId);
+        toast.warning('Add your API keys in Profile → Settings to generate cover letters.', { duration: 6000 });
+        setAutopilotLoading(false); setAutopilotActive(false); return;
+      }
+      if (!letterResponse.ok) throw new Error("Letter response failed");
+
       setAiCoverLetter(letterResult.coverLetter || '');
       setEditableCoverLetter(letterResult.coverLetter || '');
-      
+
       toast.success("AI matching complete! Resume audited and custom cover letter drafted.", { id: toastId });
     } catch (err) {
       console.error("Autopilot Apply failed:", err);

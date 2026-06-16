@@ -1,4 +1,4 @@
-// src/app/recruiter/sourcing/page.tsx
+﻿// src/app/recruiter/sourcing/page.tsx
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -12,7 +12,7 @@ import {
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
-const API = 'http://127.0.0.1:5000/api';
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 export default function RecruiterSourcingPage() {
   const { user, isAuthenticated } = useAuth();

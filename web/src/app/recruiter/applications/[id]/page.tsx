@@ -1,4 +1,4 @@
-// src/app/recruiter/applications/[id]/page.tsx
+﻿// src/app/recruiter/applications/[id]/page.tsx
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -14,7 +14,7 @@ import {
   MapPin, Phone, Award, TrendingUp, Save, RefreshCw, ExternalLink
 } from 'lucide-react';
 
-const API = 'http://127.0.0.1:5000/api';
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 const STATUS_FLOW = ['Applied', 'In Review', 'Interviewed', 'Shortlisted', 'Hired'];
 

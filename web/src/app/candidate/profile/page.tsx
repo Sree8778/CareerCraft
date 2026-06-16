@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -9,18 +9,18 @@ import { encryptApiKey } from '@/lib/crypto';
 import { KeyRound, CheckCircle, Trash2, ExternalLink, PlusCircle, RefreshCw, ShieldAlert, ShieldCheck, QrCode, Lock } from 'lucide-react';
 import { jsonHeaders } from '@/lib/api';
 
-type Provider = 'Gemini' | 'OpenAI' | 'Claude' | 'Groq';
+type Provider = 'Gemini' | 'OpenAI' | 'Claude' | 'Groq' | 'NVIDIA NIM';
 
 interface WalletKey {
   id: string;
   provider: Provider;
-  status: 'Active' | 'Standby';
+  status: 'Active' | 'Standby' | 'Invalid' | 'Exhausted';
   encryptedKey?: string;
 }
 
-const API_BASE = 'http://127.0.0.1:5000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
-const API_BASE_URL = 'http://127.0.0.1:5000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 export default function CandidateProfilePage() {
   const { user, isAuthenticated } = useAuth();
@@ -391,6 +391,7 @@ export default function CandidateProfilePage() {
                   <option value="OpenAI">OpenAI GPT-4</option>
                   <option value="Claude">Claude Anthropic</option>
                   <option value="Groq">Groq High-Speed</option>
+                  <option value="NVIDIA NIM">NVIDIA NIM — Llama 3.x</option>
                 </select>
               </div>
 
@@ -437,9 +438,17 @@ export default function CandidateProfilePage() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold font-mono text-indigo-400">{item.provider}</span>
-                          <span className={`text-[7px] font-bold uppercase tracking-widest px-1.5 rounded ${item.status === 'Active' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-800 text-zinc-400'}`}>
+                          <span className={`text-[7px] font-bold uppercase tracking-widest px-1.5 rounded ${
+                            item.status === 'Active' ? 'bg-emerald-500/20 text-emerald-300' :
+                            item.status === 'Invalid' ? 'bg-red-500/20 text-red-400' :
+                            item.status === 'Exhausted' ? 'bg-yellow-500/20 text-yellow-400' :
+                            'bg-zinc-800 text-zinc-400'
+                          }`}>
                             {item.status}
                           </span>
+                          {(item.status === 'Invalid' || item.status === 'Exhausted') && (
+                            <span className="text-[8px] text-red-400">— remove &amp; re-add</span>
+                          )}
                         </div>
                         <div className="font-mono text-[9px] text-zinc-500">
                           ••••••••••••••••••••••••••••••

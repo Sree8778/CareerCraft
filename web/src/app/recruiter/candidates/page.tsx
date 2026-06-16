@@ -1,4 +1,4 @@
-// src/app/recruiter/candidates/page.tsx
+﻿// src/app/recruiter/candidates/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -64,7 +64,7 @@ export default function CandidateListPage() {
   const [showCopilotSidebar, setShowCopilotSidebar] = useState(false);
   const [copilotLoading, setCopilotLoading] = useState(false);
 
-  const API_BASE_URL = 'http://127.0.0.1:5000/api';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
   // Load candidates from Firestore if available, otherwise use default mocks
   useEffect(() => {

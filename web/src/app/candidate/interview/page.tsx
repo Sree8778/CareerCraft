@@ -1,4 +1,4 @@
-// src/app/candidate/interview/page.tsx
+﻿// src/app/candidate/interview/page.tsx
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -62,7 +62,7 @@ export default function CandidateInterviewPage() {
   
   // Webcam elements
   const videoRef = useRef<HTMLVideoElement>(null);
-  const API_BASE_URL = 'http://127.0.0.1:5000/api';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
   // 30-minute Timer Effect
   useEffect(() => {
@@ -253,20 +253,11 @@ export default function CandidateInterviewPage() {
       const resumeData = resumeSnap.exists() ? resumeSnap.data().resumeData : {};
 
       // Get first opening question
-      let customKey = '';
-      if (typeof window !== 'undefined' && user?.id) {
-        const savedEncryptedKey = localStorage.getItem('user_gemini_api_key') || '';
-        if (savedEncryptedKey) {
-          customKey = await decryptApiKey(savedEncryptedKey, user.id);
-        }
-      }
-
       const response = await fetch(`${API_BASE_URL}/interviews/get-next-question`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
-          'X-Gemini-API-Key': customKey
         },
         body: JSON.stringify({
           resumeData,
@@ -277,6 +268,10 @@ export default function CandidateInterviewPage() {
       });
 
       const data = await response.json();
+      if (response.status === 402 && data.error === 'no_api_keys') {
+        toast.warning('Add your API keys in Profile → Settings to start an AI interview.', { duration: 6000 });
+        setLoading(false); return;
+      }
       const firstQuestion = data.nextQuestion || "Welcome. Let's start with your background. Can you outline your primary technical skills?";
       
       setCurrentQuestion(firstQuestion);
@@ -356,21 +351,12 @@ export default function CandidateInterviewPage() {
     setConversation(updatedHistory);
 
     try {
-      let customKey = '';
-      if (typeof window !== 'undefined' && user?.id) {
-        const savedEncryptedKey = localStorage.getItem('user_gemini_api_key') || '';
-        if (savedEncryptedKey) {
-          customKey = await decryptApiKey(savedEncryptedKey, user.id);
-        }
-      }
-
       // 1. Evaluate this turn
       const evalResp = await fetch(`${API_BASE_URL}/interviews/evaluate-response`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
-          'X-Gemini-API-Key': customKey
         },
         body: JSON.stringify({
           question: currentQuestion,
@@ -378,6 +364,10 @@ export default function CandidateInterviewPage() {
         })
       });
       const evalData = await evalResp.json();
+      if (evalResp.status === 402 && evalData.error === 'no_api_keys') {
+        toast.warning('Add your API keys in Profile → Settings to use AI interview evaluation.', { duration: 6000 });
+        setLoading(false); return;
+      }
 
       // 2. Fetch resume data
       const resumeSnap = await getDoc(doc(db, 'resumes', user?.id || 'mock_uid'));
@@ -390,7 +380,6 @@ export default function CandidateInterviewPage() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
-          'X-Gemini-API-Key': customKey
         },
         body: JSON.stringify({
           resumeData,

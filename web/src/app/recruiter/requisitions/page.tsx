@@ -1,7 +1,9 @@
-// src/app/recruiter/requisitions/page.tsx
+﻿// src/app/recruiter/requisitions/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 import RequisitionCard from '@/components/recruiter/RequisitionCard';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,7 +27,7 @@ export default function RequisitionListPage() {
       setLoading(true);
       try {
         // Fetch jobs and their application counts in parallel
-        const res = await fetch(`http://127.0.0.1:5000/api/jobs?recruiterId=${user.id}`, {
+        const res = await fetch(`${API_BASE}/jobs?recruiterId=${user.id}`, {
           headers: { 'Authorization': `Bearer mock_token_for_${user.id}` },
         });
         const data = await res.json();
@@ -35,7 +37,7 @@ export default function RequisitionListPage() {
         const withCounts = await Promise.all(
           jobList.map(async (job: any) => {
             try {
-              const appsRes = await fetch(`http://127.0.0.1:5000/api/jobs/${job.id}/applications`, {
+              const appsRes = await fetch(`${API_BASE}/jobs/${job.id}/applications`, {
                 headers: { 'Authorization': `Bearer mock_token_for_${user.id}` },
               });
               const appsData = await appsRes.json();

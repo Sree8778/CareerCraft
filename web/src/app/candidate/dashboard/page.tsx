@@ -261,10 +261,11 @@ export default function CandidateDashboardPage() {
                 Smart Agent Toolkits
               </h3>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
                   { name: 'Browse Live Jobs', href: '/candidate/jobs', desc: 'Scan matching open requisitions using AI semantic search filters.', label: 'Browse', color: 'border-indigo-500/20 hover:border-indigo-500/50 hover:shadow-indigo-500/5' },
                   { name: 'Portfolio Builder', href: '/candidate/resume-builder', desc: 'Refine education, jobs, skills, and optimize resume grades.', label: 'Design', color: 'border-cyan-500/20 hover:border-cyan-500/50 hover:shadow-cyan-500/5' },
+                  { name: 'AI Practice Interview', href: '/candidate/interview/practice', desc: 'Practice technical, behavioral and HR questions with instant AI coaching feedback.', label: 'Practice', color: 'border-emerald-500/20 hover:border-emerald-500/50 hover:shadow-emerald-500/5' },
                   { name: 'Profile Configurations', href: '/candidate/profile', desc: 'Update details, upload files, or tweak keys and credentials.', label: 'Configure', color: 'border-purple-500/20 hover:border-purple-500/50 hover:shadow-purple-500/5' }
                 ].map((act, i) => (
                   <Link href={act.href} key={act.name} className="block group">

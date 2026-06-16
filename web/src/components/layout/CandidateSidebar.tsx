@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Briefcase, User, LogOut, Search, FileEdit, Sparkles, MessageSquare, Building2, Network } from 'lucide-react';
+import { Briefcase, User, LogOut, Search, FileEdit, Sparkles, MessageSquare, Building2, Network, Mic } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import React from 'react';
@@ -13,6 +13,7 @@ const navLinks = [
   { name: 'Browse Jobs', href: '/candidate/jobs', icon: <Search size={18} /> },
   { name: 'Company Explorer', href: '/companies', icon: <Building2 size={18} /> },
   { name: 'Resume Builder', href: '/candidate/resume-builder', icon: <FileEdit size={18} /> },
+  { name: 'Practice Interview', href: '/candidate/interview/practice', icon: <Mic size={18} /> },
   { name: 'Messages', href: '/candidate/messages', icon: <MessageSquare size={18} /> },
   { name: 'Ecosystem Network', href: '/candidate/network', icon: <Network size={18} /> },
   { name: 'Profile Settings', href: '/candidate/profile', icon: <User size={18} /> },

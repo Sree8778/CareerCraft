@@ -1,4 +1,4 @@
-// src/app/companies/[id]/page.tsx
+﻿// src/app/companies/[id]/page.tsx
 'use client';
 
 import React, { useEffect, useState, use } from 'react';
@@ -13,7 +13,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
-const API = 'http://127.0.0.1:5000/api';
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);

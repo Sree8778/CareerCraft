@@ -1,182 +1,177 @@
-# backend/ollama_utils.py
-# Local LLM via Ollama — drop-in replacement for gemini_utils when cloud credits run out.
-import requests
+"""
+ollama_utils.py — AI function library backed by ai_router (BYOK multi-key fallback).
+
+All AI calls go through ai_router.route() which:
+  1. Tries the user's own keys in order (Active → Standby).
+  2. On quota/rate-limit: marks key Exhausted, tries next key.
+  3. On invalid key: marks key Invalid, tries next key.
+  4. If all user keys fail: falls back to the server's NVIDIA NIM key.
+
+Function signatures are unchanged — routes.py needs no edits.
+"""
+
 import json
-import re
+import logging
+from typing import Any
 
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "llama3:latest"
+import ai_router
 
+logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Core query helpers
-# ---------------------------------------------------------------------------
+# ── Per-request key wallet ─────────────────────────────────────────────────────
+# Populated by configure_dynamic_api_key in routes.py before each request.
 
-def _clean_json(text: str):
-    """Strip markdown fences and extract the first valid JSON value."""
-    text = re.sub(r'^```(?:json)?\s*|\s*```$', '', text.strip(), flags=re.MULTILINE).strip()
-    # Try to pull the first {...} or [...] block in case model added prose
-    match = re.search(r'(\{[\s\S]*\}|\[[\s\S]*\])', text)
-    if match:
-        text = match.group(1)
-    return text
+_request_wallet: list[dict] = []
+_status_callback = None   # optional Firestore key-status updater
 
 
-def _query_ollama(prompt: str, is_json: bool = False):
-    import os
-    nvidia_key = os.getenv("NVIDIA_API_KEY", "").strip()
-    if nvidia_key:
-        url = "https://integrate.api.nvidia.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {nvidia_key}",
-            "Content-Type": "application/json"
-        }
-        model = os.getenv("NVIDIA_MODEL_NAME", "meta/llama-3.1-8b-instruct")
-        payload = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.1,
-            "max_tokens": 2048
-        }
-        if is_json:
-            payload["response_format"] = {"type": "json_object"}
-            
-        try:
-            r = requests.post(url, json=payload, headers=headers, timeout=60)
-            r.raise_for_status()
-            response_text = r.json()["choices"][0]["message"]["content"].strip()
-            if is_json:
-                return json.loads(_clean_json(response_text))
-            return response_text
-        except Exception as e:
-            print(f"[NVIDIA NIM] API Error on model '{model}': {e}")
-            return None
-
-    # Fallback to local Ollama
-    payload = {"model": MODEL_NAME, "prompt": prompt, "stream": False}
-    if is_json:
-        payload["format"] = "json"
-    try:
-        r = requests.post(OLLAMA_API_URL, json=payload, timeout=300)
-        r.raise_for_status()
-        response_text = r.json().get("response", "")
-        if is_json:
-            return json.loads(_clean_json(response_text))
-        return response_text.strip()
-    except requests.exceptions.RequestException as e:
-        print(f"[OLLAMA] Connection error: {e}")
-        return None
-    except json.JSONDecodeError as e:
-        print(f"[OLLAMA] JSON decode error: {e}")
-        return None
+def set_request_wallet(wallet: list[dict], on_status_change=None) -> None:
+    """Called by configure_dynamic_api_key with the user's full key wallet."""
+    global _request_wallet, _status_callback
+    _request_wallet     = wallet or []
+    _status_callback    = on_status_change
 
 
-# ---------------------------------------------------------------------------
-# Dynamic key setter and router to Gemini
-# ---------------------------------------------------------------------------
-import gemini_utils
-import os
-
-_has_gemini_key = False
-
-def set_api_key(key: str):
-    global _has_gemini_key
+def set_api_key(key: str) -> None:
+    """
+    Legacy single-key setter — called when X-Gemini-API-Key header is present.
+    Injects it as a high-priority Gemini key at the front of the wallet.
+    """
+    global _request_wallet
     if key and key.strip():
-        gemini_utils.set_api_key(key.strip())
-        _has_gemini_key = True
+        inline = {"id": "inline-gemini", "provider": "Gemini",
+                  "key": key.strip(), "status": "Active"}
+        # Prepend so it is tried first
+        _request_wallet = [inline] + [k for k in _request_wallet if k.get("id") != "inline-gemini"]
     else:
-        _has_gemini_key = False
-
-def _should_use_gemini():
-    # If the candidate has dynamically configured their own Gemini key, use it
-    if _has_gemini_key:
-        return True
-    
-    # Check environment keys
-    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
-    nvidia_key = os.getenv("NVIDIA_API_KEY", "").strip()
-    
-    # If the server has a valid NVIDIA NIM key configured, prefer it over the disabled default Gemini key
-    if nvidia_key:
-        return False
-        
-    return bool(gemini_key and gemini_key != "AIzaSyAjXE4BiSqlwtvUbI1Mv8_0zK8r4HyG7c0")
-
-import functools
-
-def delegate_to_gemini(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        if _should_use_gemini():
-            gemini_func = getattr(gemini_utils, func.__name__, None)
-            if gemini_func:
-                return gemini_func(*args, **kwargs)
-        return func(*args, **kwargs)
-    return wrapper
+        _request_wallet = [k for k in _request_wallet if k.get("id") != "inline-gemini"]
 
 
-# ---------------------------------------------------------------------------
-# 1. Resume parsing  (matches gemini_utils.structure_text_with_ai)
-# ---------------------------------------------------------------------------
+# ── Internal helpers ───────────────────────────────────────────────────────────
 
-@delegate_to_gemini
+def _decrypt(ciphertext: str) -> str:
+    try:
+        from vault_utils import decrypt_key
+        return decrypt_key(ciphertext)
+    except Exception:
+        return ciphertext
+
+
+def _repair_json(raw: str) -> Any:
+    """Best-effort JSON extraction from a possibly truncated or markdown-wrapped response."""
+    import re
+    # Strip markdown fences
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE).strip()
+    # Try the whole thing first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Find the largest {...} or [...] block
+    m = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
+    if m:
+        candidate = m.group(1)
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            # Truncated JSON — try to close open brackets so it parses
+            for _ in range(50):
+                opens = candidate.count('{') - candidate.count('}')
+                if opens <= 0:
+                    break
+                candidate += '}'
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+    return None
+
+
+def _call(prompt: str, *, json_mode: bool = False,
+          heavy: bool = False, max_tokens: int = 2048) -> Any:
+    """
+    Route strictly through the user's own key wallet (BYOK).
+    Raises RuntimeError("NO_API_KEYS: ...") if no usable keys are available.
+    """
+    try:
+        raw = ai_router.route(
+            prompt, _request_wallet,
+            max_tokens=max_tokens, json_mode=json_mode, heavy=heavy,
+            vault_decrypt=_decrypt, on_status_change=_status_callback,
+        )
+    except RuntimeError as e:
+        msg = str(e)
+        if "no_user_keys_invalid" in msg:
+            raise RuntimeError(
+                "NO_API_KEYS: Your saved API keys are expired or invalid. "
+                "Remove them in Profile → Settings and add a working key."
+            )
+        if "no_user_keys" in msg:
+            raise RuntimeError(
+                "NO_API_KEYS: Add your API keys in Profile → Settings to unlock AI-powered features."
+            )
+        raise
+
+    if json_mode:
+        return _repair_json(raw)
+    return raw
+
+
+# ── 1. Resume parsing ──────────────────────────────────────────────────────────
+
 def structure_text_with_ai(raw_resume_text: str) -> dict:
-    """Parse raw resume text into a structured JSON object."""
     schema = {
-        "personal": {"name": "", "email": "", "phone": "", "location": "", "legalStatus": ""},
-        "summary": "",
-        "experience": [{"id": "", "jobTitle": "", "company": "", "dates": "", "description": ""}],
-        "education": [{"id": "", "degree": "", "institution": "", "graduationYear": "", "gpa": "", "achievements": ""}],
-        "skills": [{"id": "", "category": "", "skills_list": ""}],
-        "certifications": [{"name": "", "issuer": "", "date": ""}],
-        "publications": [{"title": "", "authors": "", "journal": "", "date": "", "link": ""}],
-        "projects": [{"id": "", "title": "", "date": "", "description": "", "technologies": "", "link": ""}],
+        "personal":       {"name": "", "email": "", "phone": "", "location": "", "legalStatus": ""},
+        "summary":        "",
+        "experience":     [{"id": "", "jobTitle": "", "company": "", "dates": "", "description": ""}],
+        "education":      [{"id": "", "degree": "", "institution": "", "graduationYear": "", "gpa": "", "achievements": ""}],
+        "skills":         [{"id": "", "category": "", "skills_list": ""}],
+        "projects":       [{"id": "", "title": "", "date": "", "description": ""}],
+        "publications":   [{"id": "", "title": "", "authors": "", "journal": "", "date": "", "link": ""}],
+        "certifications": [{"id": "", "name": "", "issuer": "", "date": ""}],
     }
-    prompt = f"""You are an expert resume parser.
-Extract all information from the resume text below and return ONLY a valid JSON object matching this schema exactly.
+    prompt = f"""You are an expert resume parser. Extract all information from the resume text below.
 
-Strict Sanitization Rules:
-1. Email Address: Ensure the email is a clean, valid email address. Strip out any garbage symbols, Unicode icons, or prefix words/labels like "envel⌢pe", "envelope", "email", "mail", "e-mail" that might be prepended or appended due to PDF icon-to-text conversion. E.g., "envel⌢pesreeramvarmac@gmail.com" -> "sreeramvarmac@gmail.com".
-2. Project Names: If a project has a description but the title/name is empty, missing, or represented as empty parentheses "()", infer a concise, high-impact, professional title for the project based on its description (e.g. "Asset Prescriptive Engine" or "Campus Transit Ecosystem") instead of leaving the "name" field empty.
-3. Clean Text: Remove any weird formatting layout leftovers, orphaned brackets, or garbage characters (such as "()") from all output fields.
+OUTPUT FORMAT: Return ONLY a raw JSON object.
+- Start your response with {{ and end with }}
+- No markdown fences, no backticks, no explanation, no text before or after the JSON.
 
-Schema:
+Required schema:
 {json.dumps(schema, indent=2)}
 
-Resume Text:
+Rules:
+- description/achievements fields: use <ul><li>…</li></ul> or <p>…</p> HTML.
+- skills_list: comma-separated plain text, no HTML.
+- Generate a unique short id like "a1b2c3" for each list item.
+- Empty sections → use [].
+
+Resume text:
 ---
-{raw_resume_text}
----
-JSON Output:"""
-    result = _query_ollama(prompt, is_json=True)
+{raw_resume_text[:6000]}
+---"""
+    result = _call(prompt, json_mode=True, max_tokens=4096)
     return result if isinstance(result, dict) else {}
 
 
-# alias used internally
 generate_resume_fields_from_raw_text = structure_text_with_ai
 
 
-# ---------------------------------------------------------------------------
-# 2. Section enhancement  (matches gemini_utils.enhance_section_with_ai)
-# ---------------------------------------------------------------------------
+# ── 2. Section enhancement ─────────────────────────────────────────────────────
 
-@delegate_to_gemini
 def enhance_section_with_ai(section_name: str, text_to_enhance: str) -> list:
-    """Return 3 improved versions of a resume section."""
     if not text_to_enhance.strip():
         return [text_to_enhance]
     prompt = f"""You are a professional resume advisor.
-Rewrite the following resume section ("{section_name}") to be more professional, impactful, and concise.
+Rewrite the following resume section ("{section_name}") to be more professional, impactful, and ATS-optimised.
 Generate exactly 3 distinct, polished versions.
-Return ONLY a valid JSON object with a single key "versions" containing an array of 3 strings.
-Example: {{"versions": ["Version 1 text", "Version 2 text", "Version 3 text"]}}
+Return ONLY: {{"versions": ["Version 1", "Version 2", "Version 3"]}}
 
 Input:
 ---
 {text_to_enhance}
 ---
 JSON:"""
-    result = _query_ollama(prompt, is_json=True)
+    result = _call(prompt, json_mode=True)
     if isinstance(result, dict):
         versions = result.get("versions", [])
         if isinstance(versions, list) and versions:
@@ -184,36 +179,22 @@ JSON:"""
     return [text_to_enhance]
 
 
-# keep old name as alias
 enhance_with_ollama = enhance_section_with_ai
 
 
-# ---------------------------------------------------------------------------
-# 3. Elevator pitch
-# ---------------------------------------------------------------------------
+# ── 3. Summary suggestions ─────────────────────────────────────────────────────
 
-@delegate_to_gemini
 def generate_summary_suggestions(resume_data: dict) -> list:
-    """Generate 3 distinct professional summary options when the resume has no summary."""
-    prompt = f"""You are an expert career coach and resume writer.
-A candidate has uploaded their resume but it has no professional summary.
-Based on their resume data below, write exactly 3 distinct, polished professional summary paragraphs (3-4 sentences each).
+    prompt = f"""You are an expert career coach.
+Write exactly 3 distinct professional summary paragraphs (3-4 sentences each).
+First person, present tense. ATS-friendly. Highlight years of experience, key skills, career goals.
+Return ONLY: {{"summaries": ["Summary 1.", "Summary 2.", "Summary 3."]}}
 
-Each summary should:
-- Be written in first person, present tense
-- Highlight the candidate's years of experience, key skills, and career goals
-- Be ATS-friendly and tailored to the roles they've held
-- Sound human and compelling — not generic boilerplate
-
-Return ONLY a valid JSON object with a single key "summaries" containing an array of 3 HTML strings (you may use <strong>, <em>, or plain text — no <p> tags needed, they will be wrapped automatically).
-
-Example format: {{"summaries": ["Summary 1 text here.", "Summary 2 text here.", "Summary 3 text here."]}}
-
-Resume Data:
+Resume:
 {json.dumps(resume_data, indent=2)}
 
 JSON:"""
-    result = _query_ollama(prompt, is_json=True)
+    result = _call(prompt, json_mode=True)
     if isinstance(result, dict):
         summaries = result.get("summaries", [])
         if isinstance(summaries, list) and summaries:
@@ -221,236 +202,374 @@ JSON:"""
     return []
 
 
-@delegate_to_gemini
+# ── 4. Elevator pitch ──────────────────────────────────────────────────────────
+
 def generate_elevator_pitch(resume_data: dict) -> str:
-    prompt = f"""Based on the candidate resume data below, write a compelling 30-second elevator pitch (3-4 sentences).
-Be professional, engaging, and highlight key strengths and career goals.
-Output ONLY the pitch text — no labels, no intro.
+    prompt = f"""Write a compelling 30-second elevator pitch (3-4 sentences) for this candidate.
+Professional, engaging. Highlight key strengths and goals.
+Output ONLY the pitch text — no labels, no markdown.
 
 Resume:
-{json.dumps(resume_data, indent=2)}
-
-Elevator Pitch:"""
-    return _query_ollama(prompt) or "Could not generate elevator pitch."
+{json.dumps(resume_data, indent=2)}"""
+    return _call(prompt) or "Could not generate elevator pitch."
 
 
-# ---------------------------------------------------------------------------
-# 4. Interview question generation
-# ---------------------------------------------------------------------------
+# ── 5. Interview question generation ──────────────────────────────────────────
 
-@delegate_to_gemini
 def generate_next_interview_question(resume_data: dict, conversation_history: list,
                                       latest_transcript: str, elapsed_seconds: int) -> str:
     history_str = ""
     for turn in conversation_history:
-        speaker = "Interviewer (AI)" if turn.get("speaker") == "ai" else "Candidate"
+        speaker = "Interviewer" if turn.get("speaker") == "ai" else "Candidate"
         history_str += f"{speaker}: {turn.get('text', '')}\n"
     if latest_transcript:
-        history_str += f"Candidate (Latest Answer): {latest_transcript}\n"
+        history_str += f"Candidate (Latest): {latest_transcript}\n"
 
-    time_limit_mins = 30
     elapsed_mins = elapsed_seconds / 60.0
+    prompt = f"""You are an elite Senior Technical Architect conducting a live 30-minute voice interview.
+Deep-dive technical assessment. Listen carefully and probe further.
 
-    prompt = f"""
-    You are an elite, highly critical Senior Technical Architect conducting a live 30-minute voice interview.
-    Your goal is to perform a deep-dive technical assessment of the candidate. Do not ask generic questions or a static checklist.
-    Instead, act like a real, conversational interviewer who listens carefully, catches details or technical claims in their latest answer, and probes further.
+Candidate Resume:
+{json.dumps(resume_data, indent=2)}
 
-    Candidate Resume:
-    {json.dumps(resume_data, indent=2)}
+Elapsed: {elapsed_mins:.1f} / 30 minutes
 
-    Elapsed Time: {elapsed_mins:.1f} minutes. Limit: {time_limit_mins} minutes.
+History:
+{history_str}
 
-    Conversation History:
-    {history_str}
-
-    Strict Interview Rules:
-    1. If history is empty, greet them warmly and ask a highly tailored opening question based on their most complex projects or experience.
-    2. If elapsed time is near the limit (e.g. > 26 mins), wrap up gracefully and ask if they have final questions for you.
-    3. Listen to their Latest Answer:
-       - If they just listed buzzwords (e.g., "I used Kubernetes and Docker"), challenge them to explain their configuration (e.g., "Why did you choose that orchestration strategy, and how did you configure ingress?").
-       - If they made a performance claim (e.g. "improved speed by 40%"), ask *how* they measured it and what the bottlenecks were.
-       - Focus on trade-offs, architecture choices, and deep systems designs.
-    4. Keep your question concise (1-2 sentences) so that it is optimized for Text-to-Speech (TTS) voice playback.
-    5. Output ONLY the raw question text. Do not add tags, greetings, prefixes, or formatting.
-    """
-    return _query_ollama(prompt) or "Could you tell me more about your most proud technical project?"
+Rules:
+1. Empty history → brief greeting + tailored opening question.
+2. Elapsed > 26 min → wrap up gracefully.
+3. Challenge vague buzzwords — ask HOW and WHY.
+4. Challenge performance claims — ask how they measured.
+5. 1-2 sentences only (optimised for TTS).
+6. Output ONLY the raw question. No tags, no formatting."""
+    return _call(prompt, heavy=True) or "Tell me about your most challenging technical project."
 
 
-# ---------------------------------------------------------------------------
-# 5. Voice answer evaluation
-# ---------------------------------------------------------------------------
+# ── 6. Voice answer evaluation ─────────────────────────────────────────────────
 
-@delegate_to_gemini
 def evaluate_voice_answer(question: str, transcript: str) -> dict:
-    # 1. Deterministic anti-cheat heuristic scan
-    transcript_lower = transcript.strip().lower()
-    is_suspicious = False
-    cheat_reason = ""
+    t = transcript.strip().lower()
 
-    ai_intros = [
-        "certainly, when it comes to",
-        "certainly! when it comes to",
-        "certainly, to answer your",
-        "great question! when considering",
-        "sure, when it comes to",
-        "certainly, in regards to",
-        "certainly, when considering",
-        "certainly, when looking at"
-    ]
-    for intro in ai_intros:
-        if transcript_lower.startswith(intro):
-            is_suspicious = True
-            cheat_reason = f"AI conversational preface detected ('{intro}')"
+    # Deterministic heuristic anti-cheat (runs before any AI call)
+    suspicious, cheat_reason = False, ""
+    for intro in ["certainly, when", "certainly! when", "great question!", "sure, when"]:
+        if t.startswith(intro):
+            suspicious, cheat_reason = True, f"AI preface detected: '{intro}'"
             break
+    if not suspicious and ("firstly," in t and "secondly," in t):
+        suspicious, cheat_reason = True, "Rigid AI transition list (firstly/secondly)"
+    if not suspicious and len(question) > 20 and question.strip().lower() in t:
+        suspicious, cheat_reason = True, "Answer contains verbatim copy of the question"
 
-    if not is_suspicious:
-        if "firstly," in transcript_lower and "secondly," in transcript_lower:
-            is_suspicious = True
-            cheat_reason = "Rigid chatbot-like transition list detected ('firstly... secondly...')"
+    prompt = f"""You are an expert technical assessor grading an interview answer. Be critical and objective.
 
-    if not is_suspicious:
-        clean_question = question.strip().lower()
-        if len(clean_question) > 20 and clean_question in transcript_lower:
-            is_suspicious = True
-            cheat_reason = "Transcript contains verbatim copy of the interview question"
+Question: "{question}"
+Answer: "{transcript}"
 
-    prompt = f"""
-    You are an expert technical assessor grading candidate answers in a high-stakes engineering interview.
-    Be highly analytical, critical, and objective. 
+Evaluate:
+1. Technical accuracy
+2. Conceptual depth (WHY/HOW, not just buzzwords)
+3. Communication clarity
 
-    Question: "{question}"
-    Candidate Response: "{transcript}"
+Anti-cheat: set suspiciousActivity=true if answer uses AI prefaces (Certainly, Sure, Great question)
+or rigid lists (Firstly, Secondly). Cap score at 30 if suspicious.
 
-    Perform a thorough multidimensional evaluation:
-    1. Technical Accuracy: Did they use terms correctly? Are the architectural concepts valid?
-    2. Conceptual Depth: Did they explain *why* and *how* things work under the hood, or just repeat surface keywords?
-    3. Communication: Is the answer structured, coherent, and direct?
-    4. Anti-Cheat Scan (Plagiarism & AI Generated Content Detection):
-       - You MUST set "suspiciousActivity" to true if the candidate's answer displays patterns of AI-generated content or boilerplate.
-       - CRITICAL ZERO-TOLERANCE RULES:
-         a) If the response begins with conversational helper prefaces (e.g., "Certainly...", "Sure...", "I'd be happy to...", "Great question...", "When considering..."), set "suspiciousActivity" to true immediately.
-         b) If the response uses rigid ordinal transition lists (e.g., "Firstly...", "Secondly...", "Lastly..."), set "suspiciousActivity" to true immediately.
-         c) If the response repeats the question verbatim, set "suspiciousActivity" to true immediately.
-       - If you flag suspiciousActivity as true, explain this exact reason in the "reasoning" field and cap the score at a maximum of 30.
-
-    Return ONLY a valid JSON object matching this schema exactly (no markdown formatting, no code blocks):
-    {{
-      "score": <number 0-100 based on accuracy, depth, and clarity>,
-      "feedback": "<detailed constructive, technical critique. Highlight what was good and what was missing>",
-      "suspiciousActivity": <true or false if AI-generated or copied boilerplate is detected>,
-      "reasoning": "<internal explanation for the score and any suspicious flags>"
-    }}
-    """
-    result = _query_ollama(prompt, is_json=True)
+Return ONLY this JSON:
+{{
+  "score": <0-100>,
+  "feedback": "<detailed technical critique>",
+  "suspiciousActivity": <true|false>,
+  "reasoning": "<score explanation>"
+}}"""
+    result = _call(prompt, json_mode=True)
     if not isinstance(result, dict) or "score" not in result:
-        result = {
-            "score": 75,
-            "feedback": "Solid response. Understood core concepts.",
-            "suspiciousActivity": False,
-            "reasoning": "Fallback due to system evaluation timeout or JSON format error."
-        }
-
-    # Apply heuristic override if triggered
-    if is_suspicious:
+        result = {"score": 75, "feedback": "Core concepts understood.",
+                  "suspiciousActivity": False, "reasoning": "AI evaluation unavailable — fallback score."}
+    if suspicious:
         result["suspiciousActivity"] = True
-        result["score"] = min(result.get("score", 100), 30)
-        orig_reasoning = result.get("reasoning", "")
-        result["reasoning"] = f"Heuristic Scan: {cheat_reason}. " + orig_reasoning
-
+        result["score"]   = min(result.get("score", 100), 30)
+        result["reasoning"] = f"Heuristic: {cheat_reason}. " + result.get("reasoning", "")
     return result
 
 
-# ---------------------------------------------------------------------------
-# 6. Semantic job search
-# ---------------------------------------------------------------------------
+# ── 6b. Conversational AI interviewer (voice mode) ────────────────────────────
 
-@delegate_to_gemini
+def ai_interviewer_turn(
+    conversation: list,
+    role: str,
+    interview_type: str,
+    difficulty: str,
+    turn_number: int,
+    total_turns: int,
+    job_description: str = "",
+) -> str:
+    """
+    Generate a natural, human-sounding AI interviewer response.
+    Maintains full conversation context and sounds like a real person.
+    """
+    # Build conversation history — avoid "Name:" speaker labels which cause premature stop
+    recent = conversation[-10:]
+    history_lines = []
+    for t in recent:
+        tag = "[INTERVIEWER]" if t.get("role") == "ai" else "[CANDIDATE]"
+        history_lines.append(f"{tag} {t.get('text', '').strip()}")
+    history_str = "\n".join(history_lines)
+
+    # Extract what the candidate said most recently
+    last_candidate = next(
+        (t.get("text", "").strip() for t in reversed(conversation) if t.get("role") == "user"),
+        ""
+    )
+
+    # Topics already covered — avoid repetition
+    ai_questions = [t.get("text", "") for t in conversation if t.get("role") == "ai"]
+    covered = " | ".join(ai_questions[-3:]) if ai_questions else "none"
+
+    difficulty_ctx = {
+        "Junior":  "Candidate is entry-level — focus on fundamentals and eagerness to learn.",
+        "Mid":     "Candidate has 2–5 years experience — dig into real project examples.",
+        "Senior":  "Candidate is senior — explore system design, trade-offs, and leadership.",
+    }.get(difficulty, "")
+
+    type_ctx = {
+        "Technical":  f"Technical interview for {role}. Ask about relevant tech stack, system design, debugging, or algorithms.",
+        "Behavioral": "Behavioral interview. Use 'Tell me about a time...' format. Focus on conflict, leadership, failure, or teamwork.",
+        "HR":         "HR interview. Explore career goals, motivation, culture fit, or strengths/weaknesses.",
+        "Mixed":      f"Mix technical and behavioral. Alternate between {role}-specific tech questions and situational questions.",
+    }.get(interview_type, "")
+
+    # Job-description context injected into prompts when provided
+    jd_snippet = ""
+    if job_description and job_description.strip():
+        # Trim to avoid token bloat — first 800 chars covers most key requirements
+        jd_text = job_description.strip()[:800]
+        jd_snippet = f"\nJob description (use this to ask targeted questions):\n{jd_text}\n"
+
+    if not conversation:
+        prompt = f"""You are Alex, a senior {role} interviewer starting a live {interview_type} interview.
+{jd_snippet}
+Say exactly three things as natural spoken sentences:
+1. Introduce yourself: "Hey, I'm Alex, I'll be your interviewer today."
+2. One warm sentence to put the candidate at ease.
+3. Ask ONLY this single question: "Could you start by telling me a bit about yourself?"
+
+IMPORTANT: Ask only ONE question. Do NOT ask about their background AND something else in the same turn.
+Write only what Alex says out loud. No markdown, no labels, no bullet points. Complete every sentence."""
+
+    elif turn_number > total_turns:
+        prompt = f"""You are Alex, the interviewer. The interview is wrapping up.
+
+The candidate just said: "{last_candidate}"
+
+Say 2 natural sentences:
+- Acknowledge one specific thing they said.
+- Thank them and let them know next steps are coming.
+
+Write only what Alex says. No markdown. Complete every sentence."""
+
+    else:
+        prompt = f"""You are Alex, a {difficulty} {role} interviewer. This is turn {turn_number} of {total_turns} in a live {interview_type} interview.
+{jd_snippet}
+Conversation so far:
+{history_str}
+
+The candidate just said: "{last_candidate}"
+
+Topics already covered (do not repeat): {covered}
+
+Write Alex's next spoken response in exactly 3 sentences:
+Sentence 1: React to ONE specific thing the candidate said. Do NOT say "Great answer!" — react like a real person, e.g. "Oh right, so you were dealing with X..." or "Yeah, that trade-off comes up a lot..."
+Sentence 2: Transition naturally: "So my next question is..." or "Let me ask you about..." or "On that note..."
+Sentence 3: Ask EXACTLY ONE question. {type_ctx} {difficulty_ctx} {"Prioritise skills and requirements mentioned in the job description above." if jd_snippet else ""}
+
+STRICT RULES:
+- Your entire response must end with exactly ONE question mark. Count before submitting.
+- Do NOT ask two questions. Do NOT add "and also..." or "could you also tell me..." after your question.
+- Write only spoken words. No bullet points, no markdown, no labels.
+- Complete every sentence — never stop mid-sentence."""
+
+    raw = _call(prompt, heavy=False, max_tokens=600) or \
+          "That's really interesting. Can you walk me through how you'd approach that from scratch?"
+
+    # Safety net: if 3+ question marks, truncate after the 2nd one.
+    # (Allows 1 rhetorical "?" in the reaction + 1 real question; strips any 3rd+)
+    q_count = raw.count("?")
+    if q_count > 2:
+        first = raw.index("?")
+        second = raw.index("?", first + 1)
+        raw = raw[:second + 1].strip()
+
+    return raw
+
+
+def ai_interview_final_feedback(conversation: list, role: str, interview_type: str) -> dict:
+    """End-of-session evaluation of the full conversation."""
+    qa_pairs = []
+    ai_turns = [t for t in conversation if t.get("role") == "ai"]
+    user_turns = [t for t in conversation if t.get("role") == "user"]
+    for i, ans in enumerate(user_turns):
+        q = ai_turns[i].get("text", "") if i < len(ai_turns) else ""
+        qa_pairs.append({"question": q, "answer": ans.get("text", "")})
+
+    prompt = f"""You are an expert career coach. Evaluate this {interview_type} interview for a {role} position.
+
+Interview transcript:
+{chr(10).join(f'Q{i+1}: {p["question"]}{chr(10)}A{i+1}: {p["answer"]}' for i, p in enumerate(qa_pairs))}
+
+Return ONLY this JSON:
+{{
+  "overallScore": <1-10 float>,
+  "rating": "<Poor|Fair|Good|Excellent>",
+  "strengths": ["<strength>", "<strength>", "<strength>"],
+  "improvements": ["<area>", "<area>", "<area>"],
+  "questionScores": [<score 1-10 per answer>],
+  "summary": "<2-3 sentence overall coaching summary>"
+}}"""
+    result = _call(prompt, json_mode=True, max_tokens=800)
+    if isinstance(result, dict) and "overallScore" in result:
+        return result
+    return {
+        "overallScore": 6.0, "rating": "Good",
+        "strengths": ["Engaged throughout", "Addressed questions"],
+        "improvements": ["Add more concrete examples", "Structure answers clearly"],
+        "questionScores": [6] * len(user_turns),
+        "summary": "Good effort overall. Focus on specific examples and structured answers."
+    }
+
+
+# ── 6c. Practice interview question ───────────────────────────────────────────
+
+def generate_practice_question(interview_type: str, role: str, difficulty: str,
+                                question_number: int, asked_questions: list) -> str:
+    asked = "\n".join(f"- {q}" for q in asked_questions) if asked_questions else "None yet"
+    type_guidance = {
+        "Technical":  "Ask about specific technologies, algorithms, system design, debugging, or architecture relevant to the role.",
+        "Behavioral": "Use real workplace scenarios: leadership, conflict resolution, failure, teamwork, deadlines. Prompt for a STAR-style answer.",
+        "HR":         "Ask about motivation, culture fit, career goals, strengths/weaknesses, or salary expectations.",
+        "Mixed":      "Alternate between technical depth, behavioral situations, and HR topics.",
+    }.get(interview_type, "Ask a relevant interview question.")
+    difficulty_guidance = {
+        "Junior":  "Focus on fundamentals, basic concepts, and learning attitude.",
+        "Mid":     "Expect hands-on experience; probe for depth and real examples.",
+        "Senior":  "Expect architectural decisions, trade-offs, team leadership, and impact at scale.",
+    }.get(difficulty, "")
+    prompt = f"""You are an experienced interviewer conducting a {difficulty} {role} {interview_type} interview.
+Generate question #{question_number}.
+
+Guidance: {type_guidance}
+Level: {difficulty_guidance}
+
+Questions already asked (do not repeat):
+{asked}
+
+Output ONLY the question text. No numbering, no preamble."""
+    return _call(prompt) or "Tell me about yourself and what you bring to this role."
+
+
+# ── 6c. Practice answer evaluation (coaching mode) ────────────────────────────
+
+def evaluate_practice_answer(question: str, answer: str, interview_type: str, role: str) -> dict:
+    prompt = f"""You are a supportive career coach evaluating a practice interview answer.
+Be encouraging but honest. Focus on actionable coaching.
+
+Role: {role}
+Interview type: {interview_type}
+Question: "{question}"
+Answer: "{answer}"
+
+Return ONLY this JSON:
+{{
+  "score": <integer 1-10>,
+  "rating": "<Poor|Fair|Good|Excellent>",
+  "strengths": ["<specific strength from the answer>", "<another strength>"],
+  "improvements": ["<specific thing to improve>", "<another improvement>"],
+  "tip": "<one concrete, actionable coaching tip for this question>",
+  "sample_points": ["<key point a strong answer would include>", "<another key point>"]
+}}
+
+JSON:"""
+    result = _call(prompt, json_mode=True, max_tokens=1024)
+    if isinstance(result, dict) and "score" in result:
+        return result
+    return {
+        "score": 6, "rating": "Good",
+        "strengths": ["Addressed the question"],
+        "improvements": ["Add more specific examples"],
+        "tip": "Use the STAR method: Situation, Task, Action, Result.",
+        "sample_points": ["Include a concrete example", "Quantify your impact where possible"]
+    }
+
+
+# ── 7. Semantic job search ─────────────────────────────────────────────────────
+
 def semantic_job_search(query: str, jobs_list: list) -> list:
-    # Trim job list to avoid context overflow — send top 20
     trimmed = jobs_list[:20]
-    prompt = f"""You are a career matcher. Semantically match the search query against the job list.
-Understand synonyms (React = Frontend, Python = Flask/Django, remote = work from home).
-
+    prompt = f"""Semantically match the search query against the job list. Understand synonyms.
 Query: "{query}"
-
 Jobs:
 {json.dumps(trimmed, indent=2)}
 
-Return ONLY a raw JSON array of matching jobs (matchPercentage >= 30), each with:
-- all original job fields
+Return ONLY a JSON array of matching jobs (matchPercentage >= 30), each with all original fields plus:
 - "matchPercentage": integer 0-100
-- "fitReasoning": string (one sentence why this job fits)
+- "fitReasoning": one sentence
 
-Ordered by matchPercentage descending. Raw JSON array only."""
-    result = _query_ollama(prompt, is_json=True)
+Ordered by matchPercentage desc. Raw JSON array only."""
+    result = _call(prompt, json_mode=True)
     if isinstance(result, list):
         return result
-    # fallback
-    return [{**j, "matchPercentage": 75, "fitReasoning": "Matches your key criteria."} for j in trimmed[:3]]
+    return [{**j, "matchPercentage": 75, "fitReasoning": "Matches key criteria."} for j in trimmed[:3]]
 
 
-# ---------------------------------------------------------------------------
-# 7. Recruiter copilot candidate search
-# ---------------------------------------------------------------------------
+# ── 8. Recruiter copilot ───────────────────────────────────────────────────────
 
-@delegate_to_gemini
 def copilot_candidate_search(query: str, candidates_list: list) -> list:
     trimmed = candidates_list[:15]
-    prompt = f"""You are an AI recruiter copilot. Match the recruiter's request against the candidate list.
-
+    prompt = f"""You are an AI recruiter copilot. Match the recruiter's request to candidates.
 Request: "{query}"
-
 Candidates:
 {json.dumps(trimmed, indent=2)}
 
-Return ONLY a raw JSON array of matching candidates (matchScore >= 35), each with:
-- all original candidate fields
+Return ONLY a JSON array of matching candidates (matchScore >= 35), each with all original fields plus:
 - "matchScore": integer 0-100
 - "matchingSkills": array of strings
-- "copilotReasoning": string (brief professional evaluation)
+- "copilotReasoning": one-sentence evaluation
 
-Ordered by matchScore descending. Raw JSON array only."""
-    result = _query_ollama(prompt, is_json=True)
+Ordered by matchScore desc. Raw JSON array only."""
+    result = _call(prompt, json_mode=True)
     if isinstance(result, list):
         return result
-    return [{**c, "matchScore": 80, "matchingSkills": ["Python"], "copilotReasoning": "Strong technical background."} for c in trimmed[:3]]
+    return [{**c, "matchScore": 80, "matchingSkills": [], "copilotReasoning": "Strong candidate."} for c in trimmed[:3]]
 
 
-# ---------------------------------------------------------------------------
-# 8. Cover letter generation
-# ---------------------------------------------------------------------------
+# ── 9. Cover letter ────────────────────────────────────────────────────────────
 
-@delegate_to_gemini
 def generate_cover_letter(resume_data: dict, job_details: dict) -> str:
-    prompt = f"""You are an expert career consultant. Write a tailored, professional cover letter.
+    prompt = f"""Write a tailored, professional cover letter.
 
-Candidate resume:
+Candidate:
 {json.dumps(resume_data, indent=2)}
 
-Job opening:
+Job:
 {json.dumps(job_details, indent=2)}
 
-Instructions:
-- Match the tone and requirements of the role.
-- Align candidate achievements with job requirements.
-- 250-350 words, proper salutation and sign-off.
-- Output ONLY the cover letter body — no extra commentary."""
-    result = _query_ollama(prompt)
-    if result:
-        return result
-    return ("Dear Hiring Manager,\n\nI am writing to express my strong interest in this position. "
-            "My background and skills align well with your requirements and I am excited about the opportunity "
-            "to contribute to your team.\n\nThank you for your consideration.\n\nSincerely,\nCandidate")
+Requirements:
+- Match the role's tone and requirements
+- Align candidate achievements with job needs
+- 250-350 words, proper salutation and sign-off
+- Output ONLY the letter body — no commentary, no markdown"""
+    result = _call(prompt, heavy=True)
+    return result or (
+        "Dear Hiring Manager,\n\nI am writing to express my strong interest in this position. "
+        "My background aligns well with your requirements.\n\nThank you.\n\nSincerely,\nCandidate"
+    )
 
 
-# ---------------------------------------------------------------------------
-# 9. Resume ATS grading
-# ---------------------------------------------------------------------------
+# ── 10. ATS resume scoring ─────────────────────────────────────────────────────
 
-@delegate_to_gemini
 def grade_resume_match_score(resume_data: dict, job_details: dict) -> dict:
-    prompt = f"""You are an ATS optimizer. Compare the resume against the job requirements.
+    prompt = f"""ATS optimiser. Compare the resume against the job requirements.
 
 Resume:
 {json.dumps(resume_data, indent=2)}
@@ -458,84 +577,53 @@ Resume:
 Job:
 {json.dumps(job_details, indent=2)}
 
-Return ONLY a raw JSON object with exactly:
-- "score": integer 0-100
-- "matchingSkills": array of strings
-- "missingKeywords": array of strings
-- "optimizationTips": array of strings (actionable tips)
-
-Raw JSON only."""
-    result = _query_ollama(prompt, is_json=True)
+Return ONLY:
+{{
+  "score": <0-100>,
+  "matchingSkills": ["skill"],
+  "missingKeywords": ["keyword"],
+  "optimizationTips": ["actionable tip"]
+}}"""
+    result = _call(prompt, json_mode=True)
     if isinstance(result, dict) and "score" in result:
         return result
-    return {
-        "score": 75,
-        "matchingSkills": ["Software Engineering"],
-        "missingKeywords": [],
-        "optimizationTips": ["Quantify achievements with metrics."],
-    }
+    return {"score": 75, "matchingSkills": [], "missingKeywords": [],
+            "optimizationTips": ["Quantify achievements with metrics."]}
 
 
-# ---------------------------------------------------------------------------
-# 10. Company profile generation
-# ---------------------------------------------------------------------------
+# ── 11. Company profile ────────────────────────────────────────────────────────
 
-@delegate_to_gemini
-def generate_company_profile_via_ai(company_name: str) -> dict | None:
-    prompt = f"""Generate a company profile for "{company_name}".
-Return ONLY a raw JSON object with these fields:
-- "id": lowercase alphanumeric slug
-- "name": official company name
-- "industry": industry category
-- "logoUrl": a placeholder image URL
-- "bio": 1-2 sentence company description
-- "employeesCount": approximate headcount string e.g. "10,000+"
-- "location": headquarters city/country
-
-Raw JSON only."""
-    result = _query_ollama(prompt, is_json=True)
+def generate_company_profile_via_ai(company_name: str) -> dict:
+    safe_id = "".join(c.lower() for c in company_name if c.isalnum())
+    prompt  = f"""Generate a company profile for "{company_name}".
+Return ONLY:
+{{
+  "id": "{safe_id}",
+  "name": "Official Name",
+  "industry": "Category",
+  "logoUrl": "https://logo.clearbit.com/{safe_id}.com",
+  "bio": "1-2 sentence description.",
+  "employeesCount": "10,000+",
+  "location": "City, Country"
+}}"""
+    result = _call(prompt, json_mode=True)
     if isinstance(result, dict) and "name" in result:
         return result
-    safe_id = "".join(c.lower() for c in company_name if c.isalnum())
-    return {
-        "id": safe_id or "company",
-        "name": company_name,
-        "industry": "Technology & Services",
-        "logoUrl": "https://images.unsplash.com/photo-1549719386-74dfcbf7dbed?w=100",
-        "bio": f"{company_name} delivers innovative solutions in its sector.",
-        "employeesCount": "1,000+",
-        "location": "Global",
-    }
+    return {"id": safe_id or "company", "name": company_name, "industry": "Technology",
+            "logoUrl": f"https://logo.clearbit.com/{safe_id}.com",
+            "bio": f"{company_name} delivers innovative solutions.", "employeesCount": "1,000+", "location": "Global"}
 
 
-# ---------------------------------------------------------------------------
-# 11. Company reviews generation
-# ---------------------------------------------------------------------------
+# ── 12. Company reviews ────────────────────────────────────────────────────────
 
-@delegate_to_gemini
-def generate_company_reviews_via_ai(company_id: str, company_name: str) -> list | None:
+def generate_company_reviews_via_ai(_company_id: str, company_name: str) -> list:
     prompt = f"""Generate 3 realistic anonymous employee reviews for "{company_name}".
-Return ONLY a raw JSON array of 3 objects, each with:
-- "rating": integer 1-5
-- "workLifeBalance": integer 1-5
-- "compensation": integer 1-5
-- "culture": integer 1-5
-- "title": string (reviewer job title)
-- "pros": string
-- "cons": string
-- "summary": string (1-2 sentence overall review)
-- "date": ISO date string
-
-Raw JSON array only."""
-    result = _query_ollama(prompt, is_json=True)
+Return ONLY a JSON array of 3 objects:
+[{{"rating":4,"workLifeBalance":3,"compensation":4,"culture":4,
+   "title":"Job Title","pros":"…","cons":"…","summary":"…","date":"2025-06-01"}}]"""
+    result = _call(prompt, json_mode=True)
     if isinstance(result, list) and result:
         return result
-    return [
-        {
-            "rating": 4, "workLifeBalance": 3, "compensation": 4, "culture": 4,
-            "title": "Software Engineer", "pros": "Great team culture and learning opportunities.",
-            "cons": "Fast-paced environment can be demanding.",
-            "summary": f"Overall a solid company. {company_name} invests in its employees.",
-            "date": "2025-01-15",
-        }
-    ]
+    return [{"rating": 4, "workLifeBalance": 3, "compensation": 4, "culture": 4,
+             "title": "Software Engineer", "pros": "Great team.", "cons": "Fast-paced.",
+             "summary": f"Solid company. {company_name} invests in growth.", "date": "2025-06-01"}]

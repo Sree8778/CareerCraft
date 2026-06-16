@@ -1,4 +1,4 @@
-// src/app/recruiter/requisitions/new/page.tsx
+﻿// src/app/recruiter/requisitions/new/page.tsx
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { ArrowLeft, RefreshCw, Save, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 
-const API = 'http://127.0.0.1:5000/api';
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 function NewRequisitionContent() {
   const router = useRouter();

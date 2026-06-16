@@ -1,4 +1,4 @@
-// src/app/recruiter/candidates/[id]/page.tsx
+﻿// src/app/recruiter/candidates/[id]/page.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -723,12 +723,12 @@ export default function CandidateDetailPage() {
                   onClick={async () => {
                     try {
                       // Update all applications by this candidate to Shortlisted
-                      const res = await fetch(`http://127.0.0.1:5000/api/applications?candidateId=${id}`, {
+                      const res = await fetch(`${API_BASE}/applications?candidateId=${id}`, {
                         headers: { 'Authorization': `Bearer mock_token_for_${id}` }
                       });
                       const data = await res.json();
                       await Promise.all((data.applications || []).map((a: any) =>
-                        fetch(`http://127.0.0.1:5000/api/applications/${a.id}/status`, {
+                        fetch(`${API_BASE}/applications/${a.id}/status`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer mock_token_for_${id}` },
                           body: JSON.stringify({ status: 'Shortlisted' })
@@ -744,12 +744,12 @@ export default function CandidateDetailPage() {
                 <button
                   onClick={async () => {
                     try {
-                      const res = await fetch(`http://127.0.0.1:5000/api/applications?candidateId=${id}`, {
+                      const res = await fetch(`${API_BASE}/applications?candidateId=${id}`, {
                         headers: { 'Authorization': `Bearer mock_token_for_${id}` }
                       });
                       const data = await res.json();
                       await Promise.all((data.applications || []).map((a: any) =>
-                        fetch(`http://127.0.0.1:5000/api/applications/${a.id}/status`, {
+                        fetch(`${API_BASE}/applications/${a.id}/status`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer mock_token_for_${id}` },
                           body: JSON.stringify({ status: 'In Review' })
