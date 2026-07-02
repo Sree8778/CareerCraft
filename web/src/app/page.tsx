@@ -1,31 +1,36 @@
 'use client';
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import Hero from '@/components/Hero';
 import Footer from '@/components/Footer';
 import FeaturesGrid from '@/components/FeaturesGrid';
-import AnimatedBackground from '@/components/AnimatedBackground';
-import FloatingBlobs from '@/components/FloatingBlobs';
 import BuiltForEveryone from '@/components/BuiltForEveryone';
-import dynamic from 'next/dynamic';
-
-const AnimatedLottie = dynamic(() => import('@/components/AnimatedLottie'), { ssr: false });
 
 export default function Home() {
-  return (
-    <div className="relative overflow-hidden">
-      {/* Background layers */}
-      <AnimatedBackground />
-      <FloatingBlobs />
+  const { user, isAuthenticated, loading, needsOnboarding } = useAuth();
+  const router = useRouter();
 
-      {/* Page Content */}
-      <main className="relative z-10 space-y-20 px-4 sm:px-8 md:px-16">
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated || !user) return;
+    if (needsOnboarding) {
+      router.replace('/onboarding');
+    } else {
+      router.replace(user.role === 'recruiter' ? '/recruiter/dashboard' : '/candidate/dashboard');
+    }
+  }, [loading, isAuthenticated, user, needsOnboarding, router]);
+
+  if (!loading && isAuthenticated) return null;
+
+  return (
+    <div className="relative min-h-screen overflow-x-hidden" style={{ background: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124,58,237,0.15) 0%, transparent 70%), #06040f' }}>
+      <main className="relative z-10">
         <Hero />
         <FeaturesGrid />
         <BuiltForEveryone />
-        <AnimatedLottie />
       </main>
-
-      {/* Footer */}
       <Footer />
     </div>
   );

@@ -6,8 +6,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { ModalContext } from '@/contexts/LoginModalContext';
 import { useAuth } from '@/contexts/AuthContext';
 import ThemeToggle from '@/components/ThemeToggle';
-import PamtenLogo from '@/components/PamtenLogo';
-import Link from 'next/link'; // Make sure Link is imported
+import AppLogo from '@/components/PamtenLogo';
+import Link from 'next/link';
 
 export default function Navbar() {
   const { openModal } = useContext(ModalContext);
@@ -68,8 +68,8 @@ export default function Navbar() {
         className="flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-white cursor-pointer hover:opacity-80 transition-opacity"
         onClick={handleLogoClick}
       >
-        <PamtenLogo width={80} height={40} className="h-8 w-auto" />
-        RecruitEdge
+        <AppLogo width={80} height={40} className="h-8 w-auto" />
+        CareerCraft
       </div>
       
       {/* Add this new section inside the nav element */}

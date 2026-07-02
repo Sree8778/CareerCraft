@@ -24,10 +24,13 @@ Get-Content $EnvFile | ForEach-Object {
     }
 }
 
-$PROJECT   = [System.Environment]::GetEnvironmentVariable('GCP_PROJECT_ID',           'Process')
-$REGION    = [System.Environment]::GetEnvironmentVariable('GCP_REGION',               'Process')
-$GEMINI    = [System.Environment]::GetEnvironmentVariable('GEMINI_API_KEY',            'Process')
-$VAULT_KEY = [System.Environment]::GetEnvironmentVariable('BACKEND_VAULT_MASTER_KEY',  'Process')
+$PROJECT      = [System.Environment]::GetEnvironmentVariable('GCP_PROJECT_ID',           'Process')
+$REGION       = [System.Environment]::GetEnvironmentVariable('GCP_REGION',               'Process')
+$GEMINI       = [System.Environment]::GetEnvironmentVariable('GEMINI_API_KEY',            'Process')
+$VAULT_KEY    = [System.Environment]::GetEnvironmentVariable('BACKEND_VAULT_MASTER_KEY',  'Process')
+$RESEND       = [System.Environment]::GetEnvironmentVariable('RESEND_API_KEY',            'Process')
+$EMAIL_FROM   = [System.Environment]::GetEnvironmentVariable('EMAIL_FROM',                'Process')
+$PLATFORM_URL = [System.Environment]::GetEnvironmentVariable('PLATFORM_URL',             'Process')
 
 # Base64-encode the Firebase service account JSON so it can be passed as a Cloud Run env var
 # (credentials files are gitignored and excluded from Docker images)
@@ -61,7 +64,7 @@ Write-Host "Project : $PROJECT   Region : $REGION"
 # --- 2. Set account + project ---
 Write-Host ""
 Write-Host "[1/7] Configuring gcloud..." -ForegroundColor Yellow
-& gcloud config set account sreeram3354@gmail.com
+& gcloud config set account sreeramvarma8888@gmail.com
 & gcloud config set project $PROJECT
 
 # --- 3. Enable APIs ---
@@ -107,6 +110,9 @@ if (-not $FrontendOnly) {
 GEMINI_API_KEY: "$GEMINI"
 BACKEND_VAULT_MASTER_KEY: "$VAULT_KEY"
 FIREBASE_CREDENTIALS_B64: "$FB_CREDS_B64"
+RESEND_API_KEY: "$RESEND"
+EMAIL_FROM: "$EMAIL_FROM"
+PLATFORM_URL: "$PLATFORM_URL"
 "@ | Out-File -FilePath $envYamlPath -Encoding utf8 -NoNewline
 
     & gcloud run deploy $BACKEND_SVC `
@@ -114,9 +120,10 @@ FIREBASE_CREDENTIALS_B64: "$FB_CREDS_B64"
         --region $REGION `
         --platform managed `
         --allow-unauthenticated `
-        --memory 512Mi `
+        --memory 2Gi `
         --cpu 1 `
         --max-instances 3 `
+        --timeout 300 `
         --env-vars-file $envYamlPath `
         --quiet
     Remove-Item $envYamlPath -ErrorAction SilentlyContinue
@@ -131,9 +138,14 @@ FIREBASE_CREDENTIALS_B64: "$FB_CREDS_B64"
 GEMINI_API_KEY: "$GEMINI"
 BACKEND_VAULT_MASTER_KEY: "$VAULT_KEY"
 FIREBASE_CREDENTIALS_B64: "$FB_CREDS_B64"
+RESEND_API_KEY: "$RESEND"
+EMAIL_FROM: "$EMAIL_FROM"
+PLATFORM_URL: "$PLATFORM_URL"
 "@ | Out-File -FilePath $envYamlPath -Encoding utf8 -NoNewline
     & gcloud run services update $BACKEND_SVC `
         --region $REGION `
+        --timeout 300 `
+        --memory 2Gi `
         --env-vars-file $envYamlPath `
         --quiet
     Remove-Item $envYamlPath -ErrorAction SilentlyContinue

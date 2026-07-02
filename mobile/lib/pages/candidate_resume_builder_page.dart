@@ -49,7 +49,7 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
   String _fontFamily = 'Calibri, sans-serif';
   double _fontSize = 11.0;
   String _accentColor = '#4F46E5'; // Indigo default
-  bool _showPamtenLogo = false;
+  bool _showLogo = false;
 
   // --- Media & Capture State ---
   File? _profilePicFile;
@@ -496,9 +496,9 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
 
     Uint8List? fileBytes;
     if (format == 'PDF') {
-      fileBytes = await api.generatePdf(_buildResumeJson(), styleOpts, _showPamtenLogo);
+      fileBytes = await api.generatePdf(_buildResumeJson(), styleOpts, _showLogo);
     } else {
-      fileBytes = await api.generateDocx(_buildResumeJson(), styleOpts, _showPamtenLogo);
+      fileBytes = await api.generateDocx(_buildResumeJson(), styleOpts, _showLogo);
     }
     setState(() => _isLoading = false);
 
@@ -537,7 +537,7 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
             'fontFamily': _fontFamily,
             'fontSize': _fontSize,
             'accentColor': _accentColor,
-            'showPamtenLogo': _showPamtenLogo,
+            'showPamtenLogo': _showLogo,
           },
         ),
       ),
@@ -687,11 +687,11 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Show Corporate Pamten Logo', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Show Logo on Document', style: TextStyle(fontWeight: FontWeight.bold)),
                   Switch(
-                    value: _showPamtenLogo,
+                    value: _showLogo,
                     activeColor: Colors.deepPurpleAccent,
-                    onChanged: (val) => setState(() => _showPamtenLogo = val),
+                    onChanged: (val) => setState(() => _showLogo = val),
                   ),
                 ],
               ),

@@ -7,7 +7,7 @@ import 'package:recruit_edge/models/employer.dart';
 import 'package:recruit_edge/services/auth_service.dart';
 
 // Define the base URL of your web application's API
-const String baseUrl = 'http://10.0.0.48:5000/api'; // Pointed to active Python Flask backend
+const String baseUrl = 'https://careercraft-backend-u7h4zjepfq-uc.a.run.app/api';
 
 // --- Data Fetching Functions (Unauthenticated) ---
 
@@ -244,13 +244,13 @@ Future<String> generateElevatorPitch(Map<String, dynamic> resumeData) async {
 }
 
 /// Generate PDF document from resume data
-Future<Uint8List?> generatePdf(Map<String, dynamic> resumeData, Map<String, dynamic> styleOptions, bool showPamtenLogo) async {
+Future<Uint8List?> generatePdf(Map<String, dynamic> resumeData, Map<String, dynamic> styleOptions, bool showLogo) async {
   try {
     final token = await AuthService.getToken();
     final requestBody = {
       ...resumeData,
       'styleOptions': styleOptions,
-      'showPamtenLogo': showPamtenLogo,
+      'showLogo': showLogo,
     };
 
     final response = await http.post(
@@ -275,13 +275,13 @@ Future<Uint8List?> generatePdf(Map<String, dynamic> resumeData, Map<String, dyna
 }
 
 /// Generate Word (DOCX) document from resume data
-Future<Uint8List?> generateDocx(Map<String, dynamic> resumeData, Map<String, dynamic> styleOptions, bool showPamtenLogo) async {
+Future<Uint8List?> generateDocx(Map<String, dynamic> resumeData, Map<String, dynamic> styleOptions, bool showLogo) async {
   try {
     final token = await AuthService.getToken();
     final requestBody = {
       ...resumeData,
       'styleOptions': styleOptions,
-      'showPamtenLogo': showPamtenLogo,
+      'showLogo': showLogo,
     };
 
     final response = await http.post(

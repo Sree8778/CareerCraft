@@ -67,8 +67,6 @@ class ResumePreviewPage extends StatelessWidget {
     final themeColor = _parseColor(accentHex);
     final baseFontSize = (styleOptions?['fontSize'] as double?) ?? 11.0;
     final fontFamily = _parseFontFamily(styleOptions?['fontFamily'] as String?);
-    final showPamtenLogo = (styleOptions?['showPamtenLogo'] as bool?) ?? false;
-
     // Font styles mapping
     TextStyle getStyle({
       double sizeMultiplier = 1.0,
@@ -114,42 +112,6 @@ class ResumePreviewPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Pamten Corporate Logo Option
-              if (showPamtenLogo) ...[
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: themeColor.withOpacity(0.3)),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'PAMTEN INC',
-                          style: getStyle(
-                            sizeMultiplier: 1.5,
-                            weight: FontWeight.bold,
-                            color: themeColor,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Corporate Verified Candidate Profile',
-                          style: getStyle(
-                            sizeMultiplier: 0.8,
-                            color: Colors.white54,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-
               // Candidate Header Info
               Center(
                 child: Column(

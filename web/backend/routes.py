@@ -24,17 +24,28 @@ from google_calendar_utils import create_calendar_event
 from face_verification import verify_face_similarity
 from firebase_utils import require_auth
 from vault_utils import encrypt_key
-from job_crawler import MOCK_JOBS, crawl_jobs_to_db
+from job_crawler import crawl_jobs_to_db
 from email_utils import (
     send_application_status_email,
     send_interview_scheduled_email,
     send_connection_request_email,
     send_connection_accepted_email,
+    send_2fa_otp_email,
 )
 import datetime
+from datetime import timezone, timedelta
 import os
 import random
+import string
 from google.cloud import firestore
+import requests as _requests_lib
+import threading as _threading_lib
+import hashlib as _hashlib_lib
+
+# In-memory OTP fallback (used only when Firestore is unavailable)
+_otp_store: dict = {}
+# Tracks running autonomous apply threads per user
+_autonomous_sessions: dict = {}
 
 # Create a Blueprint for API routes
 api_bp = Blueprint('api', __name__)
@@ -135,11 +146,12 @@ def configure_dynamic_api_key():
 @api_bp.route('/parse-resume', methods=['POST'])
 @require_auth
 def parse_resume_route():
+    configure_dynamic_api_key()  # load user keys from header or Firestore
     if 'file' not in request.files:
         return jsonify({"error": "No file part in the request"}), 400
-    
+
     file = request.files['file']
-    
+
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
 
@@ -347,6 +359,7 @@ def evaluate_response_route():
 
 # --- PRACTICE INTERVIEW ---
 @api_bp.route('/practice-interview/ai-turn', methods=['POST'])
+@require_auth
 def practice_ai_turn():
     """Conversational AI interviewer turn — returns natural speech text."""
     if not request.is_json:
@@ -372,6 +385,7 @@ def practice_ai_turn():
 
 
 @api_bp.route('/practice-interview/final-feedback', methods=['POST'])
+@require_auth
 def practice_final_feedback():
     """End-of-session full conversation evaluation."""
     if not request.is_json:
@@ -393,6 +407,7 @@ def practice_final_feedback():
 
 
 @api_bp.route('/practice-interview/question', methods=['POST'])
+@require_auth
 def practice_interview_question():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
@@ -415,6 +430,7 @@ def practice_interview_question():
 
 
 @api_bp.route('/practice-interview/evaluate', methods=['POST'])
+@require_auth
 def practice_interview_evaluate():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
@@ -466,47 +482,6 @@ def search_jobs_semantic_route():
 
 # --- RECRUITER AI COPILOT CANDIDATE SEARCH & DIRECTORY ---
 
-MOCK_CANDIDATES = [
-    {
-        'id': 'mock_uid_123',
-        'uid': 'mock_uid_123',
-        'name': 'Jane Doe',
-        'title': 'Senior Flutter Software Engineer',
-        'location': 'New York, USA',
-        'email': 'jane.doe@careercraft.com',
-        'phone': '+1 (555) 019-2834',
-        'skills': 'Flutter, Dart, Firebase Auth, Cloud Firestore, Firebase Storage rules, path_provider, custom widgets',
-        'experience': 'Senior Flutter Developer at MobileTech Solutions (2023 - Present) • Architected secure role-based cross-platform client flows. Engineered custom responsive layouts for folded displays and iPads.',
-        'education': 'B.S. in Computer Science, Stanford University (2022)',
-        'recruiterNotes': 'Extremely skilled in Flutter development and layouts.',
-    },
-    {
-        'id': 'mock_uid_456',
-        'uid': 'mock_uid_456',
-        'name': 'Sam Miller',
-        'title': 'Python Backend Engineer',
-        'location': 'Austin, TX, USA',
-        'email': 'sam.miller@nexus.com',
-        'phone': '+1 (555) 304-9844',
-        'skills': 'Python, Flask, PostgreSQL, Docker, face_verification API, Gemini model interfaces, require_auth decorators',
-        'experience': 'Backend Engineer at Nexus Dynamics (2022 - 2024) • Designed identity checking biometrics and custom resume parsing microservices. Configured high-performance REST systems.',
-        'education': 'M.S. in Software Engineering, UT Austin (2021)',
-        'recruiterNotes': 'Strong grasp of Python and backend systems architecture.',
-    },
-    {
-        'id': 'mock_uid_789',
-        'uid': 'mock_uid_789',
-        'name': 'Alex Rivera',
-        'title': 'UI/UX Mobile Designer',
-        'location': 'San Francisco, CA, USA',
-        'email': 'alex.rivera@designagency.com',
-        'phone': '+1 (555) 843-1029',
-        'skills': 'Figma, Adobe XD, Mobile UX research, wireframing, high-fidelity mockups, grid guidelines',
-        'experience': 'Mobile UX Designer at Design Agency (2021 - Present) • Created cohesive style design guidelines. Specialized in fluid column layouts for multi-device sizes.',
-        'education': 'B.F.A. in Graphic Design, Rhode Island School of Design (2020)',
-        'recruiterNotes': 'Pristine mobile asset design portfolio.',
-    }
-]
 
 def _get_all_candidates_helper():
     try:
@@ -581,10 +556,10 @@ def _get_all_candidates_helper():
                 })
             if candidates:
                 return candidates
-        return MOCK_CANDIDATES
+        return []
     except Exception as e:
         print(f"Error in helper fetching candidates: {e}")
-        return MOCK_CANDIDATES
+        return []
 
 @api_bp.route('/candidates', methods=['GET'])
 @require_auth
@@ -693,6 +668,322 @@ def grade_resume_route():
         return jsonify({"error": "An internal error occurred while grading the resume."}), 500
 
 
+# --- Recruiter AI: Generate job description, requirements, benefits ---
+@api_bp.route('/jobs/generate-description', methods=['POST'])
+@require_auth
+def generate_job_description_route():
+    data = request.json or {}
+    title = data.get('title', '').strip()
+    department = data.get('department', '').strip()
+    job_type = data.get('type', 'Full-time').strip()
+    company = data.get('company', '').strip()
+    skills = data.get('skills', '').strip()
+
+    if not title:
+        return jsonify({"error": "Job title is required"}), 400
+
+    try:
+        import ollama_utils
+        prompt = f"""You are an expert technical recruiter. Write a professional job posting for the following role.
+
+Role: {title}
+Department: {department or 'Not specified'}
+Employment Type: {job_type}
+Company: {company or 'a fast-growing tech company'}
+Key Skills/Technologies: {skills or 'to be determined based on role'}
+
+Return ONLY valid JSON with this exact structure:
+{{
+  "description": "2-3 paragraph role overview and responsibilities",
+  "requirements": ["requirement 1", "requirement 2", "requirement 3", "requirement 4", "requirement 5"],
+  "benefits": ["benefit 1", "benefit 2", "benefit 3", "benefit 4"]
+}}
+
+Keep requirements specific and technical. Make the description compelling."""
+
+        result = ollama_utils._call(prompt, json_mode=True, max_tokens=2048)
+        if not isinstance(result, dict):
+            raise ValueError("Invalid AI response format")
+        return jsonify({
+            "description": result.get("description", ""),
+            "requirements": result.get("requirements", []),
+            "benefits": result.get("benefits", []),
+            "aiGenerated": True,
+        }), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# --- Recruiter AI: Screen a candidate application against the job ---
+@api_bp.route('/applications/<app_id>/ai-screen', methods=['POST'])
+@require_auth
+def ai_screen_application(app_id):
+    """Fetch application + candidate resume + job, run fit analysis for recruiter."""
+    uid = request.user.get('uid')
+    try:
+        from firebase_utils import db, firebase_initialized
+        import json as _json
+
+        # Load application
+        app_doc = db.collection('applications').document(app_id).get() if firebase_initialized and db else None
+        if not app_doc or not app_doc.exists:
+            return jsonify({"error": "Application not found"}), 404
+        app_data = app_doc.to_dict()
+
+        candidate_id = app_data.get('candidateId')
+        job_id = app_data.get('jobId')
+
+        # Load candidate resume
+        resume_snap = db.collection('resumes').document(candidate_id).get() if candidate_id else None
+        resume_data = (resume_snap.to_dict() or {}).get('resumeData') if resume_snap and resume_snap.exists else None
+
+        if not resume_data:
+            return jsonify({"error": "Candidate has no resume on file"}), 422
+
+        # Load job details
+        job_snap = db.collection('jobs').document(str(job_id)).get() if job_id else None
+        job_data = job_snap.to_dict() if job_snap and job_snap.exists else None
+        if not job_data:
+            return jsonify({"error": "Job not found"}), 404
+
+        job_details = {
+            "title": job_data.get("title", ""),
+            "company": job_data.get("company", ""),
+            "description": job_data.get("description", ""),
+            "requirements": job_data.get("requirements", []),
+        }
+
+        # Rule-based score first
+        from ats_utils import rule_based_match
+        rule_based = rule_based_match(resume_data, job_details)
+
+        # Try AI-enhanced
+        ai_result = {}
+        try:
+            from gemini_utils import analyze_job_fit_comprehensive
+            import ollama_utils
+            from ai_router import KeyEntry
+            from vault_utils import decrypt_key as _vault_decrypt
+            wallet = ollama_utils.get_request_wallet()
+            if wallet:
+                gemini_entry = next(
+                    (
+                        KeyEntry(e, vault_decrypt=_vault_decrypt)
+                        for e in wallet
+                        if e.get('provider') == 'Gemini'
+                        and e.get('status') not in ('Invalid', 'Exhausted')
+                    ),
+                    None
+                )
+                if gemini_entry and gemini_entry.is_usable():
+                    from gemini_utils import set_api_key as gem_set
+                    gem_set(gemini_entry.key)
+                    ai_result = analyze_job_fit_comprehensive(resume_data, job_details, rule_based)
+        except Exception as e:
+            print(f"[ai-screen] AI fit analysis error: {e}")
+
+        # Generate interview questions
+        questions = []
+        try:
+            import ollama_utils as _ou
+            candidate_name = (resume_data.get('personal') or {}).get('name', 'the candidate')
+            skills_str = ', '.join(
+                s for grp in (resume_data.get('skills') or [])
+                for s in (grp.get('skills_list') or '').split(',')
+                if s.strip()
+            )[:300]
+            q_prompt = f"""Generate 5 specific technical interview questions for {candidate_name} applying for {job_details['title']}.
+Their skills: {skills_str}
+Job requirements: {', '.join(job_details['requirements'][:5])}
+Return as JSON array: [{{"question": "...", "category": "Technical|Behavioral|Situational"}}]"""
+            q_result = _ou._call(q_prompt, json_mode=True)
+            if isinstance(q_result, list):
+                questions = q_result
+            elif isinstance(q_result, dict):
+                questions = q_result.get('questions', q_result.get('items', []))
+        except Exception:
+            questions = [
+                {"question": f"Describe your experience with {job_details['requirements'][0] if job_details['requirements'] else 'the required technologies'}.", "category": "Technical"},
+                {"question": "Walk me through a challenging project and how you handled it.", "category": "Behavioral"},
+                {"question": f"How would you approach the key responsibilities of the {job_details['title']} role in your first 90 days?", "category": "Situational"},
+            ]
+
+        return jsonify({
+            "score": rule_based.get("score", 0),
+            "matchedSkills": rule_based.get("matchedSkills", []),
+            "missingSkills": rule_based.get("missingSkills", []),
+            "recommendation": "Hire" if rule_based.get("score", 0) >= 80 else "Maybe" if rule_based.get("score", 0) >= 55 else "Pass",
+            "optimizationTips": ai_result.get("optimizationTips", []),
+            "aiEnhanced": bool(ai_result),
+            "interviewQuestions": questions,
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# --- Resume Quality Analysis (no job context) ---
+@api_bp.route('/resume/analyze', methods=['POST'])
+@require_auth
+def analyze_resume_quality_route():
+    """
+    Rule-based resume completeness/quality check.
+    Accepts { resumeData } in body, or loads from Firestore for authenticated user.
+    No AI cost — instant response.
+    """
+    configure_dynamic_api_key()
+    uid = request.user.get('uid')
+
+    if request.is_json and request.json.get('resumeData'):
+        resume_data = request.json['resumeData']
+    else:
+        try:
+            from firebase_utils import db, firebase_initialized
+            if firebase_initialized and db:
+                snap = db.collection('resumes').document(uid).get()
+                if not snap.exists:
+                    return jsonify({"error": "No resume found for this user."}), 404
+                resume_data = snap.to_dict().get('resumeData', {})
+            else:
+                return jsonify({"error": "Firebase not available and no resumeData provided."}), 400
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    try:
+        from ats_utils import analyze_resume_quality
+        result = analyze_resume_quality(resume_data)
+        return jsonify(result), 200
+    except Exception as e:
+        print(f"[resume/analyze] error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# --- Comprehensive Job Fit Analysis (ATS + cover letter + tutorials + bullets) ---
+@api_bp.route('/analyze-fit', methods=['POST'])
+@require_auth
+def analyze_fit_route():
+    """
+    One-shot comprehensive analysis:
+    1. Rule-based ATS score (instant, no API)
+    2. AI layer: tailored bullets, cover letter, tutorials, project suggestions
+    Results cached in Firestore for 24 h to avoid redundant AI calls.
+    """
+    configure_dynamic_api_key()
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data        = request.json
+    resume_data = data.get('resumeData')
+    job_details = data.get('jobDetails')
+    job_id      = data.get('jobId', '')
+    uid         = request.user.get('uid')
+
+    if not resume_data or not job_details:
+        return jsonify({"error": "Missing resumeData or jobDetails"}), 400
+
+    try:
+        from ats_utils import compute_ats_score
+        rule_based = compute_ats_score(resume_data, job_details)
+    except Exception as e:
+        rule_based = {"score": 60, "breakdown": {}, "matchedSkills": [], "missingSkills": []}
+
+    # Check Firestore cache (24 h)
+    cache_key = f"{uid}_{job_id}" if job_id else None
+    try:
+        from firebase_utils import db, firebase_initialized
+        import datetime as _dt
+        if cache_key and firebase_initialized and db:
+            cache_snap = db.collection('atsCache').document(cache_key).get()
+            if cache_snap.exists:
+                cached = cache_snap.to_dict()
+                expires = cached.get('expiresAt', '')
+                if expires and _dt.datetime.utcnow().isoformat() < expires:
+                    # Merge fresh rule-based score (could have changed if resume updated)
+                    cached['ruleBasedScore'] = rule_based
+                    return jsonify(cached), 200
+    except Exception:
+        pass  # cache miss is fine
+
+    # Try AI enhancement
+    ai_result = None
+    try:
+        from gemini_utils import analyze_job_fit_comprehensive, generate_cover_letter
+        import ollama_utils
+        from ai_router import KeyEntry
+        from vault_utils import decrypt_key as _vault_decrypt
+        wallet = ollama_utils.get_request_wallet()
+        if wallet:
+            # KeyEntry handles both plain 'key' and Fernet-encrypted 'encryptedKey'
+            gemini_entry = next(
+                (
+                    KeyEntry(e, vault_decrypt=_vault_decrypt)
+                    for e in wallet
+                    if e.get('provider') == 'Gemini'
+                    and e.get('status') not in ('Invalid', 'Exhausted')
+                ),
+                None
+            )
+            if gemini_entry and gemini_entry.is_usable():
+                from gemini_utils import set_api_key as gem_set
+                gem_set(gemini_entry.key)
+                ai_result = analyze_job_fit_comprehensive(resume_data, job_details, rule_based)
+    except RuntimeError as e:
+        if _is_no_keys(e):
+            pass  # fall through to rule-based only response
+    except Exception as e:
+        print(f"[analyze-fit] AI layer error: {e}")
+
+    response_data = {
+        "ruleBasedScore": rule_based,
+        "aiEnhanced":     ai_result is not None,
+    }
+    if ai_result:
+        response_data.update(ai_result)
+    else:
+        response_data.update({
+            "tailoredBullets":  [],
+            "coverLetter":      "",
+            "tutorials":        [],
+            "projects":         [],
+            "optimizationTips": rule_based.get("missingSkills", [])
+                                 and [f"Build skills in: {', '.join(rule_based['missingSkills'][:5])}"] or [],
+        })
+
+    # Store in cache
+    try:
+        from firebase_utils import db, firebase_initialized
+        import datetime as _dt
+        if cache_key and firebase_initialized and db:
+            expires = (_dt.datetime.utcnow() + _dt.timedelta(hours=24)).isoformat()
+            db.collection('atsCache').document(cache_key).set({**response_data, "expiresAt": expires})
+    except Exception:
+        pass
+
+    return jsonify(response_data), 200
+
+
+# --- Store ATS score on application ---
+@api_bp.route('/applications/<app_id>/ats-score', methods=['POST'])
+@require_auth
+def store_application_ats_score(app_id):
+    """Called after apply to lock in the ATS score on the application record."""
+    configure_dynamic_api_key()
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    data = request.json
+    score_data = data.get('atsScore', {})
+    try:
+        from firebase_utils import db, firebase_initialized
+        if firebase_initialized and db:
+            db.collection('applications').document(app_id).update({'atsScore': score_data})
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # --- NEW: Google Calendar Scheduler Endpoint ---
 @api_bp.route('/interviews/schedule', methods=['POST'])
 @require_auth
@@ -764,59 +1055,6 @@ def schedule_interview_route():
 
 # --- Dynamic Data Endpoints (Unauthenticated) ---
 
-# In-memory stores in case Firebase is not running
-MOCK_BENEFITS = [
-    {
-        "title": "AI-Powered Matchmaking",
-        "desc": "Our advanced Gemini integration matches candidates and roles with 95% precision.",
-        "icon": "psychology"
-    },
-    {
-        "title": "Turn-based Audio Screening",
-        "desc": "Evaluate communication and elevator pitches via secure voice proctoring.",
-        "icon": "mic"
-    },
-    {
-        "title": "Modern Glassmorphism UI",
-        "desc": "Interact with a state-of-the-art visual engine tailored for high contrast.",
-        "icon": "space_dashboard"
-    }
-]
-
-MOCK_TESTIMONIALS = [
-    {
-        "quote": "Recruit Edge automated our initial filtering. AI voice proctoring saved us 40+ hours.",
-        "name": "Sarah Jenkins",
-        "title": "VP of Talent, TechCorp",
-        "emoji": "👩‍💼"
-    },
-    {
-        "quote": "Building a premium resume and recording my pitch was seamless. I got hired in 2 weeks!",
-        "name": "Alex Rivera",
-        "title": "Flutter Developer",
-        "emoji": "👨‍💻"
-    }
-]
-
-MOCK_EMPLOYERS = [
-    {
-        "name": "TechCorp Systems",
-        "industry": "Software & AI",
-        "logoUrl": "https://images.unsplash.com/photo-1549719386-74dfcbf7dbed?w=100&auto=format&fit=crop&q=60"
-    },
-    {
-        "name": "Nexus Dynamics",
-        "industry": "Cloud Infrastructure",
-        "logoUrl": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=100&auto=format&fit=crop&q=60"
-    },
-    {
-        "name": "Vivid Design Agency",
-        "industry": "Creative & Design",
-        "logoUrl": "https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=100&auto=format&fit=crop&q=60"
-    }
-]
-
-
 @api_bp.route('/benefits', methods=['GET'])
 def get_benefits():
     try:
@@ -824,12 +1062,11 @@ def get_benefits():
         if db:
             docs = db.collection('benefits').stream()
             benefits = [doc.to_dict() for doc in docs]
-            if benefits:
-                return jsonify({"benefits": benefits}), 200
-        return jsonify({"benefits": MOCK_BENEFITS}), 200
+            return jsonify({"benefits": benefits}), 200
+        return jsonify({"benefits": []}), 200
     except Exception as e:
         print(f"Error fetching benefits from Firestore: {e}")
-        return jsonify({"benefits": MOCK_BENEFITS}), 200
+        return jsonify({"benefits": []}), 200
 
 @api_bp.route('/testimonials', methods=['GET'])
 def get_testimonials():
@@ -838,12 +1075,11 @@ def get_testimonials():
         if db:
             docs = db.collection('testimonials').stream()
             testimonials = [doc.to_dict() for doc in docs]
-            if testimonials:
-                return jsonify({"testimonials": testimonials}), 200
-        return jsonify({"testimonials": MOCK_TESTIMONIALS}), 200
+            return jsonify({"testimonials": testimonials}), 200
+        return jsonify({"testimonials": []}), 200
     except Exception as e:
         print(f"Error fetching testimonials: {e}")
-        return jsonify({"testimonials": MOCK_TESTIMONIALS}), 200
+        return jsonify({"testimonials": []}), 200
 
 @api_bp.route('/employers/featured', methods=['GET'])
 def get_employers_featured():
@@ -852,12 +1088,11 @@ def get_employers_featured():
         if db:
             docs = db.collection('employers').where('featured', '==', True).stream()
             employers = [doc.to_dict() for doc in docs]
-            if employers:
-                return jsonify({"employers": employers}), 200
-        return jsonify({"employers": MOCK_EMPLOYERS}), 200
+            return jsonify({"employers": employers}), 200
+        return jsonify({"employers": []}), 200
     except Exception as e:
         print(f"Error fetching employers: {e}")
-        return jsonify({"employers": MOCK_EMPLOYERS}), 200
+        return jsonify({"employers": []}), 200
 
 @api_bp.route('/jobs', methods=['GET'])
 def get_jobs():
@@ -878,12 +1113,11 @@ def get_jobs():
             if not recruiter_id:
                 jobs = [j for j in jobs if j.get('status') != 'Archived']
             # If filtering by recruiter return empty list (not mock data) when none found
-            if jobs or recruiter_id:
-                return jsonify({"jobs": jobs}), 200
-        return jsonify({"jobs": MOCK_JOBS}), 200
+            return jsonify({"jobs": jobs}), 200
+        return jsonify({"jobs": []}), 200
     except Exception as e:
         print(f"Error fetching jobs: {e}")
-        return jsonify({"jobs": MOCK_JOBS}), 200
+        return jsonify({"jobs": []}), 200
 
 @api_bp.route('/jobs/<job_id>', methods=['GET'])
 def get_job_by_id(job_id):
@@ -896,10 +1130,6 @@ def get_job_by_id(job_id):
                 j['id'] = doc.id
                 return jsonify(j), 200
             return jsonify({"error": "Job not found"}), 404
-        # Fall back to mock data
-        job = next((j for j in MOCK_JOBS if j.get('id') == job_id), None)
-        if job:
-            return jsonify(job), 200
         return jsonify({"error": "Job not found"}), 404
     except Exception as e:
         print(f"Error fetching job by id: {e}")
@@ -964,9 +1194,7 @@ def post_job_v1():
             doc_ref = db.collection('jobs').add(new_job)
             new_job['id'] = doc_ref[1].id
         else:
-            import uuid
-            new_job['id'] = str(uuid.uuid4())
-            MOCK_JOBS.append(new_job)
+            return jsonify({"error": "Firebase not initialized — cannot post job"}), 503
 
         return jsonify({"status": "success", "job": new_job}), 201
     except Exception as e:
@@ -975,12 +1203,20 @@ def post_job_v1():
 
 # --- NEW: SECURE USER REGISTRATION VAULT PORTAL ---
 @api_bp.route('/users/register', methods=['POST'])
+@require_auth
 def register_user_route():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
         
     data = request.json
     uid = data.get('uid')
+    
+    if not uid:
+        return jsonify({"error": "Missing uid in registration request"}), 400
+        
+    if request.user.get('uid') != uid:
+        return jsonify({"error": "Forbidden: Request UID mismatch"}), 403
+        
     fullName = data.get('fullName')
     email = data.get('email')
     phone = data.get('phone')
@@ -988,8 +1224,8 @@ def register_user_route():
     apiKeysWallet = data.get('apiKeysWallet', [])
     resumeProfile = data.get('resumeProfile') # Optional profile data (education, experience, skills)
     
-    if not uid or not email or not fullName:
-        return jsonify({"error": "Missing uid, email, or fullName in registration request"}), 400
+    if not email or not fullName:
+        return jsonify({"error": "Missing email or fullName in registration request"}), 400
         
     try:
         from firebase_utils import db, firebase_initialized
@@ -1028,11 +1264,7 @@ def register_user_route():
             if role == 'candidate' and resumeProfile:
                 db.collection('resumes').document(uid).set({"resumeData": resumeProfile})
         else:
-            print("WARNING: Firestore uninitialized. Simulated developer mock database write successful.")
-            # Sync with in-memory mock users list
-            global MOCK_USERS
-            MOCK_USERS = [u for u in MOCK_USERS if u.get('uid') != uid]
-            MOCK_USERS.append(user_profile)
+            print("WARNING: Firestore uninitialized. Registration data not persisted.")
             
         return jsonify({
             "status": "success",
@@ -1046,6 +1278,7 @@ def register_user_route():
 
 # --- NEW: REAL-TIME SECURE KEY VERIFICATION VAULT ---
 @api_bp.route('/vault/verify-key', methods=['POST'])
+@require_auth
 def verify_key_route():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
@@ -1119,6 +1352,24 @@ def verify_key_route():
                 return jsonify({"valid": False, "error": f"NVIDIA API error {resp.status_code}: {detail}"}), 200
             except Exception as e:
                 return jsonify({"valid": False, "error": f"Could not reach NVIDIA API: {str(e)[:100]}"}), 200
+        elif provider == 'Apify':
+            if not key.startswith('apify_api_'):
+                return jsonify({"valid": False, "error": "Apify tokens must start with apify_api_"}), 200
+            try:
+                import requests as _req
+                resp = _req.get(
+                    'https://api.apify.com/v2/users/me',
+                    params={'token': key},
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    username = resp.json().get('data', {}).get('username', 'user')
+                    return jsonify({"valid": True, "message": f"Apify key verified for @{username}!"}), 200
+                if resp.status_code == 401:
+                    return jsonify({"valid": False, "error": "Invalid Apify API token."}), 200
+                return jsonify({"valid": False, "error": f"Apify error {resp.status_code}"}), 200
+            except Exception as e:
+                return jsonify({"valid": False, "error": f"Could not reach Apify: {str(e)[:100]}"}), 200
         else:
             # Generic format check for Groq and Claude
             if len(key) >= 30:
@@ -1131,7 +1382,30 @@ def verify_key_route():
         return jsonify({"error": f"Internal verification failed: {str(e)}"}), 500
 
 
+@api_bp.route('/vault/wallet/status', methods=['GET'])
+@require_auth
+def wallet_status():
+    """Return which providers the authenticated user has keys for (no key values exposed)."""
+    uid = request.user.get('uid')
+    try:
+        from firebase_utils import db, firebase_initialized
+        providers = []
+        if firebase_initialized and db:
+            user_doc = db.collection('users').document(uid).get()
+            if user_doc.exists:
+                wallet = user_doc.to_dict().get('apiKeysWallet', [])
+                providers = list({
+                    e.get('provider') for e in wallet
+                    if (e.get('key') or e.get('encryptedKey'))
+                    and e.get('status') not in ('Invalid', 'Exhausted')
+                })
+        return jsonify({"hasKeys": len(providers) > 0, "providers": providers}), 200
+    except Exception as e:
+        return jsonify({"hasKeys": False, "providers": [], "error": str(e)}), 200
+
+
 @api_bp.route('/vault/wallet/stack', methods=['POST'])
+@require_auth
 def wallet_stack_key():
     """Add a new verified key to a user's API wallet in Firestore."""
     if not request.is_json:
@@ -1139,11 +1413,14 @@ def wallet_stack_key():
 
     data = request.json
     uid = data.get('uid', '').strip()
-    provider = data.get('provider', 'Gemini')
     key = data.get('key', '').strip()
+    provider = data.get('provider', 'Gemini')
 
     if not uid or not key:
         return jsonify({"error": "Missing uid or key"}), 400
+
+    if request.user.get('uid') != uid:
+        return jsonify({"error": "Forbidden: Request UID mismatch"}), 403
 
     try:
         from firebase_utils import db, firebase_initialized
@@ -1178,6 +1455,7 @@ def wallet_stack_key():
 
 
 @api_bp.route('/vault/wallet/remove', methods=['POST'])
+@require_auth
 def wallet_remove_key():
     """Remove a key from a user's API wallet in Firestore."""
     if not request.is_json:
@@ -1189,6 +1467,9 @@ def wallet_remove_key():
 
     if not uid or not key_id:
         return jsonify({"error": "Missing uid or keyId"}), 400
+
+    if request.user.get('uid') != uid:
+        return jsonify({"error": "Forbidden: Request UID mismatch"}), 403
 
     try:
         from firebase_utils import db, firebase_initialized
@@ -1212,6 +1493,84 @@ def wallet_remove_key():
 
 # ── APPLICATION SYSTEM ──────────────────────────────────────────────────────
 
+def _run_match_analysis(app_id: str, resume_data: dict, job_details: dict, wallet: list):
+    """Background thread: compute job match score and persist it on the application document."""
+    import datetime as _dt
+    try:
+        from firebase_utils import db, firebase_initialized
+        if not (firebase_initialized and db):
+            return
+
+        # Rule-based score — fast, no tokens needed
+        rule_based: dict = {}
+        rule_score = 0
+        try:
+            from ats_utils import rule_based_match as _ats
+            rule_based = _ats(resume_data, job_details)
+            rule_score = int(rule_based.get('score', 0))
+        except Exception as e:
+            print(f"[apply-analysis] ats error: {e}")
+
+        # AI analysis using candidate's own Gemini key (zero platform cost)
+        ai_result = None
+        candidate_gemini_key = None
+        if wallet:
+            try:
+                from ai_router import KeyEntry
+                from vault_utils import decrypt_key as _vault_decrypt
+                entry = next(
+                    (KeyEntry(e, vault_decrypt=_vault_decrypt)
+                     for e in wallet
+                     if e.get('provider') == 'Gemini'
+                     and e.get('status') not in ('Invalid', 'Exhausted')),
+                    None
+                )
+                if entry and entry.is_usable():
+                    candidate_gemini_key = entry.key
+            except Exception as e:
+                print(f"[apply-analysis] key extract error: {e}")
+
+        if candidate_gemini_key:
+            try:
+                from gemini_utils import analyze_candidate_for_recruiter
+                ai_result = analyze_candidate_for_recruiter(
+                    resume_data, job_details, rule_score, api_key=candidate_gemini_key
+                )
+            except Exception as e:
+                print(f"[apply-analysis] AI error: {e}")
+
+        rec_default = 'Hire' if rule_score >= 80 else 'Maybe' if rule_score >= 55 else 'Pass'
+        if ai_result:
+            update = {
+                'matchScore':        ai_result.get('matchScore', rule_score),
+                'matchedSkills':     ai_result.get('matchedSkills', []),
+                'missingSkills':     ai_result.get('missingSkills', []),
+                'strengths':         ai_result.get('strengths', []),
+                'concerns':          ai_result.get('concerns', []),
+                'recommendation':    ai_result.get('recommendation', rec_default),
+                'aiSummary':         ai_result.get('aiSummary', ''),
+                'aiEnhanced':        True,
+                'analysisTimestamp': _dt.datetime.utcnow().isoformat(),
+            }
+        else:
+            update = {
+                'matchScore':        rule_score,
+                'matchedSkills':     rule_based.get('matchedSkills', []),
+                'missingSkills':     rule_based.get('missingSkills', []),
+                'strengths':         [],
+                'concerns':          [],
+                'recommendation':    rec_default,
+                'aiSummary':         f'ATS keyword match: {rule_score}/100.',
+                'aiEnhanced':        False,
+                'analysisTimestamp': _dt.datetime.utcnow().isoformat(),
+            }
+
+        db.collection('applications').document(app_id).update(update)
+        print(f"[apply-analysis] app={app_id} score={update['matchScore']} rec={update['recommendation']} ai={update['aiEnhanced']}")
+    except Exception as e:
+        print(f"[apply-analysis] fatal error for app={app_id}: {e}")
+
+
 @api_bp.route('/jobs/<job_id>/apply', methods=['POST'])
 @require_auth
 def apply_to_job(job_id):
@@ -1223,11 +1582,15 @@ def apply_to_job(job_id):
     candidate_name = data.get('candidateName') or request.user.get('name', 'Candidate')
     candidate_email = data.get('candidateEmail') or request.user.get('email', '')
     cover_letter = data.get('coverLetter', '')
+    # Capture wallet now — Flask g is not accessible from background threads
+    from ollama_utils import get_request_wallet
+    candidate_wallet = get_request_wallet()
     try:
         from firebase_utils import db, firebase_initialized
         job_title = data.get('jobTitle', '')
         company = data.get('company', '')
         recruiter_id = ''
+        jd: dict = {}
         if firebase_initialized and db:
             # Always fetch the job from Firestore to get the authoritative recruiterId
             jdoc = db.collection('jobs').document(job_id).get()
@@ -1256,6 +1619,28 @@ def apply_to_job(job_id):
             ref = db.collection('applications').add(app_data)
             app_data['id'] = ref[1].id
             print(f"[apply] saved application {app_data['id']} with recruiterId={recruiter_id!r}")
+
+            # Launch background analysis — uses candidate's own API key, zero platform cost
+            try:
+                import threading
+                resume_data: dict = {}
+                rdoc = db.collection('resumes').document(candidate_id).get()
+                if rdoc.exists:
+                    resume_data = rdoc.to_dict() or {}
+                job_details_for_analysis = {
+                    'title': job_title,
+                    'company': company,
+                    'description': jd.get('description', ''),
+                    'requirements': jd.get('requirements', []),
+                }
+                t = threading.Thread(
+                    target=_run_match_analysis,
+                    args=(app_data['id'], resume_data, job_details_for_analysis, candidate_wallet),
+                    daemon=True,
+                )
+                t.start()
+            except Exception as bg_err:
+                print(f"[apply] background analysis launch error: {bg_err}")
         else:
             import uuid
             app_data = {
@@ -1419,8 +1804,6 @@ def update_application_status(app_id):
                     "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
                     "read": False
                 }
-                MOCK_NOTIFICATIONS.append(notif_data)
-                
                 # Async webhook dispatch for fallback
                 webhook_payload = {
                     "applicationId": app_id,
@@ -1495,31 +1878,30 @@ def get_recruiter_stats(uid):
 
 # --- CHAT & REAL-TIME NOTIFICATIONS ---
 
-MOCK_CHATS = []
-MOCK_MESSAGES = {}  # chat_id -> list of msgs
-MOCK_NOTIFICATIONS = []
-
 @api_bp.route('/chats', methods=['GET'])
 @require_auth
 def get_chats():
     uid = request.user.get('uid')
-    role = request.args.get('role', 'candidate')
     try:
         from firebase_utils import db, firebase_initialized
         if firebase_initialized and db:
+            seen_ids = set()
             chats = []
-            if role == 'recruiter':
-                docs = db.collection('chats').where('recruiterId', '==', uid).stream()
-            else:
-                docs = db.collection('chats').where('candidateId', '==', uid).stream()
-            for doc in docs:
-                c = doc.to_dict()
-                c['id'] = doc.id
-                chats.append(c)
+            # Query both fields — a user can appear in either candidateId or recruiterId
+            # (same-role connections store one user in the "wrong" role field)
+            for query_docs in [
+                db.collection('chats').where('candidateId', '==', uid).stream(),
+                db.collection('chats').where('recruiterId', '==', uid).stream(),
+            ]:
+                for doc in query_docs:
+                    if doc.id not in seen_ids:
+                        seen_ids.add(doc.id)
+                        c = doc.to_dict()
+                        c['id'] = doc.id
+                        chats.append(c)
             return jsonify({"chats": chats}), 200
-        
-        chats = [c for c in MOCK_CHATS if (c['recruiterId'] == uid if role == 'recruiter' else c['candidateId'] == uid)]
-        return jsonify({"chats": chats}), 200
+
+        return jsonify({"chats": []}), 200
     except Exception as e:
         print(f"Error getting chats: {e}")
         return jsonify({"chats": []}), 200
@@ -1563,24 +1945,7 @@ def create_chat():
             chat_data['id'] = ref[1].id
             return jsonify({"status": "success", "chat": chat_data}), 201
 
-        found = next((c for c in MOCK_CHATS if c['candidateId'] == candidate_id and c['recruiterId'] == recruiter_id and c['jobId'] == job_id), None)
-        if found:
-            return jsonify({"status": "success", "chat": found}), 200
-
-        import uuid
-        new_chat = {
-            "id": str(uuid.uuid4()),
-            "candidateId": candidate_id,
-            "recruiterId": recruiter_id,
-            "jobId": job_id,
-            "jobTitle": job_title,
-            "candidateName": candidate_name,
-            "recruiterName": recruiter_name,
-            "lastMessage": "",
-            "lastMessageTimestamp": ""
-        }
-        MOCK_CHATS.append(new_chat)
-        return jsonify({"status": "success", "chat": new_chat}), 201
+        return jsonify({"error": "Firebase not initialized — cannot create chat"}), 503
     except Exception as e:
         print(f"Error creating chat: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1599,8 +1964,7 @@ def get_chat_messages(chat_id):
                 messages.append(m)
             return jsonify({"messages": messages}), 200
 
-        messages = MOCK_MESSAGES.get(chat_id, [])
-        return jsonify({"messages": messages}), 200
+        return jsonify({"messages": []}), 200
     except Exception as e:
         print(f"Error getting messages: {e}")
         return jsonify({"messages": []}), 200
@@ -1639,25 +2003,7 @@ def send_chat_message(chat_id):
             })
             return jsonify({"status": "success", "message": msg_data}), 201
 
-        import uuid
-        new_msg = {
-            "id": str(uuid.uuid4()),
-            "chatId": chat_id,
-            "text": text,
-            "senderId": sender_id,
-            "senderName": sender_name,
-            "timestamp": now_str
-        }
-        if chat_id not in MOCK_MESSAGES:
-            MOCK_MESSAGES[chat_id] = []
-        MOCK_MESSAGES[chat_id].append(new_msg)
-
-        found = next((c for c in MOCK_CHATS if c['id'] == chat_id), None)
-        if found:
-            found['lastMessage'] = text
-            found['lastMessageTimestamp'] = now_str
-
-        return jsonify({"status": "success", "message": new_msg}), 201
+        return jsonify({"error": "Firebase not initialized — cannot send message"}), 503
     except Exception as e:
         print(f"Error sending message: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1678,9 +2024,7 @@ def get_notifications():
                 notifs.append(n)
             return jsonify({"notifications": notifs}), 200
 
-        notifs = [n for n in MOCK_NOTIFICATIONS if n['candidateId'] == uid]
-        notifs.sort(key=lambda x: x['timestamp'], reverse=True)
-        return jsonify({"notifications": notifs}), 200
+        return jsonify({"notifications": []}), 200
     except Exception as e:
         print(f"Error getting notifications: {e}")
         return jsonify({"notifications": []}), 200
@@ -1697,75 +2041,12 @@ def read_all_notifications():
                 db.collection('notifications').document(doc.id).update({"read": True})
             return jsonify({"status": "success"}), 200
 
-        for n in MOCK_NOTIFICATIONS:
-            if n['candidateId'] == uid:
-                n['read'] = True
         return jsonify({"status": "success"}), 200
     except Exception as e:
         print(f"Error reading notifications: {e}")
         return jsonify({"error": str(e)}), 500
 
 # --- Phase 2: Community Trust & Salary Market Data Endpoints ---
-
-MOCK_COMPANIES = [
-    {
-        "id": "google",
-        "name": "Google",
-        "industry": "Search & Cloud",
-        "logoUrl": "https://images.unsplash.com/photo-1573804633927-bfcbcd909acd?w=100&auto=format&fit=crop&q=60",
-        "bio": "Google's mission is to organize the world's information and make it universally accessible and useful. We build products that connect millions of people daily.",
-        "employeesCount": "150,000+",
-        "location": "Mountain View, CA"
-    },
-    {
-        "id": "techcorp",
-        "name": "TechCorp Systems",
-        "industry": "Software & AI",
-        "logoUrl": "https://images.unsplash.com/photo-1549719386-74dfcbf7dbed?w=100&auto=format&fit=crop&q=60",
-        "bio": "Developing premium software systems and leading AI tools for modern enterprise applications since 2018.",
-        "employeesCount": "2,500+",
-        "location": "Austin, TX"
-    },
-    {
-        "id": "nexus",
-        "name": "Nexus Dynamics",
-        "industry": "Cloud Infrastructure",
-        "logoUrl": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=100&auto=format&fit=crop&q=60",
-        "bio": "Next-generation cloud networks and double-blind security vaults for global technology companies.",
-        "employeesCount": "800+",
-        "location": "Dallas, TX"
-    }
-]
-
-MOCK_REVIEWS = {}
-MOCK_QNA = {}
-
-MOCK_SALARIES = {
-    "Flutter Developer": {
-        "title": "Flutter Developer",
-        "low": 85000,
-        "median": 115000,
-        "high": 150000,
-        "avg": 118000,
-        "curve": [40, 55, 78, 95, 78, 48, 25]
-    },
-    "Python Backend Developer": {
-        "title": "Python Backend Developer",
-        "low": 95000,
-        "median": 130000,
-        "high": 175000,
-        "avg": 134000,
-        "curve": [30, 48, 72, 98, 88, 55, 30]
-    },
-    "UI/UX Designer": {
-        "title": "UI/UX Designer",
-        "low": 75000,
-        "median": 105000,
-        "high": 140000,
-        "avg": 108000,
-        "curve": [45, 60, 85, 90, 68, 38, 15]
-    }
-}
 
 @api_bp.route('/companies', methods=['GET'])
 def get_companies():
@@ -1779,37 +2060,21 @@ def get_companies():
                 c = doc.to_dict()
                 c['id'] = doc.id
                 companies.append(c)
-        else:
-            companies = list(MOCK_COMPANIES)
 
-        # If a search query is provided, check if there's any match in the database
         if search_query:
             query_lower = search_query.lower()
             matches = [c for c in companies if query_lower in c.get('name', '').lower() or query_lower in c.get('industry', '').lower() or query_lower in c.get('location', '').lower()]
-            
-            # If no matches, dynamically generate the company profile via Gemini
-            if not matches:
+            if not matches and firebase_initialized and db:
                 new_company = generate_company_profile_via_ai(search_query)
                 if new_company:
-                    # Save to DB or Mock
-                    if firebase_initialized and db:
-                        db.collection('companies').document(new_company['id']).set(new_company)
-                    else:
-                        MOCK_COMPANIES.append(new_company)
-                    companies.append(new_company)
+                    db.collection('companies').document(new_company['id']).set(new_company)
                     matches = [new_company]
             return jsonify({"companies": matches}), 200
 
-        # Seed Firestore if empty on first load
-        if not companies:
-            if firebase_initialized and db:
-                for comp in MOCK_COMPANIES:
-                    db.collection('companies').document(comp['id']).set(comp)
-            return jsonify({"companies": MOCK_COMPANIES}), 200
         return jsonify({"companies": companies}), 200
     except Exception as e:
         print(f"Error listing companies: {e}")
-        return jsonify({"companies": MOCK_COMPANIES}), 200
+        return jsonify({"companies": []}), 200
 
 @api_bp.route('/companies/<company_id>', methods=['GET'])
 def get_company_details(company_id):
@@ -1821,9 +2086,6 @@ def get_company_details(company_id):
                 c = doc.to_dict()
                 c['id'] = doc.id
                 return jsonify({"company": c}), 200
-        found = next((comp for comp in MOCK_COMPANIES if comp['id'] == company_id), None)
-        if found:
-            return jsonify({"company": found}), 200
         return jsonify({"error": "Company not found"}), 404
     except Exception as e:
         print(f"Error fetching company {company_id}: {e}")
@@ -1841,35 +2103,22 @@ def get_company_reviews(company_id):
                 r = doc.to_dict()
                 r['id'] = doc.id
                 reviews.append(r)
-        else:
-            reviews = MOCK_REVIEWS.get(company_id, [])
 
-        if not reviews:
-            # Dynamically generate reviews for the company using Gemini
-            company_name = None
-            if firebase_initialized and db:
-                comp_doc = db.collection('companies').document(company_id).get()
-                if comp_doc.exists:
-                    company_name = comp_doc.to_dict().get('name')
-            else:
-                comp_found = next((c for c in MOCK_COMPANIES if c['id'] == company_id), None)
-                if comp_found:
-                    company_name = comp_found.get('name')
-
-            if company_name:
-                generated_reviews = generate_company_reviews_via_ai(company_id, company_name)
-                if generated_reviews:
-                    if firebase_initialized and db:
+        if not reviews and firebase_initialized and db:
+            comp_doc = db.collection('companies').document(company_id).get()
+            if comp_doc.exists:
+                company_name = comp_doc.to_dict().get('name')
+                if company_name:
+                    generated_reviews = generate_company_reviews_via_ai(company_id, company_name)
+                    if generated_reviews:
                         for r in generated_reviews:
                             db.collection('companies').document(company_id).collection('reviews').add(r)
-                    else:
-                        MOCK_REVIEWS[company_id] = generated_reviews
-                    reviews = generated_reviews
+                        reviews = generated_reviews
 
         return jsonify({"reviews": reviews}), 200
     except Exception as e:
         print(f"Error listing reviews for {company_id}: {e}")
-        return jsonify({"reviews": MOCK_REVIEWS.get(company_id, [])}), 200
+        return jsonify({"reviews": []}), 200
 
 @api_bp.route('/companies/<company_id>/reviews', methods=['POST'])
 @require_auth
@@ -1898,12 +2147,7 @@ def post_company_review(company_id):
             ref = db.collection('companies').document(company_id).collection('reviews').add(review_data)
             review_data['id'] = ref[1].id
             return jsonify({"status": "success", "review": review_data}), 201
-        
-        if company_id not in MOCK_REVIEWS:
-            MOCK_REVIEWS[company_id] = []
-        review_data['id'] = f"mock-rev-{random.randint(100, 999)}"
-        MOCK_REVIEWS[company_id].insert(0, review_data)
-        return jsonify({"status": "success", "review": review_data}), 201
+        return jsonify({"error": "Firebase not initialized"}), 503
     except Exception as e:
         print(f"Error posting review: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1920,10 +2164,10 @@ def get_company_qna(company_id):
                 q['id'] = doc.id
                 qna_list.append(q)
             return jsonify({"qna": qna_list}), 200
-        return jsonify({"qna": MOCK_QNA.get(company_id, [])}), 200
+        return jsonify({"qna": []}), 200
     except Exception as e:
         print(f"Error fetching QnA: {e}")
-        return jsonify({"qna": MOCK_QNA.get(company_id, [])}), 200
+        return jsonify({"qna": []}), 200
 
 @api_bp.route('/companies/<company_id>/qna', methods=['POST'])
 @require_auth
@@ -1954,20 +2198,23 @@ def post_company_question(company_id):
             ref = db.collection('companies').document(company_id).collection('qna').add(qna_data)
             qna_data['id'] = ref[1].id
             return jsonify({"status": "success", "qna": qna_data}), 201
-
-        if company_id not in MOCK_QNA:
-            MOCK_QNA[company_id] = []
-        qna_data['id'] = f"mock-qna-{random.randint(100, 999)}"
-        MOCK_QNA[company_id].insert(0, qna_data)
-        return jsonify({"status": "success", "qna": qna_data}), 201
+        return jsonify({"error": "Firebase not initialized"}), 503
     except Exception as e:
         print(f"Error posting QnA: {e}")
         return jsonify({"error": str(e)}), 500
 
 @api_bp.route('/stats/salaries', methods=['GET'])
 def get_salary_stats():
-    # Return salary averages by tech position
-    return jsonify({"salaries": MOCK_SALARIES}), 200
+    try:
+        from firebase_utils import db, firebase_initialized
+        if firebase_initialized and db:
+            docs = db.collection('salaries').stream()
+            salaries = {doc.id: doc.to_dict() for doc in docs}
+            return jsonify({"salaries": salaries}), 200
+        return jsonify({"salaries": {}}), 200
+    except Exception as e:
+        print(f"Error fetching salaries: {e}")
+        return jsonify({"salaries": {}}), 200
 
 # --- Phase 3: Automated Job Ingestion Scale Crawler trigger endpoint ---
 @api_bp.route('/jobs/crawl', methods=['POST'])
@@ -1981,8 +2228,6 @@ def trigger_crawler():
         return jsonify({"error": str(e)}), 500
 
 # --- Phase 4: Webhook Dispatchers & Integrations Endpoints ---
-
-MOCK_WEBHOOKS = []
 
 def send_http_post(url, payload):
     try:
@@ -2013,11 +2258,6 @@ def dispatch_webhook_event_worker(event_type, event_payload):
                 if data.get('url'):
                     urls.append(data['url'])
         
-        # Merge with in-memory mock webhooks
-        for item in MOCK_WEBHOOKS:
-            if item.get('url') and item['url'] not in urls:
-                urls.append(item['url'])
-
         if not urls:
             print("[WEBHOOK DISPATCHER] No registered webhook URLs found. Skipping dispatch.")
             return
@@ -2050,13 +2290,11 @@ def get_webhook_subscriptions():
                 d = doc.to_dict()
                 d['id'] = doc.id
                 subs.append(d)
-            if not subs:
-                return jsonify({"subscriptions": MOCK_WEBHOOKS}), 200
             return jsonify({"subscriptions": subs}), 200
-        return jsonify({"subscriptions": MOCK_WEBHOOKS}), 200
+        return jsonify({"subscriptions": []}), 200
     except Exception as e:
         print(f"Error listing webhook subscriptions: {e}")
-        return jsonify({"subscriptions": MOCK_WEBHOOKS}), 200
+        return jsonify({"subscriptions": []}), 200
 
 @api_bp.route('/webhooks/subscribe', methods=['POST'])
 @require_auth
@@ -2084,10 +2322,7 @@ def subscribe_webhook_route():
             ref = db.collection('webhooks').add(sub_data)
             sub_data['id'] = ref[1].id
             return jsonify({"status": "success", "subscription": sub_data}), 201
-        
-        sub_data['id'] = f"mock-sub-{random.randint(100, 999)}"
-        MOCK_WEBHOOKS.append(sub_data)
-        return jsonify({"status": "success", "subscription": sub_data}), 201
+        return jsonify({"error": "Firebase not available"}), 503
     except Exception as e:
         print(f"Error subscribing webhook: {e}")
         return jsonify({"error": str(e)}), 500
@@ -2122,51 +2357,6 @@ def test_ping_webhook():
         return jsonify({"error": str(e)}), 500
 
 # --- Phase 5: Ecosystem Network, User Search, & Connections Endpoints ---
-
-MOCK_USERS = [
-    {
-        "uid": "mock_uid_123",
-        "fullName": "Jane Doe",
-        "email": "jane.doe@careercraft.com",
-        "role": "candidate",
-        "phone": "+1 (555) 019-2834",
-        "createdAt": "2026-05-01T12:00:00Z"
-    },
-    {
-        "uid": "mock_uid_456",
-        "fullName": "Jane Smith",
-        "email": "jane.smith@example.com",
-        "role": "candidate",
-        "phone": "987-654-3210",
-        "createdAt": "2026-05-02T12:00:00Z"
-    },
-    {
-        "uid": "mock_uid_789",
-        "fullName": "Bob Johnson",
-        "email": "bob.johnson@example.com",
-        "role": "candidate",
-        "phone": "555-123-4567",
-        "createdAt": "2026-05-03T12:00:00Z"
-    },
-    {
-        "uid": "mock_recruiter_999",
-        "fullName": "Alice Recruiter",
-        "email": "alice.recruiter@example.com",
-        "role": "recruiter",
-        "phone": "444-123-4567",
-        "createdAt": "2026-05-04T12:00:00Z"
-    },
-    {
-        "uid": "mock_recruiter_888",
-        "fullName": "Charlie Recruiter",
-        "email": "charlie@example.com",
-        "role": "recruiter",
-        "phone": "333-123-4567",
-        "createdAt": "2026-05-05T12:00:00Z"
-    }
-]
-
-MOCK_CONNECTIONS = []
 
 @api_bp.route('/users', methods=['GET'])
 @require_auth
@@ -2204,24 +2394,6 @@ def get_users():
                     users_list.append(u_data)
                 else:
                     users_list.append(u_data)
-        else:
-            # Fallback mock users
-            for u in MOCK_USERS:
-                uid = u.get('uid')
-                if uid == current_uid:
-                    continue  # Exclude self
-                
-                # Apply filters
-                if role_filter and u['role'].lower() != role_filter:
-                    continue
-                if search_query:
-                    name = u['fullName'].lower()
-                    email = u['email'].lower()
-                    if search_query not in name and search_query not in email:
-                        continue
-                    users_list.append(u)
-                else:
-                    users_list.append(u)
         return jsonify({"users": users_list}), 200
     except Exception as e:
         print(f"Error listing users: {e}")
@@ -2273,22 +2445,7 @@ def request_connection():
                 receiver_email = r_data.get('email', receiver_email)
                 receiver_role = r_data.get('role', receiver_role)
         else:
-            # Check mock connections
-            found_existing = next((c for c in MOCK_CONNECTIONS if (c['senderId'] == current_uid and c['receiverId'] == receiver_id) or (c['senderId'] == receiver_id and c['receiverId'] == current_uid)), None)
-            if found_existing:
-                return jsonify({"error": "Connection request already exists or is active between these users"}), 400
-
-            sender_doc = next((u for u in MOCK_USERS if u['uid'] == current_uid), None)
-            if sender_doc:
-                sender_name = sender_doc.get('fullName', sender_name)
-                sender_email = sender_doc.get('email', sender_email)
-                sender_role = sender_doc.get('role', sender_role)
-
-            receiver_doc = next((u for u in MOCK_USERS if u['uid'] == receiver_id), None)
-            if receiver_doc:
-                receiver_name = receiver_doc.get('fullName', receiver_name)
-                receiver_email = receiver_doc.get('email', receiver_email)
-                receiver_role = receiver_doc.get('role', receiver_role)
+            return jsonify({"error": "Firebase not initialized — cannot request connection"}), 503
 
         now_str = datetime.datetime.utcnow().isoformat() + "Z"
         conn_data = {
@@ -2318,21 +2475,6 @@ def request_connection():
                 "read": False
             }
             db.collection('notifications').add(notif)
-        else:
-            conn_data['id'] = f"mock-conn-{random.randint(1000, 9999)}"
-            MOCK_CONNECTIONS.append(conn_data)
-
-            # Send mock notification
-            notif = {
-                "id": f"mock-notif-{random.randint(100, 999)}",
-                "candidateId": receiver_id,
-                "title": "Connection Invitation",
-                "message": f"{sender_name} wants to connect with you and start a conversation.",
-                "timestamp": now_str,
-                "read": False
-            }
-            MOCK_NOTIFICATIONS.append(notif)
-            print(f"[MOCK NOTIF] Alert created for {receiver_id}: {notif['message']}")
 
         # Email the receiver regardless of Firebase mode
         if receiver_email:
@@ -2369,9 +2511,6 @@ def get_connections():
                 d = doc.to_dict()
                 d['id'] = doc.id
                 conns.append(d)
-        else:
-            # Filter mock list
-            conns = [c for c in MOCK_CONNECTIONS if c['senderId'] == current_uid or c['receiverId'] == current_uid]
         return jsonify({"connections": conns}), 200
     except Exception as e:
         print(f"Error listing connections: {e}")
@@ -2400,10 +2539,7 @@ def respond_connection(connection_id):
                 return jsonify({"error": "Connection record not found"}), 404
             conn_data = snap.to_dict()
         else:
-            conn_idx = next((i for i, c in enumerate(MOCK_CONNECTIONS) if c['id'] == connection_id), -1)
-            if conn_idx == -1:
-                return jsonify({"error": "Connection record not found"}), 404
-            conn_data = MOCK_CONNECTIONS[conn_idx]
+            return jsonify({"error": "Firebase not initialized — cannot respond to connection"}), 503
 
         # Ensure only the receiver can respond
         if conn_data.get('receiverId') != current_uid:
@@ -2465,63 +2601,6 @@ def respond_connection(connection_id):
                         "chatId": new_chat_id
                     }
                     db.collection('chats').document(new_chat_id).collection('messages').add(msg_data)
-        else:
-            # Handle mock response
-            # Create notification for sender
-            notif = {
-                "id": f"mock-notif-{random.randint(100, 999)}",
-                "candidateId": sender_id,
-                "title": "Connection Accepted" if status == 'accepted' else "Connection Request Update",
-                "message": f"{receiver_name} has accepted your connection request!" if status == 'accepted' else f"{receiver_name} declined your connection request.",
-                "timestamp": now_str,
-                "read": False
-            }
-            MOCK_NOTIFICATIONS.append(notif)
-            print(f"[MOCK NOTIF] Alert created for {sender_id}: {notif['message']}")
-
-            if status == 'accepted':
-                # Create Direct Chat Room
-                candidate_id = sender_id if conn_data['senderRole'] == 'candidate' else current_uid
-                recruiter_id = sender_id if conn_data['senderRole'] == 'recruiter' else current_uid
-                cand_name = sender_name if conn_data['senderRole'] == 'candidate' else receiver_name
-                rec_name = sender_name if conn_data['senderRole'] == 'recruiter' else receiver_name
-
-                found_chat = next((c for c in MOCK_CHATS if c['candidateId'] == candidate_id and c['recruiterId'] == recruiter_id and c['jobId'] == 'connection_chat'), None)
-                if not found_chat:
-                    import uuid
-                    new_chat_id = str(uuid.uuid4())
-                    new_chat = {
-                        "id": new_chat_id,
-                        "candidateId": candidate_id,
-                        "recruiterId": recruiter_id,
-                        "jobId": "connection_chat",
-                        "jobTitle": "Direct Connection",
-                        "candidateName": cand_name,
-                        "recruiterName": rec_name,
-                        "lastMessage": "You are now connected! Start chatting.",
-                        "lastMessageTimestamp": now_str
-                    }
-                    MOCK_CHATS.append(new_chat)
-
-                    # Initial message
-                    msg_data = {
-                        "id": f"mock-msg-{random.randint(1000, 9999)}",
-                        "senderId": "system",
-                        "senderName": "System",
-                        "text": "Connection established. You can now message each other directly.",
-                        "timestamp": now_str,
-                        "chatId": new_chat_id
-                    }
-                    if new_chat_id not in MOCK_MESSAGES:
-                        MOCK_MESSAGES[new_chat_id] = []
-                    MOCK_MESSAGES[new_chat_id].append(msg_data)
-
-        # Update in memory if mock
-        if not firebase_initialized or not db:
-            conn_idx = next((i for i, c in enumerate(MOCK_CONNECTIONS) if c['id'] == connection_id), -1)
-            if conn_idx != -1:
-                MOCK_CONNECTIONS[conn_idx]['status'] = status
-                MOCK_CONNECTIONS[conn_idx]['updatedAt'] = now_str
 
         # Email the original sender when their request is accepted
         if status == 'accepted':
@@ -2553,7 +2632,7 @@ def get_job_alerts():
             docs = db.collection('jobAlerts').where('userId', '==', uid).stream()
             alerts = [{'id': d.id, **d.to_dict()} for d in docs]
         else:
-            alerts = [a for a in MOCK_JOB_ALERTS if a['userId'] == uid]
+            alerts = []
         return jsonify({'alerts': alerts}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -2585,11 +2664,8 @@ def create_job_alert():
         if firebase_initialized and db:
             ref = db.collection('jobAlerts').add(alert)
             alert['id'] = ref[1].id
-        else:
-            import uuid
-            alert['id'] = str(uuid.uuid4())
-            MOCK_JOB_ALERTS.append(alert)
-        return jsonify({'status': 'created', 'alert': alert}), 201
+            return jsonify({'status': 'created', 'alert': alert}), 201
+        return jsonify({'error': 'Firebase not available'}), 503
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -2607,15 +2683,10 @@ def delete_job_alert(alert_id):
                 return jsonify({'error': 'Not found'}), 404
             ref.delete()
         else:
-            global MOCK_JOB_ALERTS
-            MOCK_JOB_ALERTS = [a for a in MOCK_JOB_ALERTS if not (a['id'] == alert_id and a['userId'] == uid)]
+            return jsonify({'error': 'Firebase not available'}), 503
         return jsonify({'status': 'deleted'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
-# In-memory store for mock mode
-MOCK_JOB_ALERTS: list = []
 
 
 # =============================================================================
@@ -2650,8 +2721,7 @@ def get_profile_completion(uid):
             user_data = user_doc.to_dict() if user_doc.exists else {}
             resume_exists = db.collection('resumes').document(uid).get().exists
         else:
-            mock_user = next((u for u in MOCK_USERS if u.get('uid') == uid), {})
-            user_data = mock_user
+            user_data = {}
             resume_exists = False
         result = _calc_completion(user_data, resume_exists)
         return jsonify(result), 200
@@ -2850,3 +2920,795 @@ def disable_2fa():
         return jsonify({'status': 'disabled'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ─── Email OTP verification ───────────────────────────────────────────────────
+
+@api_bp.route('/auth/send-email-otp', methods=['POST'])
+def send_email_otp():
+    """Generate a 6-digit OTP, store it in Firestore, and email it to the user."""
+    from firebase_utils import db, firebase_initialized
+    data = request.json or {}
+    email = data.get('email', '').strip().lower()
+    name  = data.get('name',  'User').strip()
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+
+    otp    = ''.join(random.choices(string.digits, k=6))
+    expiry = datetime.datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    if firebase_initialized and db:
+        try:
+            db.collection('_otps').document(email).set({
+                'otp': otp,
+                'expiry': expiry,
+                'attempts': 0,
+            })
+        except Exception as e:
+            return jsonify({'error': f'Could not store OTP: {e}'}), 500
+    else:
+        _otp_store[email] = {'otp': otp, 'expiry': expiry}
+
+    try:
+        send_2fa_otp_email(email, name, otp)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': f'Failed to send email: {e}'}), 500
+
+
+@api_bp.route('/auth/verify-email-otp', methods=['POST'])
+def verify_email_otp():
+    """Verify a 6-digit email OTP. Deletes the record on success."""
+    from firebase_utils import db, firebase_initialized
+    data  = request.json or {}
+    email = data.get('email', '').strip().lower()
+    otp   = data.get('otp',   '').strip()
+    if not email or not otp:
+        return jsonify({'error': 'Email and OTP are required'}), 400
+
+    now = datetime.datetime.now(timezone.utc)
+
+    if firebase_initialized and db:
+        try:
+            ref = db.collection('_otps').document(email)
+            doc = ref.get()
+            if not doc.exists:
+                return jsonify({'error': 'No code found — please request a new one'}), 400
+            stored = doc.to_dict()
+            expiry = stored.get('expiry')
+            if expiry and expiry < now:
+                ref.delete()
+                return jsonify({'error': 'Code expired — please request a new one'}), 400
+            if stored.get('otp') != otp:
+                return jsonify({'error': 'Incorrect code — please try again'}), 400
+            ref.delete()
+            return jsonify({'verified': True})
+        except Exception as e:
+            return jsonify({'error': f'Verification error: {e}'}), 500
+    else:
+        stored = _otp_store.get(email)
+        if not stored:
+            return jsonify({'error': 'No code found'}), 400
+        if stored['otp'] != otp:
+            return jsonify({'error': 'Incorrect code'}), 400
+        if stored['expiry'] < now:
+            return jsonify({'error': 'Code expired'}), 400
+        del _otp_store[email]
+        return jsonify({'verified': True})
+
+
+# ── Smart Apply ───────────────────────────────────────────────────────────────
+
+@api_bp.route('/smart-apply/search', methods=['POST'])
+@require_auth
+def smart_apply_search():
+    """Scrape jobs from RemoteOK + Indeed; cache results in shared Firestore pool."""
+    from firebase_utils import db
+    from datetime import datetime as _dt
+
+    uid      = getattr(request, 'uid', None)
+    body     = request.get_json() or {}
+    roles    = [r.strip() for r in body.get('roles', []) if str(r).strip()]
+    query    = body.get('query', '').strip()
+    # Build combined query from roles list or fall back to plain query field
+    if roles:
+        query = ' OR '.join(roles)
+    elif not query:
+        query = ''
+    location = body.get('location', 'Remote').strip() or 'Remote'
+    sources  = body.get('sources', ['remoteok', 'indeed', 'linkedin'])
+
+    # Retrieve the user's Apify key from their encrypted vault wallet.
+    import ollama_utils as _ou
+    from vault_utils import decrypt_key as _vault_decrypt
+    _wallet    = _ou.get_request_wallet() or []
+    _apify_e   = next((e for e in _wallet if e.get('provider') == 'Apify'
+                       and e.get('status') not in ('Invalid', 'Exhausted')), None)
+    apify_key  = ''
+    if _apify_e:
+        _enc = _apify_e.get('encryptedKey', '')
+        try:
+            apify_key = _vault_decrypt(_enc) if _enc else _apify_e.get('key', '')
+        except Exception:
+            apify_key = _apify_e.get('key', '')
+
+    if not query:
+        return jsonify({'error': 'Search query is required'}), 400
+
+    # Cache key based on all roles (or query) + location
+    roles_key  = '_'.join(r.lower().replace(' ', '_') for r in roles) if roles else query.lower().replace(' ', '_')
+    search_key = f"{roles_key}_{location.lower().replace(' ', '_')}"
+
+    # ── Firestore cache check (< 24 h) ──────────────────────────────────────
+    # Query by search_key only (single-field index, no composite needed).
+    # Filter by age in Python to avoid the composite index requirement.
+    if db:
+        try:
+            cutoff = _dt.utcnow() - timedelta(hours=24)
+            cached_docs = (
+                db.collection('scraped_jobs')
+                  .where('search_key', '==', search_key)
+                  .limit(60)
+                  .stream()
+            )
+            cached = []
+            for doc in cached_docs:
+                d = doc.to_dict()
+                sat = d.get('scraped_at')
+                # Accept Firestore Timestamp or Python datetime; skip stale docs
+                if sat is not None:
+                    sat_dt = sat if isinstance(sat, _dt) else getattr(sat, 'datetime', None)
+                    if sat_dt and sat_dt.replace(tzinfo=None) < cutoff:
+                        continue
+                if hasattr(sat, 'isoformat'):
+                    d['scraped_at'] = sat.isoformat()
+                cached.append({'id': doc.id, **d})
+            if cached:
+                return jsonify({'jobs': cached, 'cached': True, 'count': len(cached)})
+        except Exception as _cache_err:
+            print(f'Cache check skipped: {_cache_err}')
+
+    jobs = []
+
+    # ── Arbeitnow (free public API, no auth) ─────────────────────────────────
+    if 'arbeitnow' in sources:
+        try:
+            _seen_arbeit = set()
+            for _role in (roles or [query])[:3]:
+                try:
+                    resp = _requests_lib.get(
+                        'https://www.arbeitnow.com/api/job-board-api',
+                        params={'search': _role, 'page': 1},
+                        headers={'Accept': 'application/json', 'User-Agent': 'CareerCraft/1.0'},
+                        timeout=15,
+                    )
+                    if resp.ok:
+                        for j in resp.json().get('data', [])[:15]:
+                            _jurl = j.get('url', '')
+                            if not _jurl or _jurl in _seen_arbeit:
+                                continue
+                            _seen_arbeit.add(_jurl)
+                            jobs.append({
+                                'title':       j.get('title', ''),
+                                'company':     j.get('company_name', ''),
+                                'location':    'Remote' if j.get('remote') else (j.get('location') or location),
+                                'salary':      '',
+                                'description': (j.get('description') or '')[:600],
+                                'url':         _jurl,
+                                'source':      'arbeitnow',
+                                'tags':        j.get('tags', []),
+                                'logo':        j.get('logo', ''),
+                            })
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f'Arbeitnow error: {e}')
+
+    # ── Jobicy (free public API, remote jobs, no auth) ────────────────────────
+    # Jobicy uses `tag` (single keyword) not `keyword` — extract tech terms
+    if 'jobicy' in sources:
+        try:
+            import re as _re2
+            _jcy_stopwords = {
+                'senior', 'junior', 'mid', 'level', 'developer', 'engineer', 'software',
+                'full', 'stack', 'web', 'mobile', 'lead', 'staff', 'principal', 'the',
+                'and', 'for', 'with', 'role', 'position', 'remote', 'contract',
+                'backend', 'frontend', 'devops', 'manager', 'architect',
+            }
+            _jcy_tags = []
+            _jcy_seen_tags = set()
+            for _role in (roles or [query]):
+                for _w in _re2.findall(r'\b[a-zA-Z][a-zA-Z0-9#+.]*\b', _role):
+                    _wl = _w.lower()
+                    if _wl not in _jcy_stopwords and len(_wl) > 1 and _wl not in _jcy_seen_tags:
+                        _jcy_seen_tags.add(_wl)
+                        _jcy_tags.append(_wl)
+
+            _seen_jobicy = set()
+            # Try each extracted tag; fall back to unfiltered if none found
+            for _tag in (_jcy_tags[:4] if _jcy_tags else [None]):
+                try:
+                    params = {'count': 20}
+                    if _tag:
+                        params['tag'] = _tag
+                    resp = _requests_lib.get(
+                        'https://jobicy.com/api/v2/remote-jobs',
+                        params=params,
+                        headers={'Accept': 'application/json'},
+                        timeout=15,
+                    )
+                    if resp.ok:
+                        data = resp.json()
+                        job_list = data.get('jobs', []) if isinstance(data, dict) else []
+                        for j in job_list[:15]:
+                            _jurl = j.get('url') or j.get('jobUrl', '')
+                            if not _jurl or _jurl in _seen_jobicy:
+                                continue
+                            _seen_jobicy.add(_jurl)
+                            salary = ''
+                            if j.get('annualSalaryMin'):
+                                salary = f"${j['annualSalaryMin']:,}–${j.get('annualSalaryMax', j['annualSalaryMin']):,}"
+                            jobs.append({
+                                'title':       j.get('jobTitle', '') or j.get('title', ''),
+                                'company':     j.get('companyName', '') or j.get('company', ''),
+                                'location':    j.get('jobGeo', 'Remote') or 'Remote',
+                                'salary':      salary,
+                                'description': (j.get('jobExcerpt') or j.get('jobDescription') or j.get('description') or '')[:600],
+                                'url':         _jurl,
+                                'source':      'jobicy',
+                                'tags':        [j['jobType']] if j.get('jobType') else [],
+                                'logo':        j.get('companyLogo', ''),
+                            })
+                        if len(_seen_jobicy) >= 15:
+                            break
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f'Jobicy error: {e}')
+
+    # ── crawl4ai: async AI-powered web crawler ───────────────────────────────
+    # Accepts a list of direct company career page URLs via the `career_urls` field
+    if 'crawl4ai' in sources:
+        career_urls = body.get('career_urls', [])
+        if career_urls:
+            try:
+                from crawl4ai import AsyncWebCrawler
+                from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
+                import asyncio as _asyncio
+
+                schema = {
+                    'name': 'jobs',
+                    'baseSelector': 'a, [class*="job"], [class*="position"], [class*="opening"]',
+                    'fields': [
+                        {'name': 'title',   'selector': 'h2, h3, h4, [class*="title"], [class*="role"]',   'type': 'text'},
+                        {'name': 'company', 'selector': '[class*="company"], [class*="employer"]',          'type': 'text'},
+                        {'name': 'url',     'selector': 'a',                                               'type': 'attribute', 'attribute': 'href'},
+                        {'name': 'location','selector': '[class*="location"], [class*="city"]',             'type': 'text'},
+                    ]
+                }
+                strategy = JsonCssExtractionStrategy(schema, verbose=False)
+
+                async def _crawl_careers():
+                    _c4_jobs = []
+                    async with AsyncWebCrawler(verbose=False) as crawler:
+                        for _curl in career_urls[:5]:
+                            try:
+                                result = await crawler.arun(url=_curl, extraction_strategy=strategy)
+                                if result.success and result.extracted_content:
+                                    import json as _json
+                                    _extracted = _json.loads(result.extracted_content) if isinstance(result.extracted_content, str) else result.extracted_content
+                                    for _j in (_extracted if isinstance(_extracted, list) else [])[:10]:
+                                        _jurl = _j.get('url', '')
+                                        if _jurl and not _jurl.startswith('http'):
+                                            from urllib.parse import urljoin
+                                            _jurl = urljoin(_curl, _jurl)
+                                        if not _jurl:
+                                            continue
+                                        _c4_jobs.append({
+                                            'title':       _j.get('title', 'Open Position'),
+                                            'company':     _j.get('company', ''),
+                                            'location':    _j.get('location', location),
+                                            'salary':      '',
+                                            'description': '',
+                                            'url':         _jurl,
+                                            'source':      'crawl4ai',
+                                            'tags':        [],
+                                            'logo':        '',
+                                        })
+                            except Exception as _ce:
+                                print(f'crawl4ai error for {_curl}: {_ce}')
+                    return _c4_jobs
+
+                _c4_results = _asyncio.run(_crawl_careers())
+                jobs.extend(_c4_results)
+            except Exception as e:
+                print(f'crawl4ai error: {e}')
+
+    # ── Firecrawl: high-quality content extraction (BYOK) ────────────────────
+    if 'firecrawl' in sources:
+        try:
+            _fc_e = next((e for e in _wallet if e.get('provider') == 'Firecrawl'
+                          and e.get('status') not in ('Invalid', 'Exhausted')), None)
+            if _fc_e:
+                _fc_key = _vault_decrypt(_fc_e.get('encryptedKey', '')) if _fc_e.get('encryptedKey') else _fc_e.get('key', '')
+                if _fc_key:
+                    from firecrawl import FirecrawlApp
+                    _fc = FirecrawlApp(api_key=_fc_key)
+                    for _role in (roles or [query])[:2]:
+                        try:
+                            # Use Firecrawl's search (maps + scrape career pages)
+                            _fc_result = _fc.search(
+                                f'site:jobs.lever.co OR site:boards.greenhouse.io {_role} {location}',
+                                limit=10,
+                            )
+                            for _r in (_fc_result.get('data', []) if isinstance(_fc_result, dict) else []):
+                                _furl = _r.get('url', '')
+                                if not _furl:
+                                    continue
+                                jobs.append({
+                                    'title':       _r.get('title', _role),
+                                    'company':     '',
+                                    'location':    location,
+                                    'salary':      '',
+                                    'description': (_r.get('markdown') or _r.get('content') or '')[:600],
+                                    'url':         _furl,
+                                    'source':      'firecrawl',
+                                    'tags':        [],
+                                    'logo':        '',
+                                })
+                        except Exception as _fce:
+                            print(f'Firecrawl search error: {_fce}')
+        except Exception as e:
+            print(f'Firecrawl error: {e}')
+
+    # ── RemoteOK public JSON API ─────────────────────────────────────────────
+    if 'remoteok' in sources:
+        try:
+            import re as _re
+            # RemoteOK uses single-keyword tags — extract tech terms from each role
+            _stopwords = {
+                'senior', 'junior', 'mid', 'level', 'developer', 'engineer', 'software',
+                'full', 'stack', 'web', 'mobile', 'lead', 'staff', 'principal', 'the',
+                'and', 'for', 'with', 'role', 'position', 'remote', 'contract', 'part',
+                'time', 'full', 'backend', 'frontend', 'devops',
+            }
+            _seen_tags = set()
+            _tag_queue = []
+            for _role in (roles or [query]):
+                for _word in _re.findall(r'\b[a-zA-Z][a-zA-Z0-9#+.]*\b', _role):
+                    _w = _word.lower()
+                    if _w not in _stopwords and len(_w) > 1 and _w not in _seen_tags:
+                        _seen_tags.add(_w)
+                        _tag_queue.append(_w)
+
+            _rok_seen = set()
+            for _tag in _tag_queue[:5]:  # try up to 5 keywords
+                try:
+                    resp = _requests_lib.get(
+                        f'https://remoteok.com/api?tag={_tag}',
+                        headers={'User-Agent': 'CareerCraft-JobScout/1.0'},
+                        timeout=10,
+                    )
+                    if resp.ok:
+                        data = resp.json()
+                        items = data[1:] if isinstance(data, list) and len(data) > 1 else []
+                        for j in items[:20]:
+                            _jid = str(j.get('id', ''))
+                            if _jid in _rok_seen:
+                                continue
+                            _rok_seen.add(_jid)
+                            jobs.append({
+                                'title':       j.get('position', ''),
+                                'company':     j.get('company', ''),
+                                'location':    'Remote',
+                                'salary':      j.get('salary', ''),
+                                'description': (j.get('description') or '')[:600],
+                                'url':         j.get('url') or f"https://remoteok.com/l/{_jid}",
+                                'source':      'remoteok',
+                                'tags':        j.get('tags', []),
+                                'logo':        j.get('company_logo', ''),
+                            })
+                        if len(jobs) >= 20:
+                            break
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f'RemoteOK error: {e}')
+
+    # ── Indeed via Apify actor (bebity/indeed-scraper) ──────────────────────
+    if 'indeed' in sources:
+        if apify_key:
+            # Build per-role search terms; use first role for simpler queries
+            _indeed_query = roles[0] if roles else query
+            try:
+                resp = _requests_lib.post(
+                    'https://api.apify.com/v2/acts/bebity~indeed-scraper/run-sync-get-dataset-items',
+                    params={'token': apify_key, 'timeout': 60, 'memory': 512},
+                    json={
+                        'keyword':      _indeed_query,
+                        'location':     location,
+                        'maxItems':     20,
+                        # Legacy field names some actor versions use:
+                        'searchQuery':  _indeed_query,
+                        'locationQuery': location,
+                        'maxResults':   20,
+                    },
+                    timeout=90,
+                )
+                if resp.ok:
+                    _body = resp.json()
+                    items = _body if isinstance(_body, list) else _body.get('items', []) if isinstance(_body, dict) else []
+                    for item in items[:20]:
+                        url = item.get('url') or item.get('jobUrl') or item.get('applyUrl') or item.get('externalApplyLink') or ''
+                        if not url:
+                            continue
+                        jobs.append({
+                            'title':       item.get('title', '') or item.get('positionName', ''),
+                            'company':     item.get('company') or item.get('companyName', ''),
+                            'location':    item.get('location') or item.get('jobLocation', location),
+                            'salary':      item.get('salary') or item.get('jobSalary', ''),
+                            'description': (item.get('description') or item.get('snippet') or item.get('jobDescription') or '')[:600],
+                            'url':         url,
+                            'source':      'indeed',
+                            'tags':        [],
+                            'logo':        item.get('companyLogo') or item.get('companyImage', ''),
+                        })
+                else:
+                    print(f'Apify Indeed {resp.status_code}: {resp.text[:300]}')
+            except Exception as e:
+                print(f'Apify Indeed error: {e}')
+        else:
+            print('Indeed skipped — no Apify key in user wallet')
+
+    # ── LinkedIn via Apify actor (bebity/linkedin-jobs-scraper) ─────────────
+    if 'linkedin' in sources:
+        if apify_key:
+            _linkedin_query = roles[0] if roles else query
+            try:
+                resp = _requests_lib.post(
+                    'https://api.apify.com/v2/acts/bebity~linkedin-jobs-scraper/run-sync-get-dataset-items',
+                    params={'token': apify_key, 'timeout': 60, 'memory': 512},
+                    json={
+                        'keyword':       _linkedin_query,
+                        'location':      location,
+                        'maxItems':      20,
+                        # Legacy field names:
+                        'searchQuery':   _linkedin_query,
+                        'locationQuery': location,
+                        'maxResults':    20,
+                    },
+                    timeout=90,
+                )
+                if resp.ok:
+                    _body = resp.json()
+                    items = _body if isinstance(_body, list) else _body.get('items', []) if isinstance(_body, dict) else []
+                    for item in items[:20]:
+                        url = item.get('url') or item.get('jobUrl') or item.get('link') or item.get('jobLink') or ''
+                        if not url:
+                            continue
+                        jobs.append({
+                            'title':       item.get('title', '') or item.get('position', ''),
+                            'company':     item.get('company') or item.get('companyName', ''),
+                            'location':    item.get('location') or item.get('jobLocation', location),
+                            'salary':      item.get('salary', ''),
+                            'description': (item.get('description') or item.get('snippet') or item.get('jobDescription') or '')[:600],
+                            'url':         url,
+                            'source':      'linkedin',
+                            'tags':        [],
+                            'logo':        item.get('companyLogo') or item.get('companyImage', ''),
+                        })
+                else:
+                    print(f'Apify LinkedIn {resp.status_code}: {resp.text[:300]}')
+            except Exception as e:
+                print(f'Apify LinkedIn error: {e}')
+        else:
+            print('LinkedIn skipped — no Apify key in user wallet')
+
+    now_str = datetime.datetime.utcnow().isoformat()
+
+    # ── Write to shared Firestore pool ───────────────────────────────────────
+    if db and jobs:
+        batch = db.batch()
+        result = []
+        for job in jobs:
+            key     = _hashlib_lib.md5(f"{job['source']}|{job['url']}".encode()).hexdigest()
+            ref     = db.collection('scraped_jobs').document(key)
+            payload = {**job, 'search_key': search_key, 'query': query,
+                       'scraped_at': datetime.datetime.utcnow(), 'scraped_by': uid}
+            batch.set(ref, payload, merge=True)
+            result.append({'id': key, **job, 'scraped_at': now_str})
+        batch.commit()
+    else:
+        result = [{'id': str(i), **j, 'scraped_at': now_str} for i, j in enumerate(jobs)]
+
+    return jsonify({'jobs': result, 'cached': False, 'count': len(result)})
+
+
+@api_bp.route('/smart-apply/queue', methods=['GET'])
+@require_auth
+def get_smart_apply_queue():
+    from firebase_utils import db
+    from datetime import datetime as _dt
+    uid = getattr(request, 'uid', None)
+    if not db:
+        return jsonify({'queue': [], 'applied_today': 0, 'autonomous_running': False, 'applied_jobs': []})
+
+    doc = db.collection('apply_sessions').document(uid).get()
+    if not doc.exists:
+        return jsonify({'queue': [], 'applied_today': 0, 'autonomous_running': False, 'applied_jobs': []})
+
+    data  = doc.to_dict()
+    today = _dt.utcnow().date()
+    lr    = data.get('last_reset')
+    if lr and hasattr(lr, 'date') and lr.date() < today:
+        db.collection('apply_sessions').document(uid).update(
+            {'applied_today': 0, 'last_reset': _dt.utcnow()}
+        )
+        data['applied_today'] = 0
+
+    return jsonify({
+        'queue':              data.get('queue', []),
+        'applied_today':      data.get('applied_today', 0),
+        'autonomous_running': data.get('autonomous_running', False),
+        'applied_jobs':       data.get('applied_jobs', []),
+    })
+
+
+@api_bp.route('/smart-apply/queue/add', methods=['POST'])
+@require_auth
+def add_to_apply_queue():
+    from firebase_utils import db
+    uid = getattr(request, 'uid', None)
+    job = (request.get_json() or {}).get('job')
+    if not job:
+        return jsonify({'error': 'Job data required'}), 400
+    if db:
+        db.collection('apply_sessions').document(uid).set(
+            {'queue': firestore.ArrayUnion([job])}, merge=True
+        )
+    return jsonify({'success': True})
+
+
+@api_bp.route('/smart-apply/queue/remove', methods=['POST'])
+@require_auth
+def remove_from_apply_queue():
+    from firebase_utils import db
+    uid    = getattr(request, 'uid', None)
+    job_id = (request.get_json() or {}).get('job_id')
+    if db:
+        snap = db.collection('apply_sessions').document(uid).get()
+        if snap.exists:
+            queue = [j for j in snap.to_dict().get('queue', []) if j.get('id') != job_id]
+            db.collection('apply_sessions').document(uid).update({'queue': queue})
+    return jsonify({'success': True})
+
+
+@api_bp.route('/smart-apply/apply-supervised', methods=['POST'])
+@require_auth
+def apply_supervised():
+    from firebase_utils import db
+    from datetime import datetime as _dt
+    uid       = getattr(request, 'uid', None)
+    body      = request.get_json() or {}
+    job_id    = body.get('job_id')
+    job_data  = body.get('job_data', {})
+    cover_ltr = body.get('cover_letter', '')
+    if not job_id:
+        return jsonify({'error': 'job_id required'}), 400
+    if db:
+        snap     = db.collection('apply_sessions').document(uid).get()
+        existing = snap.to_dict() if snap.exists else {}
+        queue    = [j for j in existing.get('queue', []) if j.get('id') != job_id]
+        db.collection('apply_sessions').document(uid).set({
+            'queue':        queue,
+            'applied_today': firestore.Increment(1),
+            'last_reset':   _dt.utcnow(),
+            'applied_jobs': firestore.ArrayUnion([{
+                'job_id': job_id, 'job_data': job_data,
+                'cover_letter': cover_ltr,
+                'applied_at': _dt.utcnow().isoformat(),
+                'status': 'applied', 'mode': 'supervised',
+            }]),
+        }, merge=True)
+        db.collection('applications').add({
+            'candidateId': uid,
+            'jobId':       job_id,
+            'jobTitle':    job_data.get('title', ''),
+            'company':     job_data.get('company', ''),
+            'coverLetter': cover_ltr,
+            'source':      'smart_apply',
+            'appliedAt':   _dt.utcnow(),
+            'status':      'applied',
+        })
+    return jsonify({'success': True})
+
+
+@api_bp.route('/smart-apply/status', methods=['GET'])
+@require_auth
+def smart_apply_status():
+    from firebase_utils import db
+    uid = getattr(request, 'uid', None)
+    if not db:
+        return jsonify({'autonomous_running': False, 'applied_today': 0, 'progress': []})
+    doc = db.collection('apply_sessions').document(uid).get()
+    if not doc.exists:
+        return jsonify({'autonomous_running': False, 'applied_today': 0, 'progress': []})
+    d = doc.to_dict()
+    return jsonify({
+        'autonomous_running': d.get('autonomous_running', False),
+        'applied_today':      d.get('applied_today', 0),
+        'progress':           d.get('autonomous_progress', []),
+    })
+
+
+@api_bp.route('/smart-apply/autonomous/start', methods=['POST'])
+@require_auth
+def start_autonomous_apply():
+    from firebase_utils import db
+    from datetime import datetime as _dt
+    uid       = getattr(request, 'uid', None)
+    body      = request.get_json() or {}
+    daily_cap = min(int(body.get('daily_cap', 20)), 20)
+
+    if not db:
+        return jsonify({'error': 'Firebase not available'}), 503
+
+    snap = db.collection('apply_sessions').document(uid).get()
+    if not snap.exists:
+        return jsonify({'error': 'Add jobs to your queue first.'}), 400
+
+    data          = snap.to_dict()
+    queue         = data.get('queue', [])
+    applied_today = data.get('applied_today', 0)
+
+    if not queue:
+        return jsonify({'error': 'Queue is empty. Search for jobs and add them first.'}), 400
+
+    remaining = daily_cap - applied_today
+    if remaining <= 0:
+        return jsonify({'error': f'Daily cap of {daily_cap} reached. Resets at midnight UTC.'}), 429
+
+    jobs_batch = queue[:remaining]
+    db.collection('apply_sessions').document(uid).update({
+        'autonomous_running':  True,
+        'autonomous_progress': [],
+    })
+
+    # Fetch resume data + Gemini key for the worker
+    resume_data = {}
+    try:
+        r_snap = db.collection('resumes').document(uid).get()
+        if r_snap.exists:
+            resume_data = r_snap.to_dict().get('resumeData', {})
+    except Exception:
+        pass
+
+    gemini_key = os.environ.get('GEMINI_API_KEY', '')
+    # Also try user's vault Gemini key
+    try:
+        import ollama_utils as _ou2
+        from vault_utils import decrypt_key as _vdk
+        _w2 = _ou2.get_request_wallet() or []
+        _ge = next((e for e in _w2 if e.get('provider') in ('Gemini', 'Google')), None)
+        if _ge:
+            _enc2 = _ge.get('encryptedKey', '')
+            gemini_key = _vdk(_enc2) if _enc2 else _ge.get('key', gemini_key)
+    except Exception:
+        pass
+
+    def _worker(u, jobs, _db, _resume_data, _gemini_key):
+        from auto_apply import apply_to_job
+        from document_generator import generate_pdf_from_data
+        import google.generativeai as _genai
+
+        for job in jobs:
+            # Honour stop requests
+            try:
+                _chk = _db.collection('apply_sessions').document(u).get()
+                if not _chk.exists or not _chk.to_dict().get('autonomous_running'):
+                    break
+            except Exception:
+                pass
+
+            try:
+                # 1. Generate a tailored cover letter
+                cover_letter = ''
+                try:
+                    if _gemini_key:
+                        _genai.configure(api_key=_gemini_key)
+                        model = _genai.GenerativeModel('gemini-1.5-flash')
+                        _personal = _resume_data.get('personal', {})
+                        _skills   = '; '.join(
+                            s.get('skills_list', '') for s in _resume_data.get('skills', [])[:3]
+                        )
+                        _cl_prompt = (
+                            f"Write a 3-paragraph professional cover letter (under 250 words) for this application.\n"
+                            f"Job: {job.get('title')} at {job.get('company')}\n"
+                            f"Description snippet: {(job.get('description') or '')[:400]}\n"
+                            f"Candidate: {_personal.get('name','')}, skills: {_skills}\n"
+                            "Output only the body paragraphs — no 'Dear Hiring Manager' header."
+                        )
+                        cover_letter = model.generate_content(_cl_prompt).text.strip()
+                except Exception as _ce:
+                    print(f'Cover letter gen error: {_ce}')
+
+                # 2. Generate resume PDF
+                pdf_bytes = None
+                try:
+                    pdf_bytes = generate_pdf_from_data(_resume_data)
+                except Exception as _pe:
+                    print(f'PDF gen error: {_pe}')
+
+                # 3. Autonomous browser apply
+                result = apply_to_job(
+                    job_url=job.get('url', ''),
+                    resume_data=_resume_data,
+                    cover_letter=cover_letter,
+                    pdf_bytes=pdf_bytes,
+                    gemini_key=_gemini_key,
+                )
+
+                status = 'applied' if result.get('success') else 'partially_applied'
+                _db.collection('apply_sessions').document(u).update({
+                    'autonomous_progress': firestore.ArrayUnion([{
+                        'job_id':     job.get('id'),
+                        'title':      job.get('title'),
+                        'company':    job.get('company'),
+                        'status':     status,
+                        'method':     result.get('method', ''),
+                        'message':    result.get('message', '')[:300],
+                        'applied_at': _dt.utcnow().isoformat(),
+                    }]),
+                    'applied_today': firestore.Increment(1),
+                })
+                _db.collection('applications').add({
+                    'candidateId':  u,
+                    'jobId':        job.get('id'),
+                    'jobTitle':     job.get('title', ''),
+                    'company':      job.get('company', ''),
+                    'source':       'smart_apply_autonomous',
+                    'appliedAt':    _dt.utcnow(),
+                    'status':       status,
+                    'automation':   result.get('method', 'none'),
+                    'cover_letter': cover_letter[:500],
+                })
+
+            except Exception as exc:
+                print(f'Autonomous apply error ({job.get("id")}): {exc}')
+                try:
+                    _db.collection('apply_sessions').document(u).update({
+                        'autonomous_progress': firestore.ArrayUnion([{
+                            'job_id':  job.get('id'),
+                            'title':   job.get('title'),
+                            'company': job.get('company'),
+                            'status':  'failed',
+                            'message': str(exc)[:200],
+                        }]),
+                    })
+                except Exception:
+                    pass
+
+        try:
+            _db.collection('apply_sessions').document(u).update({
+                'autonomous_running': False,
+                'queue':              [],
+            })
+        except Exception:
+            pass
+
+    t = _threading_lib.Thread(target=_worker, args=(uid, jobs_batch, db, resume_data, gemini_key), daemon=True)
+    _autonomous_sessions[uid] = t
+    t.start()
+
+    return jsonify({'success': True, 'jobs_queued': len(jobs_batch)})
+
+
+@api_bp.route('/smart-apply/autonomous/stop', methods=['POST'])
+@require_auth
+def stop_autonomous_apply():
+    from firebase_utils import db
+    uid = getattr(request, 'uid', None)
+    if db:
+        db.collection('apply_sessions').document(uid).update({'autonomous_running': False})
+    _autonomous_sessions.pop(uid, None)
+    return jsonify({'success': True})

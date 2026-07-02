@@ -1,41 +1,43 @@
 import React from 'react';
 
-interface PamtenLogoProps {
+interface AppLogoProps {
   className?: string;
-  size?: number; // standard bounding size
-  mode?: 'header' | 'popup' | 'meta' | 'png';
+  size?: number;
+  mode?: string;
   width?: number;
   height?: number;
 }
 
-export default function PamtenLogo({ 
-  className = '', 
-  size, 
-  mode = 'png',
-  width,
-  height
-}: PamtenLogoProps) {
-  const src = mode === 'header' 
-    ? '/pamten_logo_header.webp' 
-    : mode === 'meta' 
-    ? '/pamten_logo_meta.webp' 
-    : mode === 'popup' 
-    ? '/pamten_logo_popup.webp'
-    : '/pamten_logo_popup_png.png';
-  
-  // Real logo aspect ratio is roughly 2:1 (e.g. 168x82 or 322x157)
-  // If width is specified, use it. If size is specified, use size for width, and size/2 for height.
-  const displayWidth = width || size || 80;
-  const displayHeight = height || (size ? size / 2 : 40);
-
+export default function AppLogo({ className = '', width = 80, height = 40 }: AppLogoProps) {
   return (
-    <img
-      src={src}
-      alt="PamTen Logo"
+    <svg
+      width={width}
+      height={height}
+      viewBox="0 0 80 40"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
       className={className}
-      width={displayWidth}
-      height={displayHeight}
-      style={{ objectFit: 'contain' }}
-    />
+      style={{ display: 'inline-block', verticalAlign: 'middle' }}
+    >
+      <rect width="80" height="40" rx="8" fill="url(#ccGrad)" />
+      <text
+        x="40"
+        y="27"
+        textAnchor="middle"
+        fill="white"
+        fontSize="15"
+        fontWeight="700"
+        fontFamily="system-ui, -apple-system, sans-serif"
+        letterSpacing="-0.5"
+      >
+        CC
+      </text>
+      <defs>
+        <linearGradient id="ccGrad" x1="0" y1="0" x2="80" y2="40" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#8B5CF6" />
+          <stop offset="100%" stopColor="#EC4899" />
+        </linearGradient>
+      </defs>
+    </svg>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import PamtenLogo from './PamtenLogo';
+import AppLogo from './PamtenLogo';
 
 interface Motive {
   id: string;
@@ -151,17 +151,17 @@ export default function PamtenMotiveAnimation() {
     window.addEventListener('resize', handleResize);
 
     class Particle {
-      x: number;
-      y: number;
-      size: number;
-      speedX: number;
-      speedY: number;
-      hue: number;
-      opacity: number;
-      decay: number;
-      angle: number;
-      radius: number;
-      speedRotate: number;
+      x!: number;
+      y!: number;
+      size!: number;
+      speedX!: number;
+      speedY!: number;
+      hue!: number;
+      opacity!: number;
+      decay!: number;
+      angle!: number;
+      radius!: number;
+      speedRotate!: number;
 
       constructor() {
         this.reset();
@@ -278,7 +278,7 @@ export default function PamtenMotiveAnimation() {
 
       {/* Header Telemetry bar */}
       <div className="w-full flex justify-between items-center z-10 border-b border-white/5 pb-2">
-        <span className="font-mono text-[9px] tracking-widest text-white/30">// PAMTEN_MOTIVE_ENGINE</span>
+        <span className="font-mono text-[9px] tracking-widest text-white/30">// CAREERCRAFT_ENGINE</span>
         <span className="font-mono text-[9px] text-white/40 tracking-wider">
           LATENCY: {ping}ms // STATE: NOMINAL
         </span>
@@ -354,7 +354,7 @@ export default function PamtenMotiveAnimation() {
               }}
             />
 
-            {/* The Real PamTen Logo */}
+            {/* Brand Logo */}
             <div 
               className="relative transition-all duration-500 scale-90"
               style={{ 
@@ -362,7 +362,7 @@ export default function PamtenMotiveAnimation() {
                 filter: `drop-shadow(0 0 8px ${activeMotive.glowColor})`
               }}
             >
-              <PamtenLogo width={75} height={37} mode="header" />
+              <AppLogo width={75} height={37} />
             </div>
           </div>
         </div>

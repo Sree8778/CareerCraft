@@ -7,14 +7,14 @@ import {
   Linkedin,
   Globe,
 } from 'lucide-react';
-import PamtenLogo from './PamtenLogo';
+import AppLogo from './PamtenLogo';
 
 export default function Footer() {
   return (
     <footer className="w-full px-4 py-10 bg-white dark:bg-zinc-900 text-gray-900 dark:text-gray-300 border-t border-gray-200 dark:border-zinc-800 transition-colors duration-300">
       <div className="max-w-6xl mx-auto text-center space-y-6">
-        <h2 className="flex items-center justify-center gap-2 text-gray-900 dark:text-white text-lg font-semibold"><PamtenLogo width={60} height={30} className="h-6 w-auto" />RecruitEdge</h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400">Stay updated with RecruitEdge</p>
+        <h2 className="flex items-center justify-center gap-2 text-gray-900 dark:text-white text-lg font-semibold"><AppLogo width={60} height={30} className="h-6 w-auto" />CareerCraft</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">Stay updated with CareerCraft</p>
 
         <form className="flex justify-center gap-2 max-w-md mx-auto">
           <input
@@ -83,7 +83,7 @@ export default function Footer() {
         </div>
 
         <p className="text-xs text-gray-600 dark:text-gray-400 mt-6">
-          &copy; {new Date().getFullYear()} RecruitEdge. All rights reserved.
+          &copy; {new Date().getFullYear()} CareerCraft. All rights reserved.
         </p>
       </div>
     </footer>

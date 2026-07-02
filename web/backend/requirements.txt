@@ -3,6 +3,7 @@ gunicorn
 Flask
 Flask-Cors
 python-dotenv
+google-genai
 google-generativeai
 python-docx
 PyMuPDF
@@ -21,3 +22,11 @@ resend
 pyotp
 qrcode[pil]
 azure-ai-inference
+cryptography
+# Browser automation (autonomous apply)
+playwright
+browser-use
+langchain-google-genai
+# Web crawling / extraction
+crawl4ai
+firecrawl-py
