@@ -3,7 +3,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { toast, Toaster } from 'sonner';
-import { FileText, Download, Eye, Sparkles, User, Briefcase, GraduationCap, Award, Upload, X, Mic, BookOpen, FolderGit2, Palette, StopCircle, UploadCloud, Copy, Trash2, Bold, Italic, List, ListOrdered, Link as LinkIcon, Unlink, FilePlus2, LayoutTemplate, Save, CheckCircle2 } from 'lucide-react';
+import { FileText, Download, Eye, Sparkles, User, Briefcase, GraduationCap, Award, Upload, X, Mic, BookOpen, FolderGit2, Palette, StopCircle, UploadCloud, Copy, Trash2, Bold, Italic, List, ListOrdered, Link as LinkIcon, Unlink, FilePlus2, LayoutTemplate, Save, CheckCircle2, Star, FolderOpen, ChevronDown, ChevronUp, Loader2, Globe, Heart, Trophy, Target, ChevronUp as ArrowUp, ChevronDown as ArrowDown, EyeOff, Languages, Mail, AlignLeft, GripVertical } from 'lucide-react';
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import LinkExtension from '@tiptap/extension-link';
@@ -14,22 +14,27 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { auth, db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { decryptApiKey } from '@/lib/crypto';
 
 
 // --- Type Definitions ---
-export interface PersonalInfo { name: string; email: string; phone: string; location: string; legalStatus: string; }
+export interface PersonalInfo { name: string; email: string; phone: string; location: string; legalStatus: string; website?: string; linkedin?: string; }
 export interface ExperienceEntry { id: string; jobTitle: string; company: string; dates: string; description: string; }
 export interface EducationEntry { id: string; degree: string; institution: string; graduationYear: string; gpa: string; achievements: string; }
 export interface SkillCategory { id: string; category: string; skills_list: string; }
 export interface CertificationEntry { id: string; name: string; issuer: string; date: string; }
 export interface PublicationEntry { id: string; title: string; authors: string; journal: string; date: string; link: string; }
 export interface ProjectEntry { id: string; title: string; date: string; description: string; }
-export interface ResumeData { personal: PersonalInfo; summary:string; experience: ExperienceEntry[]; education: EducationEntry[]; skills: SkillCategory[]; certifications: CertificationEntry[]; publications: PublicationEntry[]; projects: ProjectEntry[]; }
-type EnhancementContext = | { section: 'summary' } | { section: 'experience'; index: number } | { section: 'education'; index: number } | { section: 'projects'; index: number };
-export interface StyleOptions { fontFamily: string; fontSize: number; accentColor: string; }
-export type ResumeTemplate = 'classic' | 'modern' | 'minimal' | 'executive';
+export interface LanguageEntry { id: string; language: string; proficiency: string; }
+export interface VolunteerEntry { id: string; role: string; organization: string; dates: string; description: string; }
+export interface AwardEntry { id: string; title: string; organization: string; date: string; description: string; }
+export interface ResumeData { personal: PersonalInfo; summary: string; experience: ExperienceEntry[]; education: EducationEntry[]; skills: SkillCategory[]; certifications: CertificationEntry[]; publications: PublicationEntry[]; projects: ProjectEntry[]; languages: LanguageEntry[]; volunteer: VolunteerEntry[]; awards: AwardEntry[]; }
+type EnhancementContext = | { section: 'summary' } | { section: 'experience'; index: number } | { section: 'education'; index: number } | { section: 'projects'; index: number } | { section: 'volunteer'; index: number };
+export interface StyleOptions { fontFamily: string; fontSize: number; accentColor: string; lineSpacing: number; pageMargin: 'narrow' | 'normal' | 'wide'; }
+export type ResumeTemplate = 'classic' | 'modern' | 'minimal' | 'executive' | 'creative' | 'compact';
+
+const DEFAULT_SECTION_ORDER = ['summary','experience','education','skills','projects','certifications','publications','languages','volunteer','awards'];
 
 // --- useHistory Hook (Simplified - removed undo/redo functionality) ---
 const useHistory = (initialState: any) => {
@@ -73,6 +78,26 @@ function unescapeHtml(html: string) {
     }
     const doc = new DOMParser().parseFromString(html, 'text/html');
     return doc.documentElement.textContent || html;
+}
+
+// --- Convert any resume text value to valid Tiptap HTML ---
+// Handles: already-valid HTML, entity-encoded HTML from some AI providers, plain text
+function toEditorHtml(value: string): string {
+    const empty = '<p></p>';
+    if (!value) return empty;
+    const v = value.trim();
+    if (!v) return empty;
+    // Already proper HTML (starts with a tag)
+    if (v.startsWith('<') && v.includes('>')) return v;
+    // Entity-encoded HTML (e.g. &lt;ul&gt; from some AI responses)
+    if (typeof document !== 'undefined' && (v.includes('&lt;') || v.includes('&gt;'))) {
+        const d = new DOMParser().parseFromString(v, 'text/html');
+        const decoded = d.body?.innerHTML ?? v;
+        if (decoded.trim().startsWith('<')) return decoded.trim();
+        return decoded.trim() ? `<p>${decoded.trim()}</p>` : empty;
+    }
+    // Plain text — wrap in paragraph so Tiptap renders it correctly
+    return `<p>${v.replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`;
 }
 
 // --- Tiptap Editor Wrapper Component ---
@@ -199,8 +224,10 @@ const PersonalForm = ({ data, onChange, onPicChange, onPicRemove, picPreview }: 
             <div><Label>Email</Label><Input type="email" value={data.email || ''} onChange={e => onChange('email', e.target.value)} /></div>
             <div><Label>Phone</Label><Input value={data.phone || ''} onChange={e => onChange('phone', e.target.value)} /></div>
             <div><Label>Location</Label><Input value={data.location || ''} onChange={e => onChange('location', e.target.value)} /></div>
+            <div><Label>LinkedIn URL (optional)</Label><Input value={data.linkedin || ''} placeholder="linkedin.com/in/username" onChange={e => onChange('linkedin', e.target.value)} /></div>
+            <div><Label>Website / Portfolio (optional)</Label><Input value={data.website || ''} placeholder="yoursite.com" onChange={e => onChange('website', e.target.value)} /></div>
         </div>
-        <div><Label>Legal Status</Label><Select value={data.legalStatus || 'Prefer not to say'} onChange={e => onChange('legalStatus', e.target.value)}><option>Prefer not to say</option><option>U.S. Citizen</option></Select></div>
+        <div><Label>Legal Status</Label><Select value={data.legalStatus || 'Prefer not to say'} onChange={e => onChange('legalStatus', e.target.value)}><option>Prefer not to say</option><option>U.S. Citizen</option><option>Permanent Resident</option><option>Work Visa (H-1B)</option><option>OPT / CPT</option><option>EU Citizen</option></Select></div>
         <div>
             <Label>Profile Picture</Label>
             <div className="flex items-center gap-4">
@@ -484,6 +511,250 @@ const DynamicSection = ({ sectionKey, data, onChange, onAdd, onRemove, onEnhance
 );
 
 
+// ─── Languages Form ────────────────────────────────────────────────────────
+const PROFICIENCY_LEVELS = ['Native', 'Fluent', 'Advanced', 'Conversational', 'Basic'];
+
+const LanguagesForm = ({ data, onChange, onAdd, onRemove }: any) => (
+    <div className="space-y-3">
+        {(data || []).map((item: LanguageEntry, index: number) => (
+            <div key={item.id} className="flex items-center gap-3 p-3 border border-white/20 rounded-lg">
+                <div className="flex-1 grid grid-cols-2 gap-3">
+                    <div>
+                        <Label>Language</Label>
+                        <Input value={item.language || ''} placeholder="e.g. Spanish" onChange={e => onChange('languages', index, 'language', e.target.value)} />
+                    </div>
+                    <div>
+                        <Label>Proficiency</Label>
+                        <Select value={item.proficiency || 'Conversational'} onChange={e => onChange('languages', index, 'proficiency', e.target.value)}>
+                            {PROFICIENCY_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
+                        </Select>
+                    </div>
+                </div>
+                <Button variant="destructive" size="sm" className="mt-5" onClick={() => onRemove('languages', item.id)}><X size={14} /></Button>
+            </div>
+        ))}
+        <Button variant="outline" onClick={() => onAdd('languages', { language: '', proficiency: 'Conversational' })}>+ Add Language</Button>
+    </div>
+);
+
+// ─── JD Match Panel ────────────────────────────────────────────────────────
+const JDMatchPanel = ({ resumeData, apiBase, getToken }: { resumeData: ResumeData; apiBase: string; getToken: () => Promise<string | null>; }) => {
+    const [jdText, setJdText] = useState('');
+    const [jobTitle, setJobTitle] = useState('');
+    const [company, setCompany] = useState('');
+    const [result, setResult] = useState<{ score: number; matchingSkills: string[]; missingKeywords: string[]; optimizationTips: string[] } | null>(null);
+    const [analyzing, setAnalyzing] = useState(false);
+    const [tailoring, setTailoring] = useState(false);
+    const [tailored, setTailored] = useState(false);
+    const { toast } = { toast: (v: any) => {} }; // toast is called via sonner below
+
+    const analyze = async () => {
+        if (!jdText.trim()) { import('sonner').then(m => m.toast.warning('Paste a job description first')); return; }
+        setAnalyzing(true);
+        setResult(null);
+        try {
+            const token = await getToken();
+            const res = await fetch(`${apiBase}/grade-resume`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ resumeData, jobDetails: { title: jobTitle, description: jdText, company } }),
+            });
+            if (res.status === 402) { import('sonner').then(m => m.toast.warning('Add API keys in Settings to use JD analysis')); return; }
+            const data = await res.json();
+            setResult(data);
+        } catch { import('sonner').then(m => m.toast.error('Analysis failed. Try again.')); }
+        finally { setAnalyzing(false); }
+    };
+
+    const autoTailor = async () => {
+        if (!result) return;
+        setTailoring(true);
+        try {
+            const token = await getToken();
+            const res = await fetch(`${apiBase}/resume/tailor-to-jd`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ resumeData, jobDescription: jdText, missingKeywords: result.missingKeywords }),
+            });
+            if (res.ok) {
+                setTailored(true);
+                import('sonner').then(m => m.toast.success('Resume auto-tailored! Re-run analysis to check new score.'));
+            } else { import('sonner').then(m => m.toast.error('Tailoring failed. Try again.')); }
+        } catch { import('sonner').then(m => m.toast.error('Tailoring failed.')); }
+        finally { setTailoring(false); }
+    };
+
+    const scoreColor = result ? (result.score >= 80 ? '#34d399' : result.score >= 55 ? '#818cf8' : '#f87171') : '#818cf8';
+
+    return (
+        <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+                <div><Label>Job Title</Label><Input placeholder="e.g. Senior Engineer" value={jobTitle} onChange={e => setJobTitle(e.target.value)} /></div>
+                <div><Label>Company</Label><Input placeholder="e.g. Stripe" value={company} onChange={e => setCompany(e.target.value)} /></div>
+            </div>
+            <div>
+                <Label>Paste Job Description</Label>
+                <textarea
+                    value={jdText}
+                    onChange={e => setJdText(e.target.value)}
+                    rows={8}
+                    placeholder="Paste the full job description here…"
+                    className="flex min-h-[160px] w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder-gray-400"
+                />
+            </div>
+            <Button onClick={analyze} disabled={analyzing} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white">
+                {analyzing ? <><Loader2 size={14} className="mr-2 animate-spin" />Analyzing…</> : <><Target size={14} className="mr-2" />Analyze Match</>}
+            </Button>
+
+            {result && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                    {/* Score circle */}
+                    <div className="flex items-center gap-5 p-4 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
+                        <div className="relative w-20 h-20 shrink-0">
+                            <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                                <circle cx="40" cy="40" r="34" strokeWidth="7" fill="transparent" className="stroke-slate-700/80" />
+                                <circle cx="40" cy="40" r="34" strokeWidth="7" fill="transparent" strokeDasharray={2 * Math.PI * 34}
+                                    strokeDashoffset={2 * Math.PI * 34 * (1 - result.score / 100)}
+                                    strokeLinecap="round" style={{ stroke: scoreColor, transition: 'stroke-dashoffset 1s ease' }} />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <span className="text-2xl font-black text-white leading-none">{result.score}</span>
+                                <span className="text-[9px] text-zinc-400">/ 100</span>
+                            </div>
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-white font-bold text-base">
+                                {result.score >= 80 ? 'Great match!' : result.score >= 55 ? 'Decent match' : 'Needs work'}
+                            </p>
+                            <p className="text-zinc-400 text-xs mt-1">
+                                {result.score >= 80 ? 'Your resume aligns well with this role.' : `Add ${100 - result.score} pts to reach 100 — tailor below.`}
+                            </p>
+                            {result.missingKeywords.length > 0 && (
+                                <Button onClick={autoTailor} disabled={tailoring || tailored} size="sm"
+                                    className="mt-3 bg-violet-600 hover:bg-violet-700 text-white text-xs">
+                                    {tailoring ? <><Loader2 size={12} className="mr-1.5 animate-spin" />Tailoring…</>
+                                        : tailored ? <><CheckCircle2 size={12} className="mr-1.5" />Tailored!</>
+                                        : <><Sparkles size={12} className="mr-1.5" />Auto-tailor with AI</>}
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Keywords present */}
+                    {result.matchingSkills.length > 0 && (
+                        <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 mb-2">Keywords matched ({result.matchingSkills.length})</p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {result.matchingSkills.map((k, i) => (
+                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+                                        <CheckCircle2 size={9} />{k}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Missing keywords */}
+                    {result.missingKeywords.length > 0 && (
+                        <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-rose-400 mb-2">Missing keywords ({result.missingKeywords.length})</p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {result.missingKeywords.map((k, i) => (
+                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/15 border border-rose-500/30 text-rose-300">
+                                        <X size={9} />{k}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Tips */}
+                    {result.optimizationTips.length > 0 && (
+                        <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-2">Optimization tips</p>
+                            <ul className="space-y-1.5">
+                                {result.optimizationTips.map((tip, i) => (
+                                    <li key={i} className="flex items-start gap-2 text-xs text-zinc-300">
+                                        <span className="text-indigo-400 shrink-0 mt-0.5">›</span>{tip}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ─── Cover Letter Form ─────────────────────────────────────────────────────
+const CoverLetterForm = ({ resumeData, apiBase, getToken }: { resumeData: ResumeData; apiBase: string; getToken: () => Promise<string | null>; }) => {
+    const [company, setCompany] = useState('');
+    const [role, setRole] = useState('');
+    const [hiringManager, setHiringManager] = useState('');
+    const [notes, setNotes] = useState('');
+    const [content, setContent] = useState('');
+    const [generating, setGenerating] = useState(false);
+
+    const generate = async () => {
+        setGenerating(true);
+        try {
+            const token = await getToken();
+            const res = await fetch(`${apiBase}/generate-cover-letter`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ resumeData, jobDetails: { title: role, company, hiringManager, notes } }),
+            });
+            if (res.status === 402) { import('sonner').then(m => m.toast.warning('Add API keys in Settings to generate cover letters')); return; }
+            const data = await res.json();
+            setContent(data.coverLetter || '');
+            import('sonner').then(m => m.toast.success('Cover letter generated!'));
+        } catch { import('sonner').then(m => m.toast.error('Failed to generate. Try again.')); }
+        finally { setGenerating(false); }
+    };
+
+    const copyText = () => { navigator.clipboard.writeText(content); import('sonner').then(m => m.toast.success('Copied!')); };
+
+    const downloadTxt = () => {
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url;
+        a.download = `${resumeData.personal.name || 'Cover'}_Letter.txt`;
+        a.click(); URL.revokeObjectURL(url);
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+                <div><Label>Company</Label><Input placeholder="e.g. Stripe" value={company} onChange={e => setCompany(e.target.value)} /></div>
+                <div><Label>Role / Job Title</Label><Input placeholder="e.g. Senior Engineer" value={role} onChange={e => setRole(e.target.value)} /></div>
+                <div><Label>Hiring Manager (optional)</Label><Input placeholder="e.g. Jane Smith" value={hiringManager} onChange={e => setHiringManager(e.target.value)} /></div>
+                <div><Label>Notes for AI (optional)</Label><Input placeholder="e.g. Emphasize leadership" value={notes} onChange={e => setNotes(e.target.value)} /></div>
+            </div>
+            <Button onClick={generate} disabled={generating || !role.trim()} className="w-full bg-pink-600 hover:bg-pink-700 text-white">
+                {generating ? <><Loader2 size={14} className="mr-2 animate-spin" />Generating…</> : <><Mail size={14} className="mr-2" />Generate Cover Letter</>}
+            </Button>
+            {content && (
+                <div className="space-y-3 animate-in fade-in">
+                    <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-zinc-400">Edit your cover letter below:</p>
+                        <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={copyText}><Copy size={12} className="mr-1.5" />Copy</Button>
+                            <Button size="sm" variant="outline" onClick={downloadTxt}><Download size={12} className="mr-1.5" />Download</Button>
+                        </div>
+                    </div>
+                    <textarea
+                        value={content}
+                        onChange={e => setContent(e.target.value)}
+                        rows={18}
+                        className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 resize-y leading-relaxed"
+                    />
+                </div>
+            )}
+        </div>
+    );
+};
+
 // ─── 3-D Interactive Empty State ──────────────────────────────────────────
 const EmptyPreview3D = () => {
     const [tilt, setTilt] = useState({ x: 0, y: 0 });
@@ -679,25 +950,83 @@ const EmptyPreview3D = () => {
     );
 };
 
+const COLOR_THEMES = [
+    { name: 'Slate',    color: '#34495e' },
+    { name: 'Violet',   color: '#7c3aed' },
+    { name: 'Navy',     color: '#1e40af' },
+    { name: 'Forest',   color: '#166534' },
+    { name: 'Crimson',  color: '#be123c' },
+    { name: 'Midnight', color: '#111827' },
+    { name: 'Amber',    color: '#b45309' },
+    { name: 'Teal',     color: '#0f766e' },
+];
+
 const DesignForm = ({ options, onChange }: { options: StyleOptions, onChange: (field: keyof StyleOptions, value: any) => void }) => {
-    const fontFamilies = ['Calibri, sans-serif', 'Georgia, serif', 'Helvetica, sans-serif', 'Verdana, sans-serif', 'Garamond, serif'];
+    const fontFamilies = ['Calibri, sans-serif', 'Georgia, serif', 'Helvetica, sans-serif', 'Verdana, sans-serif', 'Garamond, serif', 'Times New Roman, serif'];
     return (
-        <div className="space-y-4">
+        <div className="space-y-5">
+            {/* Color themes */}
+            <div>
+                <Label>Color Theme</Label>
+                <div className="grid grid-cols-4 gap-2 mt-2">
+                    {COLOR_THEMES.map(t => (
+                        <button
+                            key={t.color}
+                            type="button"
+                            onClick={() => onChange('accentColor', t.color)}
+                            className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border-2 transition-all ${options.accentColor === t.color ? 'border-white/60 bg-white/10' : 'border-white/10 hover:border-white/30'}`}
+                        >
+                            <div className="w-8 h-8 rounded-full border border-white/20 shadow" style={{ background: t.color }} />
+                            <span className="text-[10px] text-zinc-400">{t.name}</span>
+                        </button>
+                    ))}
+                </div>
+                <div className="flex items-center gap-2 mt-3">
+                    <Input id="accent-color" type="color" value={options.accentColor} onChange={e => onChange('accentColor', e.target.value)} className="p-1 h-8 w-12" />
+                    <Input type="text" value={options.accentColor} onChange={e => onChange('accentColor', e.target.value)} className="flex-1 text-xs" placeholder="Custom hex" />
+                </div>
+            </div>
+
+            {/* Font */}
             <div>
                 <Label htmlFor="font-family">Font Family</Label>
                 <Select id="font-family" value={options.fontFamily} onChange={e => onChange('fontFamily', e.target.value)}>
                     {fontFamilies.map(font => <option key={font} value={font}>{font.split(',')[0]}</option>)}
                 </Select>
             </div>
-             <div>
-                <Label htmlFor="font-size">Font Size (pt)</Label>
-                <Input id="font-size" type="number" value={options.fontSize} onChange={e => onChange('fontSize', parseInt(e.target.value, 10))} />
+
+            {/* Font size */}
+            <div>
+                <Label htmlFor="font-size">Font Size: {options.fontSize}pt</Label>
+                <input type="range" min={9} max={13} step={0.5} value={options.fontSize}
+                    onChange={e => onChange('fontSize', parseFloat(e.target.value))}
+                    className="w-full mt-1 accent-indigo-500" />
+                <div className="flex justify-between text-[10px] text-zinc-500 mt-0.5"><span>9pt</span><span>13pt</span></div>
             </div>
-             <div>
-                <Label htmlFor="accent-color">Accent Color</Label>
-                <div className="flex items-center gap-2">
-                    <Input id="accent-color" type="color" value={options.accentColor} onChange={e => onChange('accentColor', e.target.value)} className="p-1 h-10 w-14" />
-                    <Input type="text" value={options.accentColor} onChange={e => onChange('accentColor', e.target.value)} className="flex-1"/>
+
+            {/* Line spacing */}
+            <div>
+                <Label>Line Spacing</Label>
+                <div className="grid grid-cols-4 gap-2 mt-2">
+                    {([1.0, 1.15, 1.5, 2.0] as const).map(s => (
+                        <button key={s} type="button"
+                            onClick={() => onChange('lineSpacing', s)}
+                            className={`py-2 rounded-lg border text-xs font-medium transition-all ${options.lineSpacing === s ? 'border-indigo-500 bg-indigo-500/20 text-indigo-300' : 'border-white/10 text-zinc-400 hover:border-white/30'}`}
+                        >{s}×</button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Page margin */}
+            <div>
+                <Label>Page Margins</Label>
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                    {(['narrow', 'normal', 'wide'] as const).map(m => (
+                        <button key={m} type="button"
+                            onClick={() => onChange('pageMargin', m)}
+                            className={`py-2 rounded-lg border text-xs font-medium capitalize transition-all ${options.pageMargin === m ? 'border-indigo-500 bg-indigo-500/20 text-indigo-300' : 'border-white/10 text-zinc-400 hover:border-white/30'}`}
+                        >{m}</button>
+                    ))}
                 </div>
             </div>
         </div>
@@ -781,6 +1110,53 @@ const TEMPLATES: { id: ResumeTemplate; name: string; desc: string; thumb: React.
         ),
     },
     {
+        id: 'creative',
+        name: 'Creative',
+        desc: 'Full-bleed colored header with clean body layout',
+        thumb: (
+            <svg viewBox="0 0 80 100" className="w-full h-full">
+                <rect width="80" height="100" fill="#fff" />
+                <rect width="80" height="28" fill="#7c3aed" />
+                <rect x="8" y="7" width="36" height="5" rx="1" fill="#fff" />
+                <rect x="8" y="15" width="24" height="3" rx="1" fill="#e9d5ff" />
+                <rect x="8" y="34" width="20" height="3" rx="1" fill="#7c3aed" />
+                <rect x="8" y="40" width="64" height="2" rx="1" fill="#e2e8f0" />
+                <rect x="8" y="44" width="48" height="2" rx="1" fill="#e2e8f0" />
+                <rect x="8" y="52" width="20" height="3" rx="1" fill="#7c3aed" />
+                <rect x="8" y="58" width="64" height="2" rx="1" fill="#e2e8f0" />
+                <rect x="8" y="62" width="40" height="2" rx="1" fill="#e2e8f0" />
+                <rect x="8" y="70" width="20" height="3" rx="1" fill="#7c3aed" />
+                <rect x="8" y="76" width="64" height="2" rx="1" fill="#e2e8f0" />
+            </svg>
+        ),
+    },
+    {
+        id: 'compact',
+        name: 'Compact',
+        desc: 'Dense two-column layout for experienced professionals',
+        thumb: (
+            <svg viewBox="0 0 80 100" className="w-full h-full">
+                <rect width="80" height="100" fill="#fff" />
+                <rect x="8" y="8" width="44" height="5" rx="1" fill="#1e293b" />
+                <rect x="8" y="15" width="64" height="1" rx="1" fill="#6366f1" />
+                <rect x="8" y="19" width="55" height="2" rx="1" fill="#cbd5e1" />
+                <rect x="8" y="26" width="29" height="36" rx="1" fill="#f8fafc" />
+                <rect x="10" y="28" width="14" height="2" rx="1" fill="#6366f1" />
+                <rect x="10" y="32" width="25" height="1.5" rx="1" fill="#e2e8f0" />
+                <rect x="10" y="35" width="22" height="1.5" rx="1" fill="#e2e8f0" />
+                <rect x="10" y="40" width="14" height="2" rx="1" fill="#6366f1" />
+                <rect x="10" y="44" width="25" height="1.5" rx="1" fill="#e2e8f0" />
+                <rect x="10" y="47" width="20" height="1.5" rx="1" fill="#e2e8f0" />
+                <rect x="42" y="26" width="30" height="2" rx="1" fill="#6366f1" />
+                <rect x="42" y="30" width="30" height="1.5" rx="1" fill="#e2e8f0" />
+                <rect x="42" y="33" width="24" height="1.5" rx="1" fill="#e2e8f0" />
+                <rect x="42" y="38" width="30" height="2" rx="1" fill="#6366f1" />
+                <rect x="42" y="42" width="30" height="1.5" rx="1" fill="#e2e8f0" />
+                <rect x="42" y="45" width="22" height="1.5" rx="1" fill="#e2e8f0" />
+            </svg>
+        ),
+    },
+    {
         id: 'executive',
         name: 'Executive',
         desc: 'Bold professional layout with strong accent lines',
@@ -809,7 +1185,7 @@ const TEMPLATES: { id: ResumeTemplate; name: string; desc: string; thumb: React.
 const TemplatePickerForm = ({ selected, onSelect }: { selected: ResumeTemplate; onSelect: (t: ResumeTemplate) => void }) => (
     <div className="space-y-3">
         <p className="text-sm text-zinc-400">Choose a layout for your resume. The preview updates instantly.</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
             {TEMPLATES.map(t => (
                 <button
                     key={t.id}
@@ -903,14 +1279,17 @@ const PitchModal = ({ isOpen, onClose, pitchText, setPitchText, startRecording, 
 export default function ResumeBuilder() {
     const [activeSection, setActiveSection] = useState<string>('personal');
     const [resumeData, setResumeDataState] = useState<ResumeData>({
-        personal: { name: '', email: '', phone: '', location: '', legalStatus: 'Prefer not to say' },
+        personal: { name: '', email: '', phone: '', location: '', legalStatus: 'Prefer not to say', website: '', linkedin: '' },
         summary: '<p></p>',
         experience: [{ id: crypto.randomUUID(), jobTitle: '', company: '', dates: '', description: '<p></p>' }],
         education: [{ id: crypto.randomUUID(), degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }],
         skills: [{ id: crypto.randomUUID(), category: '', skills_list: '' }],
         certifications: [{ id: crypto.randomUUID(), name: '', issuer: '', date: '' }],
         publications: [{ id: crypto.randomUUID(), title: '', authors: '', journal: '', date: '', link: '' }],
-        projects: [{ id: crypto.randomUUID(), title: '', date: '', description: '<p></p>' }]
+        projects: [{ id: crypto.randomUUID(), title: '', date: '', description: '<p></p>' }],
+        languages: [],
+        volunteer: [],
+        awards: [],
     });
 
     const setResumeData = (action: any) => {
@@ -923,7 +1302,7 @@ export default function ResumeBuilder() {
 
     const [loading, setLoading] = useState<boolean>(false);
     const [profilePic, setProfilePic] = useState<{ preview: string; file: File | null }>({ preview: '', file: null });
-    const [showPamtenLogo, setShowPamtenLogo] = useState<boolean>(false);
+
     const [showEnhancementModal, setShowEnhancementModal] = useState<boolean>(false);
     const [enhancementVersions, setEnhancementVersions] = useState<string[]>([]);
     const [selectedEnhancement, setSelectedEnhancement] = useState<string>('');
@@ -931,16 +1310,31 @@ export default function ResumeBuilder() {
     const [enhancementContext, setEnhancementContext] = useState<EnhancementContext | null>(null);
     const [showPitchModal, setShowPitchModal] = useState<boolean>(false);
     const [pitchText, setPitchText] = useState('');
-    const [styleOptions, setStyleOptions] = useState<StyleOptions>({ fontFamily: 'Calibri, sans-serif', fontSize: 11, accentColor: '#34495e' });
+    const [styleOptions, setStyleOptions] = useState<StyleOptions>({ fontFamily: 'Calibri, sans-serif', fontSize: 11, accentColor: '#34495e', lineSpacing: 1.15, pageMargin: 'normal' });
     const [selectedTemplate, setSelectedTemplate] = useState<ResumeTemplate>('classic');
+    const [hiddenSections, setHiddenSections] = useState<Set<string>>(new Set());
+    const [sectionOrder, setSectionOrder] = useState<string[]>([...DEFAULT_SECTION_ORDER]);
     const [uploadedFileName, setUploadedFileName] = useState<string>('');
     const [summarySuggestions, setSummarySuggestions] = useState<string[]>([]);
     const [suggestionsLoading, setSuggestionsLoading] = useState(false);
     const [newBatchFrom, setNewBatchFrom] = useState(0); // index where the latest generated batch starts
+    const [resumeAnalysis, setResumeAnalysis] = useState<any | null>(null);
+    const [showAnalysis, setShowAnalysis] = useState(false);
     const [panelWidth, setPanelWidth] = useState(50);
     const isResizing = useRef(false);
     const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
-    const { user } = useAuth();
+    const { user, getToken } = useAuth();
+
+    // ── Saved resume versions ──────────────────────────────────────────────────
+    const [savedVersions, setSavedVersions] = useState<{ id: string; name: string; savedAt: string; resumeData: any }[]>([]);
+    const [showVersionPanel, setShowVersionPanel] = useState(false);
+    const [versionNameInput, setVersionNameInput] = useState('');
+    const [savingVersion, setSavingVersion] = useState(false);
+
+    // ── Resume file upload ─────────────────────────────────────────────────────
+    const [uploadedFiles, setUploadedFiles] = useState<{ name: string; url: string; uploadedAt: string }[]>([]);
+    const [uploadingFile, setUploadingFile] = useState(false);
+    const fileUploadRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const loadSavedResume = async () => {
@@ -949,11 +1343,13 @@ export default function ResumeBuilder() {
                     const docRef = doc(db, 'resumes', user.id);
                     const docSnap = await getDoc(docRef);
                     if (docSnap.exists()) {
-                        const savedData = docSnap.data().resumeData;
-                        if (savedData) {
-                            setResumeDataState(normalizeResumeData(savedData));
+                        const d = docSnap.data();
+                        if (d.resumeData) {
+                            setResumeDataState(normalizeResumeData(d.resumeData));
                             toast.success("Loaded your saved resume from cloud!");
                         }
+                        setSavedVersions(d.savedVersions ?? []);
+                        setUploadedFiles(d.uploadedFiles ?? []);
                     }
                     
                     // Load profile picture from Firestore if exists
@@ -992,7 +1388,7 @@ export default function ResumeBuilder() {
                 userId: user.id,
                 resumeData,
                 updatedAt: new Date().toISOString(),
-            });
+            }, { merge: true });  // merge keeps savedVersions and other fields intact
 
             toast.success("Resume saved to Cloud Firestore successfully!", { id: toastId });
         } catch (error: any) {
@@ -1003,19 +1399,104 @@ export default function ResumeBuilder() {
         }
     };
 
+    const handleSaveAsVersion = async () => {
+        if (!user?.id) { toast.error('Please log in first'); return; }
+        const name = versionNameInput.trim() || `Version ${new Date().toLocaleDateString()}`;
+        setSavingVersion(true);
+        try {
+            const newVersion = { id: crypto.randomUUID(), name, savedAt: new Date().toISOString(), resumeData };
+            await setDoc(doc(db, 'resumes', user.id), { savedVersions: arrayUnion(newVersion) }, { merge: true });
+            setSavedVersions(prev => [...prev, newVersion]);
+            setVersionNameInput('');
+            toast.success(`Saved as "${name}"`);
+        } catch (e: any) {
+            toast.error(`Failed to save version: ${e.message}`);
+        } finally { setSavingVersion(false); }
+    };
+
+    const handleResumeFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !user?.id) return;
+        const allowed = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'];
+        if (!allowed.includes(file.type)) { toast.error('Only PDF and DOCX files are supported'); return; }
+
+        setUploadingFile(true);
+        const toastId = toast.loading(`Uploading ${file.name}…`);
+        try {
+            // 1. Upload to Firebase Storage
+            const storageRef = ref(storage, `resumes/${user.id}/uploads/${Date.now()}_${file.name}`);
+            await uploadBytes(storageRef, file);
+            const downloadUrl = await getDownloadURL(storageRef);
+
+            // 2. Store file record in Firestore
+            const fileRecord = { name: file.name, url: downloadUrl, uploadedAt: new Date().toISOString() };
+            await setDoc(doc(db, 'resumes', user.id), { uploadedFiles: arrayUnion(fileRecord) }, { merge: true });
+            setUploadedFiles(prev => [...prev, fileRecord]);
+
+            toast.loading('Parsing resume with AI…', { id: toastId });
+
+            // 3. Parse the file via backend, then save as a named version
+            const token = await getToken();
+            const formData = new FormData();
+            formData.append('file', file);
+            const parseRes = await fetch(`${API_BASE_URL}/parse-resume`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+                body: formData,
+            });
+            if (parseRes.ok) {
+                const parsed = await parseRes.json();
+                const versionName = file.name.replace(/\.[^.]+$/, '');
+                const newVersion = { id: crypto.randomUUID(), name: versionName, savedAt: new Date().toISOString(), resumeData: parsed };
+                await setDoc(doc(db, 'resumes', user.id), { savedVersions: arrayUnion(newVersion) }, { merge: true });
+                setSavedVersions(prev => [...prev, newVersion]);
+                toast.success(`Parsed & saved as "${versionName}"`, { id: toastId });
+            } else {
+                toast.success('File uploaded to cloud storage', { id: toastId });
+            }
+        } catch (err: any) {
+            toast.error(`Upload failed: ${err.message}`, { id: toastId });
+        } finally {
+            setUploadingFile(false);
+            if (fileUploadRef.current) fileUploadRef.current.value = '';
+        }
+    };
+
+    const handleLoadVersion = (version: { id: string; name: string; savedAt: string; resumeData: any }) => {
+        setResumeDataState(normalizeResumeData(version.resumeData));
+        toast.success(`Loaded "${version.name}"`);
+        setShowVersionPanel(false);
+    };
+
+    const handleDeleteVersion = async (versionId: string) => {
+        if (!user?.id) return;
+        const toDelete = savedVersions.find(v => v.id === versionId);
+        if (!toDelete) return;
+        try {
+            await updateDoc(doc(db, 'resumes', user.id), { savedVersions: arrayRemove(toDelete) });
+            setSavedVersions(prev => prev.filter(v => v.id !== versionId));
+            toast.success('Version deleted');
+        } catch (e: any) {
+            toast.error(`Failed to delete: ${e.message}`);
+        }
+    };
+
     const handleClearResume = () => {
         setResumeDataState({
-            personal: { name: '', email: '', phone: '', location: '', legalStatus: 'Prefer not to say' },
+            personal: { name: '', email: '', phone: '', location: '', legalStatus: 'Prefer not to say', website: '', linkedin: '' },
             summary: '<p></p>',
             experience: [{ id: crypto.randomUUID(), jobTitle: '', company: '', dates: '', description: '<p></p>' }],
             education: [{ id: crypto.randomUUID(), degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }],
             skills: [{ id: crypto.randomUUID(), category: '', skills_list: '' }],
             certifications: [{ id: crypto.randomUUID(), name: '', issuer: '', date: '' }],
             publications: [{ id: crypto.randomUUID(), title: '', authors: '', journal: '', date: '', link: '' }],
-            projects: [{ id: crypto.randomUUID(), title: '', date: '', description: '<p></p>' }]
+            projects: [{ id: crypto.randomUUID(), title: '', date: '', description: '<p></p>' }],
+            languages: [], volunteer: [], awards: [],
         });
         setUploadedFileName('');
         setProfilePic({ preview: '', file: null });
+        setSectionOrder([...DEFAULT_SECTION_ORDER]);
+        setHiddenSections(new Set());
         toast.success("Cleared. Start building your new resume!");
     };
 
@@ -1027,7 +1508,7 @@ export default function ResumeBuilder() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
+                    'Authorization': `Bearer ${await getToken()}`,
                 },
                 body: JSON.stringify({ resumeData: data }),
             });
@@ -1112,6 +1593,10 @@ export default function ResumeBuilder() {
 
     const addDynamicEntry = (section: keyof ResumeData, newEntry: any) => setResumeData((prev: ResumeData) => ({ ...prev, [section]: [...(prev[section] as any[]), { ...newEntry, id: crypto.randomUUID() }] }));
     const removeDynamicEntry = (section: keyof ResumeData, id: string) => setResumeData((prev: ResumeData) => ({ ...prev, [section]: (prev[section] as any[]).filter(item => item.id !== id) }));
+
+    const moveSectionUp   = (id: string) => setSectionOrder(prev => { const i = prev.indexOf(id); if (i <= 0) return prev; const n = [...prev]; [n[i-1], n[i]] = [n[i], n[i-1]]; return n; });
+    const moveSectionDown = (id: string) => setSectionOrder(prev => { const i = prev.indexOf(id); if (i >= prev.length - 1) return prev; const n = [...prev]; [n[i], n[i+1]] = [n[i+1], n[i]]; return n; });
+    const toggleSectionVisibility = (id: string) => setHiddenSections(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
     const handleMouseDown = (e: React.MouseEvent) => { e.preventDefault(); isResizing.current = true; document.body.style.cursor = 'col-resize'; };
     const handleMouseUp = useCallback(() => { isResizing.current = false; document.body.style.cursor = 'default'; }, []);
     const handleMouseMove = useCallback((e: MouseEvent) => { if (!isResizing.current) return; const newWidth = (e.clientX / window.innerWidth) * 100; if (newWidth > 25 && newWidth < 75) { setPanelWidth(newWidth); } }, []);
@@ -1131,22 +1616,28 @@ export default function ResumeBuilder() {
         normalized.projects = Array.isArray(normalized.projects) ? normalized.projects : [];
 
 
+        normalized.languages = Array.isArray(normalized.languages) ? normalized.languages : [];
+        normalized.volunteer  = Array.isArray(normalized.volunteer)  ? normalized.volunteer  : [];
+        normalized.awards     = Array.isArray(normalized.awards)     ? normalized.awards     : [];
+
         normalized.personal = {
             name: typeof normalized.personal?.name === 'string' ? normalized.personal.name : '',
             email: typeof normalized.personal?.email === 'string' ? normalized.personal.email : '',
             phone: typeof normalized.personal?.phone === 'string' ? normalized.personal.phone : '',
             location: typeof normalized.personal?.location === 'string' ? normalized.personal.location : '',
             legalStatus: typeof normalized.personal?.legalStatus === 'string' ? normalized.personal.legalStatus : 'Prefer not to say',
+            website: typeof normalized.personal?.website === 'string' ? normalized.personal.website : '',
+            linkedin: typeof normalized.personal?.linkedin === 'string' ? normalized.personal.linkedin : '',
         };
 
-        normalized.summary = typeof normalized.summary === 'string' ? (unescapeHtml(normalized.summary) || defaultHtmlValue) : defaultHtmlValue;
+        normalized.summary = toEditorHtml(typeof normalized.summary === 'string' ? normalized.summary : '');
 
         normalized.experience = normalized.experience.map( (item: any) => ({
             id: item.id || crypto.randomUUID(),
             jobTitle: typeof item.jobTitle === 'string' ? item.jobTitle : '',
             company: typeof item.company === 'string' ? item.company : '',
             dates: typeof item.dates === 'string' ? item.dates : '',
-            description: typeof item.description === 'string' ? (unescapeHtml(item.description) || defaultHtmlValue) : defaultHtmlValue
+            description: toEditorHtml(typeof item.description === 'string' ? item.description : '')
         }));
         normalized.education = normalized.education.map( (item: any) => ({
             id: item.id || crypto.randomUUID(),
@@ -1154,7 +1645,7 @@ export default function ResumeBuilder() {
             institution: typeof item.institution === 'string' ? item.institution : '',
             graduationYear: typeof item.graduationYear === 'string' ? item.graduationYear : '',
             gpa: typeof item.gpa === 'string' ? item.gpa : '',
-            achievements: typeof item.achievements === 'string' ? (unescapeHtml(item.achievements) || defaultHtmlValue) : defaultHtmlValue
+            achievements: toEditorHtml(typeof item.achievements === 'string' ? item.achievements : '')
         }));
         normalized.skills = normalized.skills.map( (item: any) => ({
             id: item.id || crypto.randomUUID(),
@@ -1165,7 +1656,7 @@ export default function ResumeBuilder() {
             id: item.id || crypto.randomUUID(),
             title: typeof item.title === 'string' ? item.title : '',
             date: typeof item.date === 'string' ? item.date : '',
-            description: typeof item.description === 'string' ? (unescapeHtml(item.description) || defaultHtmlValue) : defaultHtmlValue,
+            description: toEditorHtml(typeof item.description === 'string' ? item.description : ''),
         }));
         normalized.publications = normalized.publications.map( (item: any) => ({
             id: item.id || crypto.randomUUID(),
@@ -1180,6 +1671,25 @@ export default function ResumeBuilder() {
             name: typeof item.name === 'string' ? item.name : '',
             issuer: typeof item.issuer === 'string' ? item.issuer : '',
             date: typeof item.date === 'string' ? item.date : '',
+        }));
+        normalized.languages = normalized.languages.map((item: any) => ({
+            id: item.id || crypto.randomUUID(),
+            language: typeof item.language === 'string' ? item.language : '',
+            proficiency: typeof item.proficiency === 'string' ? item.proficiency : 'Conversational',
+        }));
+        normalized.volunteer = normalized.volunteer.map((item: any) => ({
+            id: item.id || crypto.randomUUID(),
+            role: typeof item.role === 'string' ? item.role : '',
+            organization: typeof item.organization === 'string' ? item.organization : '',
+            dates: typeof item.dates === 'string' ? item.dates : '',
+            description: toEditorHtml(typeof item.description === 'string' ? item.description : ''),
+        }));
+        normalized.awards = normalized.awards.map((item: any) => ({
+            id: item.id || crypto.randomUUID(),
+            title: typeof item.title === 'string' ? item.title : '',
+            organization: typeof item.organization === 'string' ? item.organization : '',
+            date: typeof item.date === 'string' ? item.date : '',
+            description: toEditorHtml(typeof item.description === 'string' ? item.description : ''),
         }));
 
         return normalized;
@@ -1208,7 +1718,7 @@ export default function ResumeBuilder() {
             const response = await fetch(`${API_BASE_URL}/parse-resume`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
+                    'Authorization': `Bearer ${await getToken()}`,
                     'X-Gemini-API-Key': customKey
                 },
                 body: formData
@@ -1228,6 +1738,25 @@ export default function ResumeBuilder() {
             setResumeDataState(normalizedData);
             setUploadedFileName(file.name);
             toast.success("Resume parsed successfully!", { id: toastId });
+
+            // Run quality analysis in background
+            try {
+                const analysisRes = await fetch(`${API_BASE_URL}/resume/analyze`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${await getToken()}`,
+                    },
+                    body: JSON.stringify({ resumeData: result.parsedData }),
+                });
+                if (analysisRes.ok) {
+                    const analysisData = await analysisRes.json();
+                    setResumeAnalysis(analysisData);
+                    setShowAnalysis(true);
+                }
+            } catch {
+                // Non-critical — analysis is best-effort
+            }
 
             // Auto-suggest summaries if none found
             const tempDiv = document.createElement('div');
@@ -1269,7 +1798,7 @@ export default function ResumeBuilder() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
+                    'Authorization': `Bearer ${await getToken()}`,
                 },
                 body: JSON.stringify({ sectionName: sectionNameForApi, textToEnhance })
             });
@@ -1280,9 +1809,9 @@ export default function ResumeBuilder() {
             }
             if (!response.ok) throw new Error('Enhancement failed');
             if (Array.isArray(result.enhancedVersions) && result.enhancedVersions.length > 0) {
-                const processedVersions = result.enhancedVersions.map((v: string) => unescapeHtml(v));
+                const processedVersions = result.enhancedVersions.map((v: string) => toEditorHtml(v));
                 setEnhancementVersions([textToEnhance, ...processedVersions]);
-                setSelectedEnhancement(unescapeHtml(textToEnhance));
+                setSelectedEnhancement(textToEnhance);
                 setShowEnhancementModal(true);
                 toast.success("AI suggestions ready!");
             } else { toast.info("No new suggestions were generated."); }
@@ -1309,7 +1838,7 @@ export default function ResumeBuilder() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
+                    'Authorization': `Bearer ${await getToken()}`,
                 },
                 body: JSON.stringify({ resumeData })
             });
@@ -1391,7 +1920,7 @@ export default function ResumeBuilder() {
             const response = await fetch(`${API_BASE_URL}/${type === 'PDF' ? 'generate-pdf' : 'generate-docx'}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...resumeData, styleOptions, showPamtenLogo })
+                body: JSON.stringify({ ...resumeData, styleOptions })
             });
 
             if (!response.ok) {
@@ -1450,8 +1979,17 @@ export default function ResumeBuilder() {
         const hasPubs = (publications || []).some(e => (e.title || '').trim());
         const hasCerts = (certifications || []).some(e => (e.name || '').trim());
 
+        const hasLangs  = (resumeData.languages || []).some(e => (e.language || '').trim());
+        const hasVol    = (resumeData.volunteer  || []).some(e => (e.role || '').trim());
+        const hasAwards = (resumeData.awards     || []).some(e => (e.title || '').trim());
+
+        const marginMap = { narrow: '16px 20px', normal: '28px 32px', wide: '36px 48px' };
+        const padding = marginMap[styleOptions.pageMargin] || '28px 32px';
+
         const baseClass = "bg-white rounded-lg border border-gray-300 min-h-[600px] quill-content-container text-gray-900";
-        const baseStyle: React.CSSProperties = { fontFamily: ff, fontSize: fs, lineHeight: 1.5, color: '#1a1a1a' };
+        const baseStyle: React.CSSProperties = { fontFamily: ff, fontSize: fs, lineHeight: styleOptions.lineSpacing ?? 1.5, color: '#1a1a1a' };
+
+        const sectionVisible = (key: string) => !hiddenSections.has(key);
 
         if (selectedTemplate === 'modern') {
             return (
@@ -1477,7 +2015,6 @@ export default function ResumeBuilder() {
                     </div>
                     {/* Main */}
                     <div style={{ flex: 1, padding: '24px 20px' }}>
-                        {showPamtenLogo && <img src="https://placehold.co/120x32/white/purple?text=Pamten+Logo" alt="Pamten Logo" style={{ width: '100px', marginBottom: '8px' }} />}
                         {(summary || '').trim() && <><p style={{ fontWeight: 700, fontSize: '9pt', textTransform: 'uppercase', letterSpacing: '1px', color: ac, marginBottom: '4px' }}>Summary</p><div style={{ fontSize: '9pt', marginBottom: '14px' }} dangerouslySetInnerHTML={{ __html: summary || '' }} /></>}
                         {hasExp && <><p style={{ fontWeight: 700, fontSize: '9pt', textTransform: 'uppercase', letterSpacing: '1px', color: ac, borderBottom: `1.5px solid ${ac}`, paddingBottom: '2px', marginBottom: '8px' }}>Experience</p>{(experience || []).map(exp => <div key={exp.id} style={{ marginBottom: '10px' }}><b style={{ fontSize: '10pt' }}>{exp.jobTitle}</b><p style={{ color: '#555', fontSize: '9pt' }}>{exp.company}{exp.dates && ` | ${exp.dates}`}</p><div style={{ fontSize: '9pt' }} dangerouslySetInnerHTML={{ __html: exp.description || '' }} /></div>)}</>}
                         {hasEdu && <><p style={{ fontWeight: 700, fontSize: '9pt', textTransform: 'uppercase', letterSpacing: '1px', color: ac, borderBottom: `1.5px solid ${ac}`, paddingBottom: '2px', marginBottom: '8px', marginTop: '14px' }}>Education</p>{(education || []).map(edu => <div key={edu.id} style={{ marginBottom: '8px' }}><b style={{ fontSize: '10pt' }}>{edu.degree}</b><p style={{ color: '#555', fontSize: '9pt' }}>{edu.institution}{edu.graduationYear && ` · ${edu.graduationYear}`}{edu.gpa && ` · GPA: ${edu.gpa}`}</p></div>)}</>}
@@ -1491,7 +2028,6 @@ export default function ResumeBuilder() {
         if (selectedTemplate === 'minimal') {
             return (
                 <div id="resume-preview-content" className={baseClass} style={{ ...baseStyle, padding: '40px 48px' }}>
-                    {showPamtenLogo && <img src="https://placehold.co/120x32/white/purple?text=Pamten+Logo" alt="Pamten Logo" style={{ width: '100px', marginBottom: '12px' }} />}
                     <h2 style={{ fontSize: '28pt', fontWeight: 300, letterSpacing: '4px', textTransform: 'uppercase', color: '#0f172a', marginBottom: '4px' }}>{personal.name || 'Your Name'}</h2>
                     <p style={{ fontSize: '9pt', color: '#94a3b8', letterSpacing: '1px', marginBottom: '32px' }}>{contactDetails}</p>
                     {(summary || '').trim() && <><p style={{ fontSize: '7pt', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '2px', color: '#64748b', marginBottom: '6px' }}>Profile</p><div style={{ fontSize: '9pt', color: '#374151', marginBottom: '24px', borderLeft: '2px solid #e2e8f0', paddingLeft: '12px' }} dangerouslySetInnerHTML={{ __html: summary || '' }} /></>}
@@ -1508,7 +2044,6 @@ export default function ResumeBuilder() {
         if (selectedTemplate === 'executive') {
             return (
                 <div id="resume-preview-content" className={baseClass} style={{ ...baseStyle, padding: '36px 40px' }}>
-                    {showPamtenLogo && <img src="https://placehold.co/120x32/white/purple?text=Pamten+Logo" alt="Pamten Logo" style={{ width: '100px', marginBottom: '8px' }} />}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '4px' }}>
                         <h2 style={{ fontSize: '30pt', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>{personal.name || 'Your Name'}</h2>
                         {profilePic.preview && <img src={profilePic.preview} alt="Profile" style={{ width: '68px', height: '68px', borderRadius: '6px', objectFit: 'cover', border: `2px solid ${ac}` }} />}
@@ -1536,29 +2071,58 @@ export default function ResumeBuilder() {
             );
         }
 
+        const SH = ({ label }: { label: string }) => (
+            <h3 style={{ fontSize: '11pt', fontWeight: 700, borderBottom: `1.5px solid ${ac}`, paddingBottom: '2px', marginBottom: '8px', marginTop: '14px', color: ac, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</h3>
+        );
+
+        const sectionBlocks: Record<string, React.ReactNode> = {
+            summary: (summary || '').trim() ? <div key="summary"><SH label="Summary" /><div style={{ fontSize: fs, color: '#374151' }} dangerouslySetInnerHTML={{ __html: summary || '' }} /></div> : null,
+            experience: hasExp ? <div key="experience"><SH label="Experience" />{(experience || []).map(exp => <div key={exp.id} style={{ marginBottom: '10px' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><b style={{ fontSize: '11pt', color: '#0f172a' }}>{exp.jobTitle}</b><span style={{ fontSize: '9pt', color: '#64748b' }}>{exp.dates}</span></div><p style={{ color: ac, fontSize: '9pt', fontWeight: 600, marginBottom: '3px' }}>{exp.company}</p><div style={{ fontSize: fs, color: '#374151' }} dangerouslySetInnerHTML={{ __html: exp.description || '' }} /></div>)}</div> : null,
+            education: hasEdu ? <div key="education"><SH label="Education" />{(education || []).map(edu => <div key={edu.id} style={{ marginBottom: '8px' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><b style={{ fontSize: '11pt' }}>{edu.degree}</b><span style={{ fontSize: '9pt', color: '#64748b' }}>{edu.graduationYear}</span></div><p style={{ color: '#64748b', fontSize: '9pt' }}>{edu.institution}{edu.gpa && ` · GPA ${edu.gpa}`}</p>{edu.achievements && (edu.achievements !== '<p></p>') && <div style={{ fontSize: fs, color: '#374151', marginTop: '2px' }} dangerouslySetInnerHTML={{ __html: edu.achievements }} />}</div>)}</div> : null,
+            skills: hasSkills ? <div key="skills"><SH label="Skills" /><div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>{(skills || []).flatMap(s => (s.skills_list || '').split(',').map(sk => sk.trim()).filter(Boolean)).map((sk, i) => <span key={i} style={{ fontSize: '9pt', background: ac + '12', border: `1px solid ${ac}30`, borderRadius: '4px', padding: '2px 8px', color: '#1e293b' }}>{sk}</span>)}</div></div> : null,
+            projects: hasProj ? <div key="projects"><SH label="Projects" />{(projects || []).map((p: any) => <div key={p.id} style={{ marginBottom: '8px' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><b style={{ fontSize: '11pt' }}>{p.title}</b><span style={{ fontSize: '9pt', color: '#64748b' }}>{p.date}</span></div><div style={{ fontSize: fs, color: '#374151' }} dangerouslySetInnerHTML={{ __html: p.description || '' }} /></div>)}</div> : null,
+            certifications: hasCerts ? <div key="certifications"><SH label="Certifications" />{(certifications || []).map(c => <div key={c.id} style={{ marginBottom: '4px', fontSize: fs, color: '#374151' }}><b>{c.name}</b>{c.issuer && ` · ${c.issuer}`}{c.date && ` · ${c.date}`}</div>)}</div> : null,
+            publications: hasPubs ? <div key="publications"><SH label="Publications" />{(publications || []).map(p => <div key={p.id} style={{ marginBottom: '6px', fontSize: fs, color: '#374151' }}><b>{p.title}</b> · {p.authors} · <i>{p.journal}</i>{p.date && ` · ${p.date}`}</div>)}</div> : null,
+            languages: hasLangs ? <div key="languages"><SH label="Languages" /><div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>{(resumeData.languages || []).filter(l => l.language.trim()).map(l => <span key={l.id} style={{ fontSize: '9pt', background: ac + '12', border: `1px solid ${ac}30`, borderRadius: '4px', padding: '2px 8px', color: '#1e293b' }}>{l.language}<span style={{ color: '#64748b', marginLeft: '4px' }}>({l.proficiency})</span></span>)}</div></div> : null,
+            volunteer: hasVol ? <div key="volunteer"><SH label="Volunteer Work" />{(resumeData.volunteer || []).map((v: any) => <div key={v.id} style={{ marginBottom: '8px' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}><b style={{ fontSize: '11pt' }}>{v.role}</b><span style={{ fontSize: '9pt', color: '#64748b' }}>{v.dates}</span></div><p style={{ color: ac, fontSize: '9pt', fontWeight: 600 }}>{v.organization}</p><div style={{ fontSize: fs, color: '#374151' }} dangerouslySetInnerHTML={{ __html: v.description || '' }} /></div>)}</div> : null,
+            awards: hasAwards ? <div key="awards"><SH label="Awards &amp; Honors" />{(resumeData.awards || []).map((a: any) => <div key={a.id} style={{ marginBottom: '6px', fontSize: fs, color: '#374151' }}><b>{a.title}</b>{a.organization && ` · ${a.organization}`}{a.date && ` · ${a.date}`}{a.description && (a.description !== '<p></p>') && <div dangerouslySetInnerHTML={{ __html: a.description }} />}</div>)}</div> : null,
+        };
+
         // Default: Classic
         return (
-            <div id="resume-preview-content" className={baseClass} style={{ ...baseStyle, padding: '32px', whiteSpace: 'pre-wrap' }}>
-                {showPamtenLogo && (<div className="mb-4"><img src="https://placehold.co/120x32/white/purple?text=Pamten+Logo" alt="Pamten Logo" style={{ width: '120px' }} /></div>)}
-                <div className="text-center mb-6 pb-4 border-b border-gray-300 flex items-center justify-between text-gray-900">
+            <div id="resume-preview-content" className={baseClass} style={{ ...baseStyle, padding }}>
+                <div style={{ textAlign: 'center', marginBottom: '20px', paddingBottom: '14px', borderBottom: `2px solid ${ac}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
-                        <h2 className="text-4xl font-bold" style={{color: ac}}>{personal.name || "Your Name"}</h2>
-                        <p className="text-gray-600 mt-2">{contactDetails}</p>
+                        <h2 style={{ fontSize: '26pt', fontWeight: 800, color: ac, marginBottom: '4px' }}>{personal.name || 'Your Name'}</h2>
+                        <p style={{ color: '#64748b', fontSize: '9pt' }}>
+                            {[personal.email, personal.phone, personal.location, personal.website, personal.linkedin].filter(Boolean).join(' · ')}
+                        </p>
                     </div>
-                    {profilePic.preview && (<img src={profilePic.preview} alt="Profile" className="w-24 h-24 rounded-full object-cover border-2 border-gray-200" />)}
+                    {profilePic.preview && <img src={profilePic.preview} alt="Profile" style={{ width: '72px', height: '72px', borderRadius: '50%', objectFit: 'cover', border: `2px solid ${ac}` }} />}
                 </div>
-                {(summary || '').trim() && <div className="mb-4"><h3 className="text-lg font-semibold border-b border-gray-300 pb-1 mb-2" style={{color: ac}}>Summary</h3><div className="text-gray-700" dangerouslySetInnerHTML={{__html: summary || ''}} /></div>}
-                {hasExp && <div className="mb-4"><h3 className="text-lg font-semibold border-b border-gray-300 pb-1 mb-2" style={{color: ac}}>Experience</h3>{(experience || []).map(exp => <div key={exp.id} className="mt-2 text-gray-700"><h4><b>{exp.jobTitle || ''}</b></h4><p className="text-gray-600">{exp.company || ''} | {exp.dates || ''}</p><div dangerouslySetInnerHTML={{__html: exp.description || ''}} /></div>)}</div>}
-                {hasEdu && <div className="mb-4"><h3 className="text-lg font-semibold border-b border-gray-300 pb-1 mb-2" style={{color: ac}}>Education</h3>{(education || []).map(edu => (<div key={edu.id} className="mt-2 text-gray-700"><h4><b>{edu.degree || ''}</b>, {edu.institution || ''}</h4><p className="text-gray-600">{edu.graduationYear || ''}{edu.gpa && ` | GPA: ${edu.gpa}`}</p><div dangerouslySetInnerHTML={{__html: edu.achievements || ''}} /></div>))}</div>}
-                {hasSkills && <div className="mb-4"><h3 className="text-lg font-semibold border-b border-gray-300 pb-1 mb-2" style={{color: ac}}>Skills</h3>{(skills || []).map(skill => <div key={skill.id} className="mt-1 text-gray-700"><b>{skill.category || ''}:</b> {skill.skills_list || ''}</div>)}</div>}
-                {hasProj && <div className="mb-4"><h3 className="text-lg font-semibold border-b border-gray-300 pb-1 mb-2" style={{color: ac}}>Projects</h3>{(projects || []).map((proj: any) => <div key={proj.id} className="mt-2 text-gray-700"><h4><b>{proj.title || ''}</b>{proj.date && ` (${proj.date})`}</h4><div dangerouslySetInnerHTML={{__html: proj.description || ''}}/></div>)}</div>}
-                {hasPubs && <div className="mb-4"><h3 className="text-lg font-semibold border-b border-gray-300 pb-1 mb-2" style={{color: ac}}>Publications</h3>{(publications || []).map(pub => <div key={pub.id} className="mt-2 text-gray-700"><h4><b>{pub.title || ''}</b> ({pub.date || ''})</h4><p className="text-sm text-gray-600">{pub.authors || ''} - <i>{pub.journal || ''}</i></p></div>)}</div>}
-                {hasCerts && <div><h3 className="text-lg font-semibold border-b border-gray-300 pb-1 mb-2" style={{color: ac}}>Certifications</h3>{(certifications || []).map(cert => <div key={cert.id} className="mt-2 text-gray-700"><h4><b>{cert.name || ''}</b></h4><p className="text-gray-600">{cert.issuer || ''}{cert.date && ` | ${cert.date}`}</p></div>)}</div>}
+                {sectionOrder.filter(k => !hiddenSections.has(k)).map(k => sectionBlocks[k] || null)}
             </div>
         );
     };
     
-    const sections = [ { id: 'personal', name: 'Personal', icon: <User size={16} /> }, { id: 'summary', name: 'Summary', icon: <FileText size={16} /> }, { id: 'experience', name: 'Experience', icon: <Briefcase size={16} /> }, { id: 'education', name: 'Education', icon: <GraduationCap size={16} /> }, { id: 'skills', name: 'Skills', icon: <Award size={16} /> }, { id: 'projects', name: 'Projects', icon: <FolderGit2 size={16} />}, { id: 'publications', name: 'Publications', icon: <BookOpen size={16} />}, { id: 'certifications', name: 'Certifications', icon: <Award size={16} /> }, { id: 'templates', name: 'Templates', icon: <LayoutTemplate size={16}/> }, { id: 'design', name: 'Design', icon: <Palette size={16}/> } ];
+    const sections = [
+        { id: 'personal',       name: 'Personal',       icon: <User size={16} /> },
+        { id: 'summary',        name: 'Summary',        icon: <FileText size={16} /> },
+        { id: 'experience',     name: 'Experience',     icon: <Briefcase size={16} /> },
+        { id: 'education',      name: 'Education',      icon: <GraduationCap size={16} /> },
+        { id: 'skills',         name: 'Skills',         icon: <Award size={16} /> },
+        { id: 'projects',       name: 'Projects',       icon: <FolderGit2 size={16} /> },
+        { id: 'languages',      name: 'Languages',      icon: <Globe size={16} /> },
+        { id: 'volunteer',      name: 'Volunteer',      icon: <Heart size={16} /> },
+        { id: 'awards',         name: 'Awards',         icon: <Trophy size={16} /> },
+        { id: 'certifications', name: 'Certifications', icon: <Award size={16} /> },
+        { id: 'publications',   name: 'Publications',   icon: <BookOpen size={16} /> },
+        { id: 'jd-match',       name: 'JD Match',       icon: <Target size={16} /> },
+        { id: 'cover-letter',   name: 'Cover Letter',   icon: <Mail size={16} /> },
+        { id: 'section-order',  name: 'Order & Visibility', icon: <GripVertical size={16} /> },
+        { id: 'templates',      name: 'Templates',      icon: <LayoutTemplate size={16}/> },
+        { id: 'design',         name: 'Design',         icon: <Palette size={16}/> },
+    ];
 
     return (
         <CandidateLayout>
@@ -1570,7 +2134,6 @@ export default function ResumeBuilder() {
                 <header className="flex-shrink-0 bg-white/5 dark:bg-zinc-900/40 backdrop-blur-md border-b border-white/10 p-4">
                   <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
                       <div className="flex items-center gap-2">
-                           <img src="https://placehold.co/32x32/white/purple?text=Logo" alt="Pamten Logo" className="h-8"/>
                            <div><h1 className="text-2xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">AI Resume Builder</h1><p className="text-xs text-gray-300">Craft your professional resume with AI assistance</p></div>
                       </div>
                       <div className="flex items-center gap-4">
@@ -1607,6 +2170,117 @@ export default function ResumeBuilder() {
                                     )}
                                 </CardContent>
                             </Card>
+
+                            {/* ── ATS Readiness Panel ── */}
+                            {showAnalysis && resumeAnalysis && (
+                                <div className="rounded-2xl border border-indigo-500/30 bg-indigo-950/20 overflow-hidden">
+                                    {/* Header with large gauge */}
+                                    <div className="flex items-center justify-between px-5 py-4 border-b border-indigo-500/20 bg-indigo-950/40">
+                                        <div className="flex items-center gap-4">
+                                            <div className="relative w-20 h-20 shrink-0">
+                                                <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                                                    <circle cx="40" cy="40" r="34" strokeWidth="7" fill="transparent" className="stroke-slate-700/80" />
+                                                    <circle cx="40" cy="40" r="34" strokeWidth="7" fill="transparent"
+                                                        strokeDasharray={2 * Math.PI * 34}
+                                                        strokeDashoffset={2 * Math.PI * 34 * (1 - (resumeAnalysis.overallScore || 0) / 100)}
+                                                        strokeLinecap="round"
+                                                        className={resumeAnalysis.overallScore >= 80 ? 'stroke-emerald-400' : resumeAnalysis.overallScore >= 55 ? 'stroke-indigo-400' : 'stroke-rose-500'}
+                                                    />
+                                                </svg>
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                    <span className={`text-2xl font-black leading-none ${resumeAnalysis.overallScore >= 80 ? 'text-emerald-400' : resumeAnalysis.overallScore >= 55 ? 'text-indigo-400' : 'text-rose-400'}`}>
+                                                        {resumeAnalysis.overallScore}
+                                                    </span>
+                                                    <span className="text-[9px] text-zinc-400 mt-0.5">/ 100</span>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p className="text-base font-bold text-white">ATS Readiness</p>
+                                                <p className="text-[11px] text-zinc-400 mt-0.5">
+                                                    {resumeAnalysis.overallScore >= 90 ? 'Excellent — ready to apply!' :
+                                                     resumeAnalysis.overallScore >= 70 ? 'Good — minor tweaks needed' :
+                                                     resumeAnalysis.overallScore >= 50 ? 'Fair — follow the fixes below' :
+                                                     'Needs work — complete the sections below'}
+                                                </p>
+                                                {resumeAnalysis.overallScore < 100 && (
+                                                    <p className="text-[10px] text-indigo-300 mt-1 font-medium">
+                                                        +{100 - resumeAnalysis.overallScore} pts to reach 100
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <button type="button" onClick={() => setShowAnalysis(false)} className="text-zinc-500 hover:text-zinc-300 p-1 self-start"><X size={16} /></button>
+                                    </div>
+
+                                    <div className="p-4 space-y-3">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">Path to 100%</p>
+
+                                        {([
+                                            { key: 'contact',    editorKey: 'personal',   weight: 15 },
+                                            { key: 'summary',    editorKey: 'summary',    weight: 15 },
+                                            { key: 'experience', editorKey: 'experience', weight: 30 },
+                                            { key: 'education',  editorKey: 'education',  weight: 15 },
+                                            { key: 'skills',     editorKey: 'skills',     weight: 20 },
+                                            { key: 'projects',   editorKey: 'projects',   weight:  5 },
+                                        ] as { key: string; editorKey: string; weight: number }[]).map(({ key, editorKey, weight }) => {
+                                            const sec: any = (resumeAnalysis.sections || {})[key] || {};
+                                            const score: number = sec.score ?? 0;
+                                            const ptsAtStake = Math.round(weight * (100 - score) / 100);
+                                            const done = score >= 100;
+                                            return (
+                                                <div key={key} className={`rounded-xl p-3 ${done ? 'bg-emerald-950/30 border border-emerald-500/20' : 'bg-white/[0.04] border border-white/[0.07]'}`}>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${done ? 'bg-emerald-500/20 text-emerald-300' : ptsAtStake >= 10 ? 'bg-rose-500/20 text-rose-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                                                                {done ? '✓' : `+${ptsAtStake} pts`}
+                                                            </span>
+                                                            <span className="text-xs font-semibold text-white">{sec.label || key}</span>
+                                                        </div>
+                                                        {!done && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setActiveSection(editorKey)}
+                                                                className="text-[10px] font-bold text-indigo-300 hover:text-indigo-100 border border-indigo-500/40 hover:border-indigo-400 rounded px-2 py-0.5 transition-colors shrink-0"
+                                                            >
+                                                                Fix →
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                                        <div className="h-full rounded-full transition-all duration-700"
+                                                            style={{ width: `${score}%`, background: score >= 80 ? '#34d399' : score >= 50 ? '#818cf8' : '#f87171' }}
+                                                        />
+                                                    </div>
+                                                    <div className="flex justify-between mt-1">
+                                                        <span className="text-[9px] text-zinc-500">{weight}% of score</span>
+                                                        <span className={`text-[9px] font-bold ${score >= 80 ? 'text-emerald-400' : score >= 50 ? 'text-indigo-400' : 'text-rose-400'}`}>{score}%</span>
+                                                    </div>
+                                                    {(sec.issues || []).length > 0 && (
+                                                        <div className="mt-2 space-y-1">
+                                                            {(sec.issues as string[]).map((issue, i) => (
+                                                                <p key={i} className="text-[10px] text-zinc-400 flex items-start gap-1.5">
+                                                                    <span className="text-yellow-400 shrink-0">›</span>{issue}
+                                                                </p>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+
+                                        {(resumeAnalysis.strengths || []).length > 0 && (
+                                            <div className="border-t border-white/5 pt-3 space-y-1.5">
+                                                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-2">What&apos;s working</p>
+                                                {(resumeAnalysis.strengths as string[]).map((s, i) => (
+                                                    <div key={i} className="flex items-start gap-2 text-[11px] text-zinc-300">
+                                                        <span className="text-emerald-400 shrink-0 mt-0.5">✓</span>{s}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             <Card>
                                 <CardContent className="p-4"><div className="flex flex-wrap gap-2">{sections.map(section => (<Button key={section.id} variant={activeSection === section.id ? "default" : "outline"} onClick={() => setActiveSection(section.id)} size="sm" className="flex items-center gap-2">{section.icon} {section.name}</Button>))}</div></CardContent>
                                 <CardContent>
@@ -1618,6 +2292,29 @@ export default function ResumeBuilder() {
                                     {activeSection === 'projects' && <DynamicSection sectionKey="projects" data={resumeData.projects} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ title: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Project Title'}, {key: 'date', label: 'Date'}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2}]} />}
                                     {activeSection === 'publications' && <DynamicSection sectionKey="publications" data={resumeData.publications} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ title: '', authors: '', journal: '', date: '', link: '' }} fields={[{key: 'title', label: 'Publication Title'}, {key: 'authors', label: 'Authors'}, {key: 'journal', label: 'Journal or Conference'}, {key: 'date', label: 'Publication Date'}, {key: 'link', label: 'Link (Optional)'}]} />}
                                     {activeSection === 'certifications' && <DynamicSection sectionKey="certifications" data={resumeData.certifications} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ name: '', issuer: '', date: '' }} fields={[{key: 'name', label: 'Certification Name'}, {key: 'issuer', label: 'Issuing Organization'}, {key: 'date', label: 'Date Received'}]} />}
+                                    {activeSection === 'languages' && <LanguagesForm data={resumeData.languages} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} />}
+                                    {activeSection === 'volunteer' && <DynamicSection sectionKey="volunteer" data={resumeData.volunteer} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ role: '', organization: '', dates: '', description: '<p></p>' }} fields={[{key: 'role', label: 'Role / Title'}, {key: 'organization', label: 'Organization'}, {key: 'dates', label: 'Dates'}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2}]} />}
+                                    {activeSection === 'awards' && <DynamicSection sectionKey="awards" data={resumeData.awards} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ title: '', organization: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Award Title'}, {key: 'organization', label: 'Awarding Organization'}, {key: 'date', label: 'Date'}, {key: 'description', label: 'Description (optional)', type: 'textarea', colSpan: 2}]} />}
+                                    {activeSection === 'jd-match' && <JDMatchPanel resumeData={resumeData} apiBase={API_BASE_URL} getToken={getToken} />}
+                                    {activeSection === 'cover-letter' && <CoverLetterForm resumeData={resumeData} apiBase={API_BASE_URL} getToken={getToken} />}
+                                    {activeSection === 'section-order' && (
+                                        <div className="space-y-2">
+                                            <p className="text-xs text-zinc-400 mb-3">Drag to reorder sections. Click the eye to hide from preview (data is preserved).</p>
+                                            {sectionOrder.map((secId, idx) => {
+                                                const secMeta = sections.find(s => s.id === secId);
+                                                const hidden = hiddenSections.has(secId);
+                                                return (
+                                                    <div key={secId} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all ${hidden ? 'border-white/5 bg-white/[0.02] opacity-50' : 'border-white/10 bg-white/[0.04]'}`}>
+                                                        <GripVertical size={14} className="text-zinc-600 flex-shrink-0" />
+                                                        <span className="flex-1 text-sm text-zinc-300 flex items-center gap-2">{secMeta?.icon}{secMeta?.name || secId}</span>
+                                                        <button onClick={() => moveSectionUp(secId)} disabled={idx === 0} className="p-1 text-zinc-500 hover:text-white disabled:opacity-20 transition-colors"><ArrowUp size={12} /></button>
+                                                        <button onClick={() => moveSectionDown(secId)} disabled={idx === sectionOrder.length - 1} className="p-1 text-zinc-500 hover:text-white disabled:opacity-20 transition-colors"><ArrowDown size={12} /></button>
+                                                        <button onClick={() => toggleSectionVisibility(secId)} className={`p-1 transition-colors ${hidden ? 'text-zinc-600' : 'text-indigo-400'}`}>{hidden ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                     {activeSection === 'templates' && <TemplatePickerForm selected={selectedTemplate} onSelect={setSelectedTemplate} />}
                                     {activeSection === 'design' && <DesignForm options={styleOptions} onChange={handleStyleChange} />}
                                 </CardContent>
@@ -1635,15 +2332,113 @@ export default function ResumeBuilder() {
                            </CardContent>
                        </Card>
                        <div className="space-y-4 mt-6 flex-shrink-0">
-                           <div className="flex items-center space-x-2 p-4 border border-white/20 rounded-lg bg-white/10">
-                               <input type="checkbox" id="pamtenLogo" className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500" checked={showPamtenLogo} onChange={(e) => setShowPamtenLogo(e.target.checked)} />
-                               <label htmlFor="pamtenLogo" className="text-sm font-medium text-gray-300">Add Pamten Logo to Document</label>
-                           </div>
                            <div className="grid grid-cols-2 gap-3">
                                <Button className="w-full bg-zinc-700 hover:bg-zinc-600 text-white border border-zinc-500" onClick={handleSaveDraft} disabled={loading}><Save size={15} className="mr-2" />Save Draft</Button>
                                <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" onClick={handleSaveResume} disabled={loading}><Upload size={15} className="mr-2" />Save & Publish</Button>
                                <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleDownload('PDF')} disabled={loading}><Download size={15} className="mr-2" />Download PDF</Button>
                                <Button variant="outline" className="w-full" onClick={() => handleDownload('DOCX')} disabled={loading}><Download size={15} className="mr-2" />Download DOCX</Button>
+                           </div>
+
+                           {/* ── Upload Resume File ───────────────────────────── */}
+                           <div className="pt-3 border-t border-white/10">
+                               <input
+                                   ref={fileUploadRef}
+                                   type="file"
+                                   accept=".pdf,.doc,.docx"
+                                   className="hidden"
+                                   onChange={handleResumeFileUpload}
+                               />
+                               <Button
+                                   className="w-full bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white text-xs"
+                                   onClick={() => fileUploadRef.current?.click()}
+                                   disabled={uploadingFile}
+                               >
+                                   {uploadingFile
+                                       ? <><Loader2 size={14} className="mr-2 animate-spin" />Uploading & Parsing…</>
+                                       : <><UploadCloud size={14} className="mr-2" />Upload Resume (PDF / DOCX)</>
+                                   }
+                               </Button>
+                               {uploadedFiles.length > 0 && (
+                                   <div className="mt-2 space-y-1">
+                                       <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Uploaded Files</p>
+                                       {uploadedFiles.map((f, i) => (
+                                           <div key={i} className="flex items-center gap-2 text-[11px] text-zinc-400 bg-white/5 rounded-lg px-2 py-1.5">
+                                               <FileText size={10} className="text-zinc-500 flex-shrink-0" />
+                                               <span className="truncate flex-1">{f.name}</span>
+                                               <a href={f.url} target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 flex-shrink-0">↗</a>
+                                           </div>
+                                       ))}
+                                   </div>
+                               )}
+                           </div>
+
+                           {/* ── Saved Versions ───────────────────────────────── */}
+                           <div className="space-y-2 pt-3 border-t border-white/10">
+                               <button
+                                   onClick={() => setShowVersionPanel(v => !v)}
+                                   className="w-full flex items-center justify-between text-xs text-zinc-400 hover:text-white transition-colors"
+                               >
+                                   <span className="flex items-center gap-1.5 font-semibold">
+                                       <Star size={12} /> Saved Versions
+                                       {savedVersions.length > 0 && (
+                                           <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] px-1.5 py-0.5 rounded-full">
+                                               {savedVersions.length}
+                                           </span>
+                                       )}
+                                   </span>
+                                   {showVersionPanel ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                               </button>
+
+                               {showVersionPanel && (
+                                   <div className="space-y-2">
+                                       {/* Save current as named version */}
+                                       <div className="flex gap-2">
+                                           <input
+                                               value={versionNameInput}
+                                               onChange={e => setVersionNameInput(e.target.value)}
+                                               onKeyDown={e => e.key === 'Enter' && handleSaveAsVersion()}
+                                               placeholder="Version name (e.g. SWE Resume)…"
+                                               className="flex-1 bg-zinc-900/60 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500/40"
+                                           />
+                                           <Button
+                                               size="sm"
+                                               onClick={handleSaveAsVersion}
+                                               disabled={savingVersion}
+                                               className="text-xs px-3 bg-indigo-600 hover:bg-indigo-500 text-white whitespace-nowrap"
+                                           >
+                                               {savingVersion ? '…' : 'Save'}
+                                           </Button>
+                                       </div>
+
+                                       {/* Versions list */}
+                                       {savedVersions.length === 0 ? (
+                                           <p className="text-[11px] text-zinc-600 text-center py-2">No saved versions yet</p>
+                                       ) : (
+                                           <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                                               {savedVersions.map(v => (
+                                                   <div key={v.id} className="flex items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/5">
+                                                       <div className="flex-1 min-w-0">
+                                                           <p className="text-xs font-semibold text-white truncate">{v.name}</p>
+                                                           <p className="text-[10px] text-zinc-500">{new Date(v.savedAt).toLocaleDateString()}</p>
+                                                       </div>
+                                                       <button
+                                                           onClick={() => handleLoadVersion(v)}
+                                                           className="flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 px-2 py-1 rounded transition-colors whitespace-nowrap"
+                                                       >
+                                                           <FolderOpen size={10} /> Load
+                                                       </button>
+                                                       <button
+                                                           onClick={() => handleDeleteVersion(v.id)}
+                                                           className="p-1 text-zinc-600 hover:text-red-400 transition-colors"
+                                                       >
+                                                           <Trash2 size={10} />
+                                                       </button>
+                                                   </div>
+                                               ))}
+                                           </div>
+                                       )}
+                                   </div>
+                               )}
                            </div>
                        </div>
                     </div>

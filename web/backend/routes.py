@@ -17,6 +17,7 @@ from ollama_utils import (
     copilot_candidate_search,
     generate_cover_letter,
     grade_resume_match_score,
+    tailor_resume_to_jd,
     generate_company_profile_via_ai,
     generate_company_reviews_via_ai
 )
@@ -666,6 +667,26 @@ def grade_resume_route():
     except Exception as e:
         print(f"Error in grade resume endpoint: {e}")
         return jsonify({"error": "An internal error occurred while grading the resume."}), 500
+
+
+@api_bp.route('/resume/tailor-to-jd', methods=['POST'])
+@require_auth
+def tailor_resume_to_jd_route():
+    data = request.json or {}
+    resume_data = data.get('resumeData')
+    job_description = data.get('jobDescription', '')
+    missing_keywords = data.get('missingKeywords', [])
+    if not resume_data:
+        return jsonify({"error": "Missing resumeData"}), 400
+    try:
+        tailored = tailor_resume_to_jd(resume_data, job_description, missing_keywords)
+        return jsonify({"resumeData": tailored}), 200
+    except RuntimeError as e:
+        if _is_no_keys(e): return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        print(f"[tailor-to-jd] error: {e}")
+        return jsonify({"error": "Failed to tailor resume."}), 500
 
 
 # --- Recruiter AI: Generate job description, requirements, benefits ---

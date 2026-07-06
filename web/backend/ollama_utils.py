@@ -21,15 +21,38 @@ logger = logging.getLogger(__name__)
 # ── Per-request key wallet ─────────────────────────────────────────────────────
 # Populated by configure_dynamic_api_key in routes.py before each request.
 
-_request_wallet: list[dict] = []
-_status_callback = None   # optional Firestore key-status updater
+import threading
+from flask import has_request_context, g
 
+_local_state = threading.local()
+
+def get_request_wallet() -> list[dict]:
+    """Retrieve the per-request API keys wallet thread-safely."""
+    if has_request_context():
+        if not hasattr(g, 'request_wallet'):
+            g.request_wallet = []
+        return g.request_wallet
+    else:
+        if not hasattr(_local_state, 'wallet'):
+            _local_state.wallet = []
+        return _local_state.wallet
+
+def get_status_callback():
+    """Retrieve the per-request Firestore status update callback thread-safely."""
+    if has_request_context():
+        return getattr(g, 'status_callback', None)
+    else:
+        return getattr(_local_state, 'status_callback', None)
 
 def set_request_wallet(wallet: list[dict], on_status_change=None) -> None:
     """Called by configure_dynamic_api_key with the user's full key wallet."""
-    global _request_wallet, _status_callback
-    _request_wallet     = wallet or []
-    _status_callback    = on_status_change
+    w = wallet or []
+    if has_request_context():
+        g.request_wallet = w
+        g.status_callback = on_status_change
+    else:
+        _local_state.wallet = w
+        _local_state.status_callback = on_status_change
 
 
 def set_api_key(key: str) -> None:
@@ -37,14 +60,19 @@ def set_api_key(key: str) -> None:
     Legacy single-key setter — called when X-Gemini-API-Key header is present.
     Injects it as a high-priority Gemini key at the front of the wallet.
     """
-    global _request_wallet
+    wallet = get_request_wallet()
     if key and key.strip():
         inline = {"id": "inline-gemini", "provider": "Gemini",
                   "key": key.strip(), "status": "Active"}
         # Prepend so it is tried first
-        _request_wallet = [inline] + [k for k in _request_wallet if k.get("id") != "inline-gemini"]
+        new_wallet = [inline] + [k for k in wallet if k.get("id") != "inline-gemini"]
     else:
-        _request_wallet = [k for k in _request_wallet if k.get("id") != "inline-gemini"]
+        new_wallet = [k for k in wallet if k.get("id") != "inline-gemini"]
+
+    if has_request_context():
+        g.request_wallet = new_wallet
+    else:
+        _local_state.wallet = new_wallet
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
@@ -95,9 +123,9 @@ def _call(prompt: str, *, json_mode: bool = False,
     """
     try:
         raw = ai_router.route(
-            prompt, _request_wallet,
+            prompt, get_request_wallet(),
             max_tokens=max_tokens, json_mode=json_mode, heavy=heavy,
-            vault_decrypt=_decrypt, on_status_change=_status_callback,
+            vault_decrypt=_decrypt, on_status_change=get_status_callback(),
         )
     except RuntimeError as e:
         msg = str(e)
@@ -130,7 +158,7 @@ def structure_text_with_ai(raw_resume_text: str) -> dict:
         "publications":   [{"id": "", "title": "", "authors": "", "journal": "", "date": "", "link": ""}],
         "certifications": [{"id": "", "name": "", "issuer": "", "date": ""}],
     }
-    prompt = f"""You are an expert resume parser. Extract all information from the resume text below.
+    prompt = f"""You are an expert resume parser. Extract ALL information from the resume text below.
 
 OUTPUT FORMAT: Return ONLY a raw JSON object.
 - Start your response with {{ and end with }}
@@ -145,9 +173,18 @@ Rules:
 - Generate a unique short id like "a1b2c3" for each list item.
 - Empty sections → use [].
 
+CRITICAL — summary field:
+- Many resumes place the professional summary/objective/profile paragraph IMMEDIATELY AFTER
+  the contact information WITHOUT an explicit "Summary" section header.
+- You MUST extract this text into the "summary" field even when there is no header.
+- Look for any paragraph (3+ sentences) that describes the candidate's background,
+  years of experience, key skills, and career goals — that IS the summary.
+- Do NOT leave "summary" as an empty string if such a paragraph exists anywhere in the text.
+- Format the summary as one or more <p>…</p> HTML paragraphs.
+
 Resume text:
 ---
-{raw_resume_text[:6000]}
+{raw_resume_text[:8000]}
 ---"""
     result = _call(prompt, json_mode=True, max_tokens=4096)
     return result if isinstance(result, dict) else {}
@@ -185,16 +222,23 @@ enhance_with_ollama = enhance_section_with_ai
 # ── 3. Summary suggestions ─────────────────────────────────────────────────────
 
 def generate_summary_suggestions(resume_data: dict) -> list:
-    prompt = f"""You are an expert career coach.
-Write exactly 3 distinct professional summary paragraphs (3-4 sentences each).
-First person, present tense. ATS-friendly. Highlight years of experience, key skills, career goals.
-Return ONLY: {{"summaries": ["Summary 1.", "Summary 2.", "Summary 3."]}}
+    name = (resume_data.get("personal") or {}).get("name", "the candidate")
+    prompt = f"""You are an expert career coach writing ATS-optimised resume summaries for {name}.
 
-Resume:
-{json.dumps(resume_data, indent=2)}
+Write exactly 3 distinct professional summary paragraphs. Each must be:
+- 3-4 sentences long
+- Written in first person, present tense
+- ATS-friendly: include years of experience, top technical skills, and a clear career goal
+- Varied in focus: (1) technical depth, (2) leadership/impact, (3) broad career value
+
+Return ONLY valid JSON — no markdown, no explanation:
+{{"summaries": ["Summary 1 text.", "Summary 2 text.", "Summary 3 text."]}}
+
+Candidate resume data:
+{json.dumps(resume_data, indent=2)[:4000]}
 
 JSON:"""
-    result = _call(prompt, json_mode=True)
+    result = _call(prompt, json_mode=True, heavy=True, max_tokens=1200)
     if isinstance(result, dict):
         summaries = result.get("summaries", [])
         if isinstance(summaries, list) and summaries:
@@ -390,8 +434,17 @@ STRICT RULES:
 - Write only spoken words. No bullet points, no markdown, no labels.
 - Complete every sentence — never stop mid-sentence."""
 
-    raw = _call(prompt, heavy=False, max_tokens=600) or \
+    raw = _call(prompt, heavy=True, max_tokens=1500) or \
           "That's really interesting. Can you walk me through how you'd approach that from scratch?"
+
+    # Strip model preambles that small models sometimes inject
+    import re as _re
+    raw = _re.sub(
+        r"^(Alex:|INTERVIEWER:|Here(?:'s| is)(?: Alex(?:'s)?)? (?:response|reply|turn|next (?:question|response))[:\s]*)",
+        "", raw, flags=_re.IGNORECASE
+    ).strip()
+    # Strip "Sentence N:" labels the model might add throughout the response
+    raw = _re.sub(r"Sentence\s*\d+[:.]\s*", " ", raw, flags=_re.IGNORECASE).strip()
 
     # Safety net: if 3+ question marks, truncate after the 2nd one.
     # (Allows 1 rhetorical "?" in the reaction + 1 real question; strips any 3rd+)
@@ -589,6 +642,33 @@ Return ONLY:
         return result
     return {"score": 75, "matchingSkills": [], "missingKeywords": [],
             "optimizationTips": ["Quantify achievements with metrics."]}
+
+
+# ── 10b. Tailor resume to job description ──────────────────────────────────────
+
+def tailor_resume_to_jd(resume_data: dict, job_description: str, missing_keywords: list) -> dict:
+    prompt = f"""You are an expert resume writer. Tailor the resume to better match the job description.
+
+Resume:
+{json.dumps(resume_data, indent=2)}
+
+Job Description:
+{job_description}
+
+Missing Keywords to incorporate: {missing_keywords}
+
+Instructions:
+- Naturally weave the missing keywords into the existing experience descriptions and skills
+- Do NOT fabricate new jobs, degrees, or skills the candidate doesn't have
+- DO rephrase existing experience bullets to use industry terminology from the JD
+- Add missing keywords as skills if they are close matches to existing skills
+- Return the updated resume as valid JSON matching exactly the same structure as the input
+
+Return ONLY the updated resume JSON with the exact same structure."""
+    result = _call(prompt, json_mode=True, heavy=True)
+    if isinstance(result, dict):
+        return result
+    return resume_data
 
 
 # ── 11. Company profile ────────────────────────────────────────────────────────
