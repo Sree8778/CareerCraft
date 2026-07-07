@@ -190,11 +190,11 @@ function injectOverlay(profile) {
   });
 }
 
-// Message handler for popup-triggered fill
+// Message handler — always register, works on both auto-injected and popup-injected runs
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'FILL_FORM') {
     const profile = msg.profile;
-    if (!profile) { sendResponse({ filled: 0 }); return; }
+    if (!profile) { sendResponse({ filled: 0 }); return true; }
     const filled = fillForm(profile);
     if (filled > 0) {
       const meta = getJobMeta();
@@ -204,14 +204,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       });
     }
     sendResponse({ filled });
+    return true;
   }
 });
 
-// Init
-(async () => {
-  const ats = detectATS();
-  if (!ats) return;
-
+// Auto-init floating overlay — only on first injection (guard via DOM check)
+if (!document.getElementById('__cc_overlay')) {
   chrome.runtime.sendMessage({ type: 'GET_CACHED_PROFILE' }, ({ profile }) => {
     if (profile) {
       injectOverlay(profile);
@@ -221,4 +219,4 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       });
     }
   });
-})();
+}

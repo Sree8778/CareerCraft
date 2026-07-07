@@ -73,12 +73,11 @@ async function showConnected() {
     if (ats) {
       atsIndicator.textContent = `${ats} detected`;
       atsIndicator.className = 'ats-badge ats-detected';
-      btnFill.disabled = false;
     } else {
-      atsIndicator.textContent = 'No supported ATS on this page';
+      atsIndicator.textContent = 'Fill any form on this page';
       atsIndicator.className = 'ats-badge ats-none';
-      btnFill.disabled = true;
     }
+    btnFill.disabled = false;
   }
 }
 
