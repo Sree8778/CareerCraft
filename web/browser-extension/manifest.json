@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "CareerCraft Auto-Apply",
+  "version": "1.0.0",
+  "description": "Auto-fill job applications on Greenhouse, Lever, Ashby, Workday, and more.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://careercraft-backend-u7h4zjepfq-uc.a.run.app/*",
+    "https://boards.greenhouse.io/*",
+    "https://job-boards.greenhouse.io/*",
+    "https://jobs.lever.co/*",
+    "https://jobs.ashbyhq.com/*",
+    "https://apply.workable.com/*",
+    "https://jobs.smartrecruiters.com/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://wd5.myworkdayjobs.com/*",
+    "https://www.indeed.com/*",
+    "https://m5.apply.indeed.com/*",
+    "https://www.linkedin.com/jobs/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://boards.greenhouse.io/*",
+        "https://job-boards.greenhouse.io/*",
+        "https://jobs.lever.co/*",
+        "https://jobs.ashbyhq.com/*",
+        "https://apply.workable.com/*",
+        "https://jobs.smartrecruiters.com/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://www.indeed.com/viewjob*",
+        "https://www.indeed.com/applystart*",
+        "https://www.linkedin.com/jobs/view/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "CareerCraft Auto-Apply",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

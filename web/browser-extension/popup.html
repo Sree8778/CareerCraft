@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CareerCraft Auto-Apply</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Setup screen -->
+    <div id="screen-setup" class="screen">
+      <div class="logo">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+        </svg>
+        CareerCraft
+      </div>
+      <p class="subtitle">Paste your Plugin Token from<br /><strong>Settings → Browser Plugin</strong></p>
+      <textarea id="token-input" placeholder="Paste plugin token here…" rows="3"></textarea>
+      <div id="setup-error" class="error" style="display:none"></div>
+      <button id="btn-connect" class="btn-primary">Connect</button>
+      <a href="https://careercraft-frontend-u7h4zjepfq-uc.a.run.app/candidate/settings" target="_blank" class="link">
+        Get your token →
+      </a>
+    </div>
+
+    <!-- Connected screen -->
+    <div id="screen-connected" class="screen" style="display:none">
+      <div class="header">
+        <div class="logo small">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+          </svg>
+          CareerCraft
+        </div>
+        <span id="status-badge" class="badge badge-active">Connected</span>
+      </div>
+
+      <div class="profile-card">
+        <div class="avatar" id="profile-avatar">U</div>
+        <div>
+          <p id="profile-name" class="profile-name">Loading…</p>
+          <p id="profile-email" class="profile-email"></p>
+        </div>
+      </div>
+
+      <div class="ats-section">
+        <p class="section-label">Supported ATS Detected</p>
+        <div id="ats-indicator" class="ats-badge ats-none">Open a job application page</div>
+      </div>
+
+      <button id="btn-fill" class="btn-primary" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        Auto-Fill This Application
+      </button>
+
+      <div id="fill-result" class="fill-result" style="display:none"></div>
+
+      <div class="divider"></div>
+
+      <button id="btn-refresh" class="btn-ghost">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+        </svg>
+        Refresh Profile
+      </button>
+      <button id="btn-disconnect" class="btn-ghost danger">Disconnect</button>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

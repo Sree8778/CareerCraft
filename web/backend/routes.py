@@ -3827,3 +3827,150 @@ def stop_autonomous_apply():
         db.collection('apply_sessions').document(uid).update({'autonomous_running': False})
     _autonomous_sessions.pop(uid, None)
     return jsonify({'success': True})
+
+
+@api_bp.route('/auto-apply/solve-questions', methods=['POST'])
+@require_auth
+def auto_apply_solve_questions():
+    configure_dynamic_api_key()
+    data = request.json or {}
+    candidate_id = data.get('candidateId')
+    questions = data.get('questions', [])
+    if not candidate_id or not questions:
+        return jsonify({"error": "Missing candidateId or questions"}), 400
+    try:
+        from auto_apply_ai import solve_questions_with_gemini
+        answers = solve_questions_with_gemini(candidate_id, questions)
+        return jsonify({"answers": answers}), 200
+    except Exception as e:
+        print(f"Error solving questions: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/auto-apply/log', methods=['POST'])
+@require_auth
+def auto_apply_log():
+    from firebase_utils import db, firebase_initialized
+    data = request.json or {}
+    candidate_id = data.get('candidateId')
+    job_title = data.get('jobTitle', '')
+    company = data.get('company', '')
+    source = data.get('source', '')
+    if not candidate_id:
+        return jsonify({"error": "Missing candidateId"}), 400
+    try:
+        if firebase_initialized and db:
+            db.collection('applications').add({
+                'candidateId': candidate_id,
+                'jobTitle': job_title,
+                'company': company,
+                'source': source,
+                'appliedAt': datetime.datetime.utcnow(),
+                'status': 'applied'
+            })
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        print(f"Error logging auto-apply: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── Browser Extension Plugin Token ──────────────────────────────────────────
+
+@api_bp.route('/plugin/token', methods=['GET'])
+@require_auth
+def get_plugin_token():
+    from firebase_utils import db
+    uid = getattr(request, 'uid', None)
+    if not uid:
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        snap = db.collection('users').document(uid).get()
+        token = snap.to_dict().get('pluginToken') if snap.exists else None
+        return jsonify({"token": token}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/plugin/token', methods=['POST'])
+@require_auth
+def generate_plugin_token():
+    import uuid
+    from firebase_utils import db
+    uid = getattr(request, 'uid', None)
+    if not uid:
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        new_token = str(uuid.uuid4()).replace('-', '') + str(uuid.uuid4()).replace('-', '')
+        db.collection('users').document(uid).set({'pluginToken': new_token}, merge=True)
+        return jsonify({"token": new_token}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def _auth_plugin_token():
+    from firebase_utils import db
+    auth_hdr = request.headers.get('Authorization', '')
+    if not auth_hdr.startswith('PluginToken '):
+        return None, (jsonify({"error": "Missing plugin token"}), 401)
+    token = auth_hdr[len('PluginToken '):]
+    try:
+        docs = list(db.collection('users').where('pluginToken', '==', token).limit(1).stream())
+        if not docs:
+            return None, (jsonify({"error": "Invalid plugin token"}), 401)
+        return docs[0].id, None
+    except Exception as e:
+        return None, (jsonify({"error": str(e)}), 500)
+
+
+@api_bp.route('/plugin/profile', methods=['GET'])
+def get_plugin_profile():
+    from firebase_utils import db
+    uid, err = _auth_plugin_token()
+    if err:
+        return err
+    try:
+        user_snap = db.collection('users').document(uid).get()
+        user_data = user_snap.to_dict() if user_snap.exists else {}
+        resume_snap = db.collection('resumes').document(uid).get()
+        resume_data = resume_snap.to_dict().get('resumeData', {}) if resume_snap.exists else {}
+        personal = resume_data.get('personal', {})
+        return jsonify({
+            "uid": uid,
+            "name": user_data.get('fullName') or user_data.get('name', ''),
+            "email": user_data.get('email', ''),
+            "phone": personal.get('phone') or user_data.get('phone', ''),
+            "location": personal.get('location') or user_data.get('location', ''),
+            "linkedin": personal.get('linkedin', ''),
+            "website": personal.get('website', ''),
+            "summary": resume_data.get('summary', ''),
+            "headline": personal.get('headline', ''),
+            "currentCompany": personal.get('currentCompany', ''),
+            "experience": resume_data.get('experience', []),
+            "education": resume_data.get('education', []),
+            "skills": resume_data.get('skills', []),
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/plugin/applied', methods=['POST'])
+def record_plugin_applied():
+    from firebase_utils import db
+    uid, err = _auth_plugin_token()
+    if err:
+        return err
+    data = request.json or {}
+    try:
+        db.collection('applications').add({
+            'candidateId': uid,
+            'jobTitle': data.get('jobTitle', ''),
+            'company': data.get('company', ''),
+            'jobUrl': data.get('jobUrl', ''),
+            'ats': data.get('ats', ''),
+            'source': 'browser_extension',
+            'appliedAt': datetime.datetime.utcnow(),
+            'status': 'applied',
+        })
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

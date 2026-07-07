@@ -11,12 +11,12 @@ import {
   User, Phone, Mail, MapPin, FileText, Briefcase, Shield, KeyRound,
   Bell, ChevronRight, CheckCircle, Trash2, ExternalLink, PlusCircle,
   RefreshCw, ShieldAlert, ShieldCheck, QrCode, Lock, DollarSign,
-  Globe, Save, Eye, EyeOff
+  Globe, Save, Eye, EyeOff, Puzzle, Copy, RotateCcw
 } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
-type Section = 'profile' | 'account' | 'api-keys' | 'security' | 'preferences';
+type Section = 'profile' | 'account' | 'api-keys' | 'security' | 'preferences' | 'plugin';
 type Provider = 'Gemini' | 'OpenAI' | 'Claude' | 'Groq' | 'NVIDIA NIM' | 'Apify' | 'Firecrawl';
 
 const AI_PROVIDERS: Provider[]      = ['Gemini', 'OpenAI', 'Claude', 'Groq', 'NVIDIA NIM'];
@@ -30,6 +30,7 @@ const NAV: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: 'api-keys',    label: 'API Keys',     icon: <KeyRound className="w-4 h-4" /> },
   { id: 'security',    label: 'Security',     icon: <Shield className="w-4 h-4" /> },
   { id: 'preferences', label: 'Preferences',  icon: <Briefcase className="w-4 h-4" /> },
+  { id: 'plugin',      label: 'Browser Plugin', icon: <Puzzle className="w-4 h-4" /> },
 ];
 
 const FIELD = 'w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 transition disabled:opacity-50 disabled:cursor-not-allowed';
@@ -75,6 +76,11 @@ export default function CandidateSettingsPage() {
   const [scraperShowKey, setScraperShowKey] = useState(false);
   const [scraperVerifying, setScraperVerifying] = useState(false);
   const [scraperVerifyError, setScraperVerifyError] = useState<string | null>(null);
+
+  // Browser Plugin token
+  const [pluginToken, setPluginToken] = useState<string | null>(null);
+  const [pluginTokenLoading, setPluginTokenLoading] = useState(false);
+  const [pluginTokenCopied, setPluginTokenCopied] = useState(false);
 
   // Security / 2FA
   const [tfaEnabled, setTfaEnabled] = useState(false);
@@ -127,6 +133,9 @@ export default function CandidateSettingsPage() {
           setWorkAuth(prefs.workAuth || '');
           setAvailability(prefs.availability || '');
         }
+        // Load plugin token
+        const ptSnap = await getDoc(doc(db, 'users', user.id));
+        if (ptSnap.exists()) setPluginToken(ptSnap.data().pluginToken || null);
       } catch (e) {
         console.error('Settings load error:', e);
       }
@@ -275,6 +284,27 @@ export default function CandidateSettingsPage() {
       toast.success('2FA disabled.');
     } catch (e: any) { toast.error(e.message || 'Invalid code'); }
     finally { setTfaLoading(false); }
+  };
+
+  const generatePluginToken = async () => {
+    setPluginTokenLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/plugin/token`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${await getToken()}` },
+      });
+      const data = await res.json();
+      if (data.token) { setPluginToken(data.token); toast.success('Plugin token generated.'); }
+      else throw new Error(data.error);
+    } catch { toast.error('Failed to generate token.'); }
+    finally { setPluginTokenLoading(false); }
+  };
+
+  const copyPluginToken = async () => {
+    if (!pluginToken) return;
+    await navigator.clipboard.writeText(pluginToken);
+    setPluginTokenCopied(true);
+    setTimeout(() => setPluginTokenCopied(false), 2000);
   };
 
   if (!isAuthenticated || user?.role !== 'candidate') return null;
@@ -749,6 +779,76 @@ export default function CandidateSettingsPage() {
                   {savingPrefs ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                   Save Preferences
                 </button>
+              </div>
+            )}
+
+            {/* BROWSER PLUGIN */}
+            {active === 'plugin' && (
+              <div className="space-y-5">
+                <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 space-y-5">
+                  <div className="flex items-center gap-3">
+                    <Puzzle className="w-5 h-5 text-violet-400" />
+                    <div>
+                      <h2 className="text-base font-bold text-white">Browser Extension</h2>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">Auto-fill job applications on Greenhouse, Lever, Ashby, Workday, and more.</p>
+                    </div>
+                  </div>
+
+                  {/* Install instructions */}
+                  <div className="bg-violet-500/8 border border-violet-500/20 rounded-xl p-4 space-y-3 text-xs text-violet-200">
+                    <p className="font-bold text-violet-300 flex items-center gap-2"><Puzzle className="w-3.5 h-3.5" /> Installation</p>
+                    <ol className="space-y-1.5 list-decimal list-inside text-zinc-300">
+                      <li>Download the extension from the <span className="text-violet-300 font-bold">web/browser-extension</span> folder in the project</li>
+                      <li>Open Chrome → <span className="font-mono bg-white/10 px-1 rounded">chrome://extensions</span></li>
+                      <li>Enable <span className="font-bold">Developer mode</span> (top right toggle)</li>
+                      <li>Click <span className="font-bold">Load unpacked</span> → select the <span className="font-mono bg-white/10 px-1 rounded">browser-extension</span> folder</li>
+                      <li>Click the extension icon → paste your Plugin Token below</li>
+                    </ol>
+                  </div>
+
+                  {/* Token card */}
+                  <div className="border border-white/8 rounded-xl p-5 space-y-4">
+                    <div>
+                      <p className="text-sm font-bold text-white mb-0.5">Plugin Token</p>
+                      <p className="text-[11px] text-zinc-500">This token authenticates the browser extension with your account. Treat it like a password.</p>
+                    </div>
+
+                    {pluginToken ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-xl px-4 py-3">
+                          <code className="flex-1 text-[11px] font-mono text-violet-300 break-all">{pluginToken}</code>
+                          <button onClick={copyPluginToken}
+                            className="shrink-0 flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/30 transition">
+                            {pluginTokenCopied ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            {pluginTokenCopied ? 'Copied!' : 'Copy'}
+                          </button>
+                        </div>
+                        <button onClick={generatePluginToken} disabled={pluginTokenLoading}
+                          className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-zinc-400 hover:text-white hover:bg-white/8 transition disabled:opacity-50">
+                          {pluginTokenLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                          Regenerate Token
+                        </button>
+                        <p className="text-[10px] text-zinc-600">Regenerating invalidates the current token — you will need to paste the new one into the extension.</p>
+                      </div>
+                    ) : (
+                      <button onClick={generatePluginToken} disabled={pluginTokenLoading}
+                        className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition">
+                        {pluginTokenLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Puzzle className="w-3.5 h-3.5" />}
+                        {pluginTokenLoading ? 'Generating…' : 'Generate Plugin Token'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Supported ATS */}
+                  <div className="border border-white/8 rounded-xl p-4 space-y-3">
+                    <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Supported Job Boards & ATS</p>
+                    <div className="flex flex-wrap gap-2">
+                      {['Greenhouse', 'Lever', 'Ashby', 'Workable', 'SmartRecruiters', 'Workday', 'Indeed', 'LinkedIn'].map(ats => (
+                        <span key={ats} className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-300">{ats}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
