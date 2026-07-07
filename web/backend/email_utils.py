@@ -10,8 +10,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-FROM_ADDRESS = os.environ.get("EMAIL_FROM", "CareerCraft <notifications@careercraft.ai>")
-PLATFORM_NAME = "CareerCraft"
+FROM_ADDRESS = os.environ.get("EMAIL_FROM", "RecruitEdge <onboarding@resend.dev>")
+PLATFORM_NAME = "RecruitEdge"
 PLATFORM_URL = os.environ.get("PLATFORM_URL", "http://localhost:3000")
 
 # ---------------------------------------------------------------------------

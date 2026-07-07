@@ -1,218 +1,240 @@
-﻿// src/app/candidate/messages/page.tsx
+// src/app/candidate/messages/page.tsx
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import CandidateLayout from '@/components/layout/CandidateLayout';
-import { 
-  Send, RefreshCw, MessageSquare, Briefcase, 
-  User as UserIcon, Calendar, Check, ExternalLink, Sparkles
+import { API_BASE, authHeader } from '@/lib/api';
+import { db } from '@/lib/firebase';
+import {
+  collection, query, where, orderBy, onSnapshot,
+  addDoc, updateDoc, doc, serverTimestamp, Timestamp,
+} from 'firebase/firestore';
+import {
+  Send, MessageSquare, Briefcase, RefreshCw,
+  CheckCheck, Check, Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
+// ── Helpers ────────────────────────────────────────────────────────────────
 
-const getInitials = (name: string) => {
-  if (!name) return 'U';
-  return name.split(' ').map(n => n[0] || '').join('').slice(0, 2).toUpperCase() || 'U';
-};
+const getInitials = (name: string) =>
+  (name ?? '').split(' ').map(n => n[0] || '').join('').slice(0, 2).toUpperCase() || '?';
 
-const formatTime = (ts: string) => {
-  if (!ts) return '';
-  const d = new Date(ts);
-  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-};
+function tsToMs(ts: any): number {
+  if (!ts) return 0;
+  if (ts instanceof Timestamp) return ts.toMillis();
+  if (typeof ts === 'string') return Date.parse(ts) || 0;
+  if (ts._seconds)            return ts._seconds * 1000;
+  return 0;
+}
+
+function relativeTime(ts: any): string {
+  const ms = tsToMs(ts);
+  if (!ms) return '';
+  const diff = Math.floor((Date.now() - ms) / 1000);
+  if (diff < 60)    return `${diff}s`;
+  if (diff < 3600)  return `${Math.floor(diff / 60)}m`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+  return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function msgTime(ts: any): string {
+  const ms = tsToMs(ts);
+  if (!ms) return '';
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+const AVATAR_GRADIENTS = [
+  'from-indigo-600 to-purple-600', 'from-pink-600 to-rose-600',
+  'from-cyan-600 to-blue-600',    'from-emerald-600 to-teal-600',
+];
+
+// ── Page ───────────────────────────────────────────────────────────────────
 
 export default function CandidateMessagesPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getToken, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  const [chats, setChats] = useState<any[]>([]);
-  const [activeChat, setActiveChat] = useState<any | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [inputText, setInputText] = useState('');
-  
-  const [loadingChats, setLoadingChats] = useState(true);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [chats,       setChats]       = useState<any[]>([]);
+  const [activeChat,  setActiveChat]  = useState<any | null>(null);
+  const [messages,    setMessages]    = useState<any[]>([]);
+  const [inputText,   setInputText]   = useState('');
+  const [sending,     setSending]     = useState(false);
+  const [chatsReady,  setChatsReady]  = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const bottomRef   = useRef<HTMLDivElement>(null);
+  const inputRef    = useRef<HTMLTextAreaElement>(null);
 
-  // Authentication check
+  // ── Auth guard ────────────────────────────────────────────────────────────
+
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/');
-    } else if (user?.role !== 'candidate') {
-      router.push('/');
-    }
-  }, [isAuthenticated, user, router]);
+    if (authLoading) return;
+    if (!isAuthenticated || user?.role !== 'candidate') router.push('/');
+  }, [authLoading, isAuthenticated, user, router]);
 
-  // Load chat channels
+  // ── Real-time chat list ────────────────────────────────────────────────────
+  // Firestore: listen to chats where candidateId == uid OR recruiterId == uid
+  // (same-role direct messages land in the "wrong" field)
+
   useEffect(() => {
     if (!user?.id) return;
+    const uid = user.id;
 
-    const loadChats = async () => {
-      try {
-        const res = await fetch(`${API}/chats?role=candidate`, {
-          headers: { 'Authorization': `Bearer mock_token_for_${user.id}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setChats(data.chats || []);
-        }
-      } catch (err) {
-        console.error('Failed to load chats:', err);
-      } finally {
-        setLoadingChats(false);
-      }
+    const q1 = query(collection(db, 'chats'), where('candidateId', '==', uid));
+    const q2 = query(collection(db, 'chats'), where('recruiterId', '==', uid));
+
+    const seen = new Map<string, any>();
+    const merge = (docs: any[]) => {
+      docs.forEach(d => seen.set(d.id, d));
+      const sorted = [...seen.values()].sort(
+        (a, b) => tsToMs(b.lastMessageTimestamp) - tsToMs(a.lastMessageTimestamp)
+      );
+      setChats(sorted);
+      setChatsReady(true);
     };
 
-    loadChats();
-    // Poll for new chat updates
-    const interval = setInterval(loadChats, 5000);
-    return () => clearInterval(interval);
-  }, [user]);
+    const unsub1 = onSnapshot(q1, snap => {
+      snap.docs.forEach(d => seen.set(d.id, { id: d.id, ...d.data() }));
+      merge([]);
+    }, () => {});
 
-  // Load messages for active chat
+    const unsub2 = onSnapshot(q2, snap => {
+      snap.docs.forEach(d => seen.set(d.id, { id: d.id, ...d.data() }));
+      merge([]);
+    }, () => {});
+
+    return () => { unsub1(); unsub2(); };
+  }, [user?.id]);
+
+  // ── Real-time message thread ───────────────────────────────────────────────
+
   useEffect(() => {
-    if (!activeChat?.id || !user?.id) return;
+    if (!activeChat?.id) { setMessages([]); return; }
 
-    const loadMessages = async (silent = false) => {
-      if (!silent) setLoadingMessages(true);
-      try {
-        const res = await fetch(`${API}/chats/${activeChat.id}/messages`, {
-          headers: { 'Authorization': `Bearer mock_token_for_${user.id}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setMessages(data.messages || []);
-        }
-      } catch (err) {
-        console.error('Failed to load messages:', err);
-      } finally {
-        if (!silent) setLoadingMessages(false);
-      }
-    };
+    const q = query(
+      collection(db, 'chats', activeChat.id, 'messages'),
+      orderBy('timestamp', 'asc'),
+    );
 
-    loadMessages();
-    // Polling for real-time messages
-    const interval = setInterval(() => loadMessages(true), 3000);
-    return () => clearInterval(interval);
-  }, [activeChat, user]);
+    const unsub = onSnapshot(q, snap => {
+      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => {});
+
+    return () => unsub();
+  }, [activeChat?.id]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim() || !activeChat?.id || !user || sending) return;
+  // ── Send message ──────────────────────────────────────────────────────────
+
+  const handleSend = useCallback(async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const text = inputText.trim();
+    if (!text || !activeChat?.id || !user || sending) return;
 
     setSending(true);
-    const sentText = inputText;
     setInputText('');
 
     try {
-      const res = await fetch(`${API}/chats/${activeChat.id}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user.id}`
-        },
-        body: JSON.stringify({
-          text: sentText,
-          senderId: user.id,
-          senderName: user.name
-        })
+      // Optimistic local add
+      const optimistic = { id: `opt-${Date.now()}`, text, senderId: user.id, senderName: user.name, timestamp: { _seconds: Date.now() / 1000 }, optimistic: true };
+      setMessages(prev => [...prev, optimistic]);
+
+      // Write directly to Firestore subcollection (mirrors what the REST API does)
+      const chatRef  = doc(db, 'chats', activeChat.id);
+      const msgsRef  = collection(db, 'chats', activeChat.id, 'messages');
+      const msgDoc   = await addDoc(msgsRef, {
+        text,
+        senderId:   user.id,
+        senderName: user.name,
+        timestamp:  serverTimestamp(),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setMessages((prev) => [...prev, data.message]);
-      } else {
-        toast.error('Failed to send message.');
-        setInputText(sentText);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to connect to chat server.');
-      setInputText(sentText);
+      // Update chat's lastMessage
+      await updateDoc(chatRef, {
+        lastMessage:          text,
+        lastMessageTimestamp: serverTimestamp(),
+      });
+
+      // Remove optimistic, real doc will arrive via onSnapshot
+      setMessages(prev => prev.filter(m => m.id !== optimistic.id));
+      void msgDoc;
+
+    } catch {
+      toast.error('Failed to send message');
+      setInputText(text);
     } finally {
       setSending(false);
+      inputRef.current?.focus();
     }
-  };
+  }, [inputText, activeChat?.id, user, sending]);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <CandidateLayout>
-      <div className="max-w-6xl mx-auto flex flex-col h-[calc(100vh-10rem)] space-y-4">
-        
-        {/* Header Title */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent flex items-center gap-2">
-              <MessageSquare className="w-8 h-8 text-indigo-400" />
-              Message Center
-            </h1>
-            <p className="text-xs text-zinc-400 mt-1">Connect in real-time with recruiters reviewing your active applications.</p>
-          </div>
+      <div className="flex flex-col" style={{ height: 'calc(100vh - 7rem)' }}>
+        {/* Header */}
+        <div className="mb-4 shrink-0">
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-indigo-400" /> Messages
+          </h1>
+          <p className="text-xs text-zinc-500 mt-0.5">Real-time chat with recruiters</p>
         </div>
 
-        {/* Dashboard Frame */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 bg-white/5 border border-white/10 rounded-3xl overflow-hidden glass shadow-2xl">
-          
-          {/* LEFT SIDEBAR: ACTIVE CHATS LIST */}
-          <div className="border-r border-white/10 flex flex-col h-full bg-slate-950/20">
-            <div className="p-4 border-b border-white/5 flex justify-between items-center bg-slate-950/40">
-              <span className="text-xs font-bold font-mono tracking-wider text-zinc-400 uppercase">Conversations</span>
-              <span className="text-[10px] font-mono font-bold bg-indigo-500/20 px-2 py-0.5 rounded text-indigo-300">
-                {chats.length} Active
+        {/* Chat frame */}
+        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-3 rounded-2xl border border-white/10 overflow-hidden bg-zinc-950/50 backdrop-blur">
+
+          {/* Sidebar */}
+          <div className="border-r border-white/8 flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between">
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Conversations</span>
+              <span className="text-[10px] font-mono bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 px-2 py-0.5 rounded-full">
+                {chats.length}
               </span>
             </div>
 
-            <div className="flex-1 overflow-y-auto divide-y divide-white/5 scrollbar-thin">
-              {loadingChats ? (
-                <div className="p-8 flex items-center justify-center gap-2 text-zinc-400 text-xs">
-                  <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
-                  Loading your chats...
+            <div className="flex-1 overflow-y-auto divide-y divide-white/5">
+              {!chatsReady ? (
+                <div className="p-8 flex items-center justify-center gap-2 text-zinc-500 text-xs">
+                  <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" /> Loading…
                 </div>
               ) : chats.length === 0 ? (
-                <div className="p-8 text-center space-y-3">
-                  <MessageSquare className="w-10 h-10 mx-auto text-zinc-700" />
-                  <p className="text-xs text-zinc-400 leading-normal">
-                    No active chats yet. Once a recruiter initiates review or requests an interview, channels will appear here automatically!
+                <div className="p-8 text-center space-y-2">
+                  <MessageSquare className="w-10 h-10 mx-auto text-zinc-800" />
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    No conversations yet. Once a recruiter opens a chat from your application, it will appear here.
                   </p>
                 </div>
               ) : (
-                chats.map((c) => {
-                  const isSelected = activeChat?.id === c.id;
+                chats.map((c, i) => {
+                  const isActive  = activeChat?.id === c.id;
+                  const contact   = c.candidateId === user?.id ? c.recruiterName : c.candidateName;
+                  const gradient  = AVATAR_GRADIENTS[i % AVATAR_GRADIENTS.length];
                   return (
-                    <button
-                      key={c.id}
-                      onClick={() => setActiveChat(c)}
-                      className={`w-full text-left p-4 transition-all duration-300 flex items-start gap-3 hover:bg-white/5 ${
-                        isSelected ? 'bg-indigo-600/10 border-l-4 border-indigo-500' : ''
-                      }`}
-                    >
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center font-black text-white shrink-0 shadow-lg text-xs">
-                        {getInitials(c.recruiterName)}
+                    <button key={c.id} onClick={() => setActiveChat(c)}
+                      className={`w-full text-left p-4 flex items-start gap-3 transition-all ${
+                        isActive ? 'bg-indigo-600/10 border-l-2 border-indigo-500' : 'hover:bg-white/3'
+                      }`}>
+                      <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-xs font-black text-white shrink-0`}>
+                        {getInitials(contact)}
                       </div>
-                      <div className="flex-1 truncate space-y-1">
-                        <div className="flex justify-between items-baseline">
-                          <h4 className="text-xs font-bold text-white truncate">{c.recruiterName}</h4>
-                          <span className="text-[8px] text-zinc-500 font-mono">
-                            {formatTime(c.lastMessageTimestamp)}
-                          </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline justify-between gap-1">
+                          <span className="text-xs font-semibold text-white truncate">{contact}</span>
+                          <span className="text-[9px] text-zinc-600 font-mono shrink-0">{relativeTime(c.lastMessageTimestamp)}</span>
                         </div>
-                        <p className="text-[10px] text-zinc-400 font-medium truncate flex items-center gap-1">
-                          <Briefcase className="w-3 h-3 text-zinc-500 shrink-0" /> {c.jobTitle}
+                        <p className="text-[10px] text-zinc-500 flex items-center gap-1 mt-0.5">
+                          <Briefcase className="w-2.5 h-2.5 shrink-0" />
+                          <span className="truncate">{c.jobTitle}</span>
                         </p>
-                        <p className="text-[10px] text-zinc-500 truncate italic">
-                          {c.lastMessage || 'Channel initialized. Speak with recruiter...'}
-                        </p>
+                        <p className="text-[10px] text-zinc-600 truncate mt-0.5 italic">{c.lastMessage || 'Chat started'}</p>
                       </div>
                     </button>
                   );
@@ -221,98 +243,101 @@ export default function CandidateMessagesPage() {
             </div>
           </div>
 
-          {/* RIGHT SIDEBAR: ACTIVE THREAD */}
-          <div className="md:col-span-2 flex flex-col h-full bg-slate-950/10">
-            {activeChat ? (
+          {/* Message thread */}
+          <div className="md:col-span-2 flex flex-col overflow-hidden">
+            {!activeChat ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-zinc-600">
+                <MessageSquare className="w-12 h-12" />
+                <p className="text-sm font-semibold">Select a conversation</p>
+              </div>
+            ) : (
               <>
-                {/* Active chat header */}
-                <div className="p-4 border-b border-white/10 flex justify-between items-center bg-slate-950/40">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center font-black text-white shrink-0 shadow-lg text-xs">
-                      {getInitials(activeChat.recruiterName)}
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-bold text-white">{activeChat.recruiterName}</h3>
-                      <p className="text-[10px] text-zinc-400 flex items-center gap-1 font-medium mt-0.5">
-                        <Briefcase className="w-3.5 h-3.5 text-zinc-500 shrink-0" /> {activeChat.jobTitle}
-                      </p>
-                    </div>
+                {/* Thread header */}
+                <div className="px-5 py-3.5 border-b border-white/8 flex items-center gap-3 shrink-0 bg-zinc-950/40">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-xs font-black text-white">
+                    {getInitials(activeChat.candidateId === user?.id ? activeChat.recruiterName : activeChat.candidateName)}
                   </div>
-
-                  {/* Calendar Quick action */}
-                  <Link href={`/candidate/jobs/${activeChat.jobId}`} passHref>
-                    <button className="flex items-center gap-1 text-[10px] uppercase font-mono tracking-wider font-bold py-1.5 px-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-lg text-zinc-300 transition duration-300 active:scale-95 cursor-pointer">
-                      <Calendar className="w-3.5 h-3.5 text-indigo-400" /> Book Interview
-                    </button>
-                  </Link>
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {activeChat.candidateId === user?.id ? activeChat.recruiterName : activeChat.candidateName}
+                    </p>
+                    <p className="text-[10px] text-zinc-500 flex items-center gap-1">
+                      <Briefcase className="w-2.5 h-2.5" /> {activeChat.jobTitle}
+                    </p>
+                  </div>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] text-emerald-400 font-mono">Live</span>
+                  </div>
                 </div>
 
-                {/* Messages log */}
-                <div className="flex-1 p-6 overflow-y-auto space-y-4 scrollbar-thin">
-                  {loadingMessages ? (
-                    <div className="flex justify-center py-12 text-zinc-400 text-xs items-center gap-1.5">
-                      <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" /> Loading message stream...
-                    </div>
-                  ) : (
-                    messages.map((msg) => {
-                      const isCandidate = msg.senderId === user?.id;
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  <AnimatePresence initial={false}>
+                    {messages.map(msg => {
+                      const isMine = msg.senderId === user?.id;
                       return (
-                        <div
+                        <motion.div
                           key={msg.id}
-                          className={`flex ${isCandidate ? 'justify-end' : 'justify-start'}`}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className={`flex ${isMine ? 'justify-end' : 'justify-start'} items-end gap-2`}
                         >
-                          <div
-                            className={`max-w-xs md:max-w-md p-3.5 rounded-2xl text-xs leading-relaxed border relative ${
-                              isCandidate
-                                ? 'bg-gradient-to-br from-indigo-600 to-purple-600 border-indigo-400/20 text-white rounded-br-none shadow shadow-indigo-500/10'
-                                : 'bg-white/5 border-white/10 text-zinc-200 rounded-bl-none'
-                            }`}
-                          >
-                            <p>{msg.text}</p>
-                            <span className="text-[8px] font-mono text-zinc-400 block text-right mt-1.5 select-none">
-                              {formatTime(msg.timestamp)}
-                            </span>
+                          {!isMine && (
+                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-[9px] font-black text-white shrink-0 mb-0.5">
+                              {getInitials(msg.senderName)}
+                            </div>
+                          )}
+                          <div className={`max-w-[70%] space-y-0.5 ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
+                            <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                              isMine
+                                ? 'bg-indigo-600 text-white rounded-br-sm'
+                                : 'bg-white/8 text-zinc-200 rounded-bl-sm'
+                            } ${msg.optimistic ? 'opacity-60' : ''}`}>
+                              {msg.text}
+                            </div>
+                            <div className={`flex items-center gap-1 text-[9px] text-zinc-600 px-1 ${isMine ? 'justify-end' : 'justify-start'}`}>
+                              {msgTime(msg.timestamp)}
+                              {isMine && (msg.optimistic
+                                ? <Check className="w-2.5 h-2.5" />
+                                : <CheckCheck className="w-2.5 h-2.5 text-indigo-400" />)}
+                            </div>
                           </div>
-                        </div>
+                        </motion.div>
                       );
-                    })
-                  )}
-                  <div ref={messagesEndRef} />
+                    })}
+                  </AnimatePresence>
+                  <div ref={bottomRef} />
                 </div>
 
-                {/* Chat input box */}
-                <form onSubmit={handleSendMessage} className="p-4 border-t border-white/10 bg-slate-950/40">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Type your message here..."
-                      value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
-                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!inputText.trim() || sending}
-                      className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center shrink-0 transition disabled:opacity-50 active:scale-95 cursor-pointer"
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
-                  </div>
+                {/* Input */}
+                <form onSubmit={handleSend} className="p-4 border-t border-white/8 flex items-end gap-3 shrink-0">
+                  <textarea
+                    ref={inputRef}
+                    value={inputText}
+                    onChange={e => setInputText(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+                    }}
+                    placeholder="Type a message… (Enter to send)"
+                    rows={1}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500/50 resize-none max-h-32 overflow-y-auto"
+                    style={{ fieldSizing: 'content' } as any}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!inputText.trim() || sending}
+                    className="w-10 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition shrink-0"
+                  >
+                    {sending
+                      ? <RefreshCw className="w-4 h-4 text-white animate-spin" />
+                      : <Send className="w-4 h-4 text-white" />}
+                  </button>
                 </form>
               </>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-3">
-                <MessageSquare className="w-12 h-12 text-zinc-800" />
-                <h3 className="font-bold text-zinc-400">Select a Conversation</h3>
-                <p className="text-xs text-zinc-500 max-w-sm leading-normal">
-                  Choose a recruiter from the left panel to display the conversation log and reply inline.
-                </p>
-              </div>
             )}
           </div>
-
         </div>
-
       </div>
     </CandidateLayout>
   );

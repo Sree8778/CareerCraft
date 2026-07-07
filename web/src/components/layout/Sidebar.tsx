@@ -3,20 +3,23 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Briefcase, Users, ClipboardList, LogOut, Sparkles, MessageSquare, Search, Building2, Webhook, Network } from 'lucide-react';
+import { Briefcase, Users, ClipboardList, LogOut, Sparkles, MessageSquare, Search, Building2, Webhook, Network, ClipboardCheck, UserCircle, Settings, Globe } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import React from 'react';
 
 const navLinks = [
-  { name: 'Dashboard', href: '/recruiter/dashboard', icon: <Briefcase size={18} /> },
-  { name: 'Requisitions', href: '/recruiter/requisitions', icon: <ClipboardList size={18} /> },
-  { name: 'Candidates Pool', href: '/recruiter/candidates', icon: <Users size={18} /> },
-  { name: 'AI Sourcing Search', href: '/recruiter/sourcing', icon: <Search size={18} /> },
-  { name: 'Company Directory', href: '/companies', icon: <Building2 size={18} /> },
-  { name: 'Messages', href: '/recruiter/messages', icon: <MessageSquare size={18} /> },
-  { name: 'Webhook Integrations', href: '/recruiter/webhooks', icon: <Webhook size={18} /> },
-  { name: 'Ecosystem Network', href: '/recruiter/network', icon: <Network size={18} /> },
+  { name: 'Dashboard',            href: '/recruiter/dashboard',    icon: <Briefcase size={18} /> },
+  { name: 'Requisitions',         href: '/recruiter/requisitions', icon: <ClipboardList size={18} /> },
+  { name: 'Applications Review',  href: '/recruiter/applications', icon: <ClipboardCheck size={18} /> },
+  { name: 'Candidates Pool',      href: '/recruiter/candidates',   icon: <Users size={18} /> },
+  { name: 'Passive Sourcing',     href: '/recruiter/sourcing',     icon: <Globe size={18} /> },
+  { name: 'Company Directory',    href: '/companies',              icon: <Building2 size={18} /> },
+  { name: 'Messages',             href: '/recruiter/messages',     icon: <MessageSquare size={18} /> },
+  { name: 'Ecosystem Network',    href: '/recruiter/network',      icon: <Network size={18} /> },
+  { name: 'Webhook Integrations', href: '/recruiter/webhooks',     icon: <Webhook size={18} /> },
+  { name: 'My Profile',           href: '/recruiter/profile',      icon: <UserCircle size={18} /> },
+  { name: 'Settings',             href: '/recruiter/settings',     icon: <Settings size={18} /> },
 ];
 
 export default function Sidebar() {
@@ -58,17 +61,6 @@ export default function Sidebar() {
             );
           })}
           
-          <Link
-            href="/recruiter/applications"
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ${
-              pathname === '/recruiter/applications'
-                ? 'bg-gradient-to-r from-purple-500/20 to-indigo-500/10 border-l-2 border-purple-400 text-white shadow shadow-purple-500/5' 
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
-            }`}
-          >
-            <span role="img" aria-label="Applications" className="text-zinc-500">📋</span>
-            Applications Review
-          </Link>
         </nav>
       </div>
 

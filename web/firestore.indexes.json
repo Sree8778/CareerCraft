@@ -1,0 +1,101 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "applications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recruiterId", "order": "ASCENDING" },
+        { "fieldPath": "appliedDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "applications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "candidateId", "order": "ASCENDING" },
+        { "fieldPath": "appliedDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "applications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "jobId", "order": "ASCENDING" },
+        { "fieldPath": "appliedDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recruiterId", "order": "ASCENDING" },
+        { "fieldPath": "postedDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "postedDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "connections",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "senderId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "connections",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "receiverId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chats",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "candidateId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chats",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recruiterId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "interviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "candidateId", "order": "ASCENDING" },
+        { "fieldPath": "scheduledAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "interviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recruiterId", "order": "ASCENDING" },
+        { "fieldPath": "scheduledAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

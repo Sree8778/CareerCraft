@@ -14,7 +14,7 @@ import CandidateLayout from '@/components/layout/CandidateLayout';
 import { API_BASE, authHeader, jsonHeaders } from '@/lib/api';
 
 export default function JobListingsPage() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, getToken, loading: authLoading } = useAuth();
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [allJobs, setAllJobs] = useState<Job[]>([]); // Store all fetched jobs
@@ -36,7 +36,7 @@ export default function JobListingsPage() {
   const fetchAlerts = async () => {
     if (!user?.id) return;
     try {
-      const res = await fetch(`${API_BASE}/job-alerts`, { headers: authHeader(user.id) });
+      const res = await fetch(`${API_BASE}/job-alerts`, { headers: await authHeader(getToken) });
       if (res.ok) setAlerts((await res.json()).alerts ?? []);
     } catch { /* silent */ }
   };
@@ -47,7 +47,7 @@ export default function JobListingsPage() {
     try {
       const res = await fetch(`${API_BASE}/job-alerts`, {
         method: 'POST',
-        headers: jsonHeaders(user!.id),
+        headers: await jsonHeaders(getToken),
         body: JSON.stringify({ keywords: alertKeywords, location: alertLocation }),
       });
       if (!res.ok) throw new Error();
@@ -61,7 +61,7 @@ export default function JobListingsPage() {
 
   const handleDeleteAlert = async (id: string) => {
     try {
-      await fetch(`${API_BASE}/job-alerts/${id}`, { method: 'DELETE', headers: authHeader(user!.id) });
+      await fetch(`${API_BASE}/job-alerts/${id}`, { method: 'DELETE', headers: await authHeader(getToken) });
       setAlerts(prev => prev.filter(a => a.id !== id));
       toast.success('Alert removed');
     } catch { toast.error('Failed to remove alert'); }
@@ -71,6 +71,7 @@ export default function JobListingsPage() {
 
   useEffect(() => {
     // Redirect non-candidates or unauthenticated users
+    if (authLoading) return;
     if (!isAuthenticated || user?.role !== 'candidate') {
       router.push('/');
       return;
@@ -81,14 +82,10 @@ export default function JobListingsPage() {
       try {
         const [jobsResponse, appsResponse] = await Promise.all([
           fetch(`${API_BASE}/jobs`, {
-            headers: {
-              'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
-            },
+            headers: { 'Authorization': `Bearer ${await getToken()}` },
           }),
           fetch(`${API_BASE}/applications?candidateId=${user.id}`, {
-            headers: {
-              'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
-            },
+            headers: { 'Authorization': `Bearer ${await getToken()}` },
           })
         ]);
         
@@ -120,7 +117,7 @@ export default function JobListingsPage() {
     };
 
     fetchJobs();
-  }, [isAuthenticated, user, router]);
+  }, [isAuthenticated, user, router, authLoading]);
 
   // Standard Keyword Search Filter
   useEffect(() => {
@@ -157,7 +154,7 @@ export default function JobListingsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
+          'Authorization': `Bearer ${await getToken()}`,
           'X-Gemini-API-Key': customKey
         },
         body: JSON.stringify({
@@ -217,7 +214,7 @@ export default function JobListingsPage() {
     toast.success("Filters reset successfully!");
   };
 
-  if (!isAuthenticated || user?.role !== 'candidate') {
+  if (authLoading || !isAuthenticated || user?.role !== 'candidate') {
     return null;
   }
 

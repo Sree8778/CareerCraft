@@ -8,7 +8,7 @@ dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 
 # Lightweight model — gemini-2.0-flash is fast, low-cost, and not deprecated
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash")
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
 
 # Module-level client cache — recreated only when the API key changes
 _current_api_key = None
@@ -66,6 +66,14 @@ def structure_text_with_ai(raw_resume_text: str) -> dict:
     You are an expert resume parsing assistant. Analyze the following raw text extracted from a resume and convert it into a structured JSON object.
     The JSON object must follow this exact schema.
     Do not add any fields that are not in the schema. Do not enclose the JSON in markdown backticks.
+
+    CRITICAL — 'summary' field:
+    Many resumes place the professional summary/objective/profile paragraph IMMEDIATELY AFTER
+    the contact information WITHOUT an explicit "Summary" or "Profile" section header.
+    You MUST extract this text into the 'summary' field even when there is no section header.
+    Look for any paragraph (3+ sentences or 30+ words) that describes the candidate's background,
+    years of experience, key skills, and career goals — that IS the summary.
+    Do NOT leave 'summary' as an empty string if such a paragraph exists anywhere in the text.
 
     For the 'summary', 'description', and 'achievements' fields, if the original text contains bullet points, format them as an unordered HTML list (`<ul><li>...</li><li>...</li></ul>`). If the original text contains paragraphs, format them as HTML paragraphs (`<p>...</p>`). If text is bold or italic, use `<strong>` or `<em>` HTML tags. Ensure nested structures are correctly represented in HTML.
 
@@ -467,6 +475,200 @@ def grade_resume_match_score(resume_data: dict, job_details: dict) -> dict:
             "missingKeywords": ["Scale Architecture"],
             "optimizationTips": ["Tailor experience descriptions to showcase quantitative impact."]
         }
+
+def analyze_job_fit_comprehensive(resume_data: dict, job_details: dict, rule_based: dict) -> dict:
+    """
+    One-shot comprehensive job fit analysis using Gemini.
+    Produces: tailored resume bullets, cover letter, missing-skill tutorials, project ideas.
+    rule_based is pre-computed so the AI focuses on content, not just scoring.
+    """
+    missing_str = ", ".join(rule_based.get("missingSkills", [])[:8]) or "none identified"
+    prompt = f"""
+You are an expert career coach, ATS specialist, and software engineering mentor.
+
+A candidate is applying for the following job:
+{json.dumps(job_details, indent=2)}
+
+Their resume:
+{json.dumps(resume_data, indent=2)}
+
+Pre-computed ATS score: {rule_based.get("score", "N/A")}/100
+Missing skills identified: {missing_str}
+
+Produce a raw JSON object with EXACTLY these fields (no markdown, no extra text):
+{{
+  "tailoredBullets": [
+    "3-5 strong resume bullet points tailored for this specific job, rewriting the candidate's real experience using the job's language and keywords. Each bullet must start with a strong action verb and include a measurable result where possible."
+  ],
+  "coverLetter": "A compelling 250-350 word cover letter tailored to this job. Professional tone, specific company/role references, no generic filler. Sign off with 'Sincerely,' on a new line.",
+  "tutorials": [
+    {{
+      "skill": "Missing skill name",
+      "title": "Specific course or tutorial title",
+      "platform": "YouTube | Coursera | Udemy | freeCodeCamp | official docs",
+      "estimatedHours": "e.g. 4 hours",
+      "why": "One sentence on why this skill matters for this specific job"
+    }}
+  ],
+  "projects": [
+    {{
+      "title": "Project name",
+      "description": "2-sentence description of what to build and what skills it demonstrates",
+      "skills": ["skill1", "skill2"],
+      "difficulty": "Beginner | Intermediate | Advanced",
+      "estimatedDays": "e.g. 3-5 days"
+    }}
+  ],
+  "optimizationTips": ["3-4 specific actionable tips to improve this resume for this job"]
+}}
+
+Rules:
+- tailoredBullets: 4-5 bullets, drawn from candidate's REAL experience, adapted to job language
+- tutorials: 3-4 entries, one per key missing skill, specific titles (not generic "learn Python")
+- projects: 2-3 portfolio project ideas that directly address the skills gap
+- coverLetter: use candidate's actual name, company name, and job title
+- Output ONLY the JSON object, nothing else
+"""
+    try:
+        response = _get_client().models.generate_content(model=GEMINI_MODEL_NAME, contents=prompt)
+        text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(text)
+    except Exception as e:
+        print(f"[gemini_utils] analyze_job_fit_comprehensive error: {e}")
+        return {
+            "tailoredBullets": [
+                f"Delivered scalable solutions directly aligned with {job_details.get('title', 'the role')}'s technical requirements.",
+                "Collaborated cross-functionally to ship features ahead of schedule, reducing time-to-market by 20%.",
+                "Designed and implemented systems that improved reliability and reduced operational overhead.",
+            ],
+            "coverLetter": f"Dear Hiring Manager,\n\nI am excited to apply for the {job_details.get('title','position')} role at {job_details.get('company','your company')}. My background aligns well with your requirements and I am confident I can add immediate value to your team.\n\nThank you for your consideration.\n\nSincerely,\n{resume_data.get('personal', {}).get('name', 'Candidate')}",
+            "tutorials": [
+                {"skill": s, "title": f"Complete {s} Bootcamp", "platform": "YouTube", "estimatedHours": "4-6 hours", "why": f"{s} is listed as a core requirement for this role."}
+                for s in rule_based.get("missingSkills", [])[:3]
+            ],
+            "projects": [
+                {"title": "Full-Stack Portfolio Project", "description": "Build a complete web application using the required stack. Deploy it publicly to demonstrate production-level skills.", "skills": rule_based.get("missingSkills", [])[:3], "difficulty": "Intermediate", "estimatedDays": "7-10 days"}
+            ],
+            "optimizationTips": [
+                "Use keywords from the job description verbatim in your resume — ATS systems do exact matching.",
+                "Quantify every achievement with numbers, percentages, or dollar amounts.",
+                "Add the missing skills to your skills section after completing suggested tutorials.",
+            ],
+        }
+
+
+def analyze_candidate_for_recruiter(resume_data: dict, job_details: dict, rule_based_score: int, api_key: str = None) -> dict:
+    """
+    Unbiased recruiter-perspective analysis of a candidate against a job.
+    Stored with the application document so recruiters see it instantly.
+    api_key: use candidate's own key (avoids platform cost); falls back to module key if None.
+    """
+    from google import genai as _genai
+    client = _genai.Client(api_key=api_key) if api_key else _get_client()
+    model = GEMINI_MODEL_NAME
+
+    # Build condensed resume text to reduce token cost
+    personal = resume_data.get('personal', {}) or {}
+    exp_list = resume_data.get('experience', []) or []
+    edu_list = resume_data.get('education', []) or []
+    skills_list = resume_data.get('skills', []) or []
+    summary = resume_data.get('summary', '') or ''
+    certs = resume_data.get('certifications', []) or []
+
+    # Strip HTML from summary
+    try:
+        from bs4 import BeautifulSoup
+        summary_text = BeautifulSoup(summary, 'html.parser').get_text(' ')
+    except Exception:
+        import re
+        summary_text = re.sub(r'<[^>]+>', ' ', summary).strip()
+
+    skills_flat = []
+    for sg in skills_list:
+        if sg.get('skills_list'):
+            skills_flat.extend([s.strip() for s in sg['skills_list'].split(',') if s.strip()])
+
+    exp_text = '\n'.join(
+        f"- {e.get('jobTitle','')} @ {e.get('company','')} ({e.get('dates','')})"
+        for e in exp_list[:6]
+    )
+    edu_text = '\n'.join(
+        f"- {e.get('degree','')} from {e.get('institution','')} ({e.get('graduationYear','')})"
+        for e in edu_list[:3]
+    )
+    cert_text = ', '.join(c.get('name', '') for c in certs[:5]) or 'None'
+
+    prompt = f"""You are a senior talent acquisition specialist with 15+ years of recruiting experience. \
+Evaluate this candidate for the specified role with complete objectivity. Do NOT let gender, age, ethnicity, \
+nationality, university prestige, or company brand bias your assessment. Focus solely on demonstrated skills, \
+relevant experience, and measurable outcomes.
+
+JOB REQUIREMENTS:
+Title: {job_details.get('title', '')}
+Company: {job_details.get('company', '')}
+Description: {(job_details.get('description', '') or '')[:600]}
+Requirements: {json.dumps((job_details.get('requirements', []) or [])[:10])}
+
+CANDIDATE PROFILE:
+Name: {personal.get('name', 'Candidate')}
+Summary: {summary_text[:400]}
+Skills: {', '.join(skills_flat[:30])}
+Experience:
+{exp_text}
+Education:
+{edu_text}
+Certifications: {cert_text}
+
+PRE-COMPUTED ATS KEYWORD SCORE: {rule_based_score}/100
+
+Evaluate across ALL these dimensions — weight each honestly:
+1. Core technical skills coverage vs. job requirements
+2. Depth and recency of relevant experience
+3. Seniority level fit (years + scope of responsibility)
+4. Education adequacy (or practical compensation for it)
+5. Quality and specificity of achievements (quantified impact?)
+6. Career trajectory (progression, consistency, relevance)
+7. Red flags (gaps, frequent changes, scope mismatch)
+8. Unique value-adds or transferable strengths
+
+Produce ONLY a raw JSON object — no markdown, no extra text:
+{{
+  "matchScore": <integer 0-100, holistic assessment>,
+  "matchedSkills": [<specific skills/competencies candidate has that match job>],
+  "missingSkills": [<concrete skills or experience types the candidate lacks>],
+  "strengths": [<3-5 specific strengths relevant to THIS role>],
+  "concerns": [<specific, honest concerns a real recruiter would flag — max 4>],
+  "recommendation": "<Hire | Maybe | Pass>",
+  "aiSummary": "<3-4 sentence executive summary: lead with recommendation rationale, candidate's top strengths for this role, key gaps, and overall fit verdict. Factual and recruiter-ready.>"
+}}
+
+Scoring calibration:
+85-100 → Strong Hire: meets/exceeds most requirements, gaps are minor
+70-84 → Hire: solid fit, small gaps learnable on the job
+55-69 → Maybe: potential but notable gaps; worth a screening call
+40-54 → Pass/Maybe: significant mismatch; only if pipeline is thin
+<40 → Pass: major mismatch with core requirements"""
+
+    try:
+        resp = client.models.generate_content(model=model, contents=prompt)
+        text = resp.text.strip().replace('```json', '').replace('```', '').strip()
+        result = json.loads(text)
+        # Clamp score to 0-100
+        result['matchScore'] = max(0, min(100, int(result.get('matchScore', rule_based_score))))
+        return result
+    except Exception as e:
+        print(f"[gemini_utils] analyze_candidate_for_recruiter error: {e}")
+        rec = 'Hire' if rule_based_score >= 80 else 'Maybe' if rule_based_score >= 55 else 'Pass'
+        return {
+            'matchScore': rule_based_score,
+            'matchedSkills': [],
+            'missingSkills': [],
+            'strengths': [],
+            'concerns': [],
+            'recommendation': rec,
+            'aiSummary': f'ATS keyword match score: {rule_based_score}/100. AI narrative analysis unavailable.',
+        }
+
 
 def generate_company_profile_via_ai(company_name: str) -> dict | None:
     """Uses Gemini to search/generate a real-world company profile by name."""

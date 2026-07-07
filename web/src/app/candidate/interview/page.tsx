@@ -1,4 +1,4 @@
-﻿// src/app/candidate/interview/page.tsx
+// src/app/candidate/interview/page.tsx
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -26,7 +26,7 @@ const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HT
 Button.displayName = 'Button';
 
 export default function CandidateInterviewPage() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, getToken, loading: authLoading } = useAuth();
   const router = useRouter();
   
   // State variables
@@ -98,10 +98,11 @@ export default function CandidateInterviewPage() {
 
   // Auth Protection
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       router.push('/');
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, authLoading]);
 
   // Start Camera for Verification
   const startCamera = async () => {
@@ -174,7 +175,7 @@ export default function CandidateInterviewPage() {
       const response = await fetch(`${API_BASE_URL}/interviews/verify-identity`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`
+          'Authorization': `Bearer ${await getToken()}`
         },
         body: formData
       });
@@ -257,7 +258,7 @@ export default function CandidateInterviewPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
+          'Authorization': `Bearer ${await getToken()}`,
         },
         body: JSON.stringify({
           resumeData,
@@ -356,7 +357,7 @@ export default function CandidateInterviewPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
+          'Authorization': `Bearer ${await getToken()}`,
         },
         body: JSON.stringify({
           question: currentQuestion,
@@ -379,7 +380,7 @@ export default function CandidateInterviewPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}`,
+          'Authorization': `Bearer ${await getToken()}`,
         },
         body: JSON.stringify({
           resumeData,
@@ -502,7 +503,7 @@ export default function CandidateInterviewPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (!isAuthenticated) return null;
+  if (authLoading || !isAuthenticated) return null;
 
   return (
     <section className="min-h-screen p-6 bg-gradient-to-b from-black to-neutral-900 text-white flex flex-col items-center">
@@ -513,7 +514,7 @@ export default function CandidateInterviewPage() {
         <div className="flex justify-between items-center mb-8 bg-white/5 border border-white/10 rounded-2xl p-6 glass">
           <div>
             <h1 className="text-3xl font-extrabold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent max-sm:text-xl">
-              CareerCraft AI Voice Interview
+              RecruitEdge AI Voice Interview
             </h1>
             <p className="text-sm text-zinc-400 mt-1 max-sm:text-xs">
               Secure Turn-Based Technical Recruiter Assessor

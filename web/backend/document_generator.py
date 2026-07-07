@@ -182,7 +182,8 @@ def generate_docx_from_data(data):
             p = doc.add_paragraph(style=normal_style)
             p.add_run(edu.get('degree', '')).bold = True
             p.add_run(f", {edu.get('institution', '')}\n")
-            p.add_run(f"{edu.get('graduationYear', '')}{f' | GPA: {edu.get('gpa')}' if edu.get('gpa') else ''}\n").italic = True
+            gpa_part = (f' | GPA: {edu.get("gpa")}' if edu.get('gpa') else '')
+            p.add_run(f"{edu.get('graduationYear', '')}{gpa_part}\n").italic = True
             add_html_to_docx_paragraph(doc, p, edu.get('achievements', ''), normal_style)
             p.paragraph_format.space_after = Pt(12)
 

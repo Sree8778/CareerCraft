@@ -68,12 +68,15 @@ def require_auth(f):
         token = parts[1]
 
         # Mock tokens for local dev and easy testing
-        if token.startswith("mock_token"):
+        from flask import current_app
+        if token.startswith("mock_token") and current_app.debug:
+            _mock_uid = token.replace("mock_token_for_", "") if "mock_token_for_" in token else "mock_uid"
             request.user = {
-                "uid": token.replace("mock_token_for_", "") if "mock_token_for_" in token else "mock_uid",
-                "email": "developer@careercraft.mock",
+                "uid": _mock_uid,
+                "email": "developer@recruitedge.mock",
                 "name": "Developer"
             }
+            request.uid = _mock_uid
             return f(*args, **kwargs)
 
         if not firebase_initialized:
@@ -82,6 +85,7 @@ def require_auth(f):
         try:
             decoded_token = auth.verify_id_token(token)
             request.user = decoded_token
+            request.uid = decoded_token.get('uid')
         except Exception as e:
             print(f"Token verification error: {e}")
             return jsonify({"error": f"Invalid token: {str(e)}"}), 401

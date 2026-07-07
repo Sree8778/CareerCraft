@@ -5,14 +5,14 @@
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
-/** Build an Authorization header from a Firebase ID token or mock token. */
-export function authHeader(userId: string): Record<string, string> {
-  return { Authorization: `Bearer mock_token_for_${userId}` };
+/** Build an Authorization header using the real Firebase ID token. */
+export async function authHeader(getToken: () => Promise<string>): Promise<Record<string, string>> {
+  return { Authorization: `Bearer ${await getToken()}` };
 }
 
 /** Convenience: authHeader + JSON content-type. */
-export function jsonHeaders(userId: string): Record<string, string> {
-  return { ...authHeader(userId), 'Content-Type': 'application/json' };
+export async function jsonHeaders(getToken: () => Promise<string>): Promise<Record<string, string>> {
+  return { ...await authHeader(getToken), 'Content-Type': 'application/json' };
 }
 
 /** Shape of the 402 "no API keys" response from the backend. */

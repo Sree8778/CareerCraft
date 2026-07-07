@@ -1,44 +1,38 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, DollarSign } from 'lucide-react';
 
-const featuredJobs = [
-  {
-    id: 1,
-    title: 'Senior Full Stack Engineer',
-    company: 'Tech Innovations Inc.',
-    location: 'San Francisco, CA',
-    salary: '$120K - $150K',
-    emoji: '👨‍💻',
-  },
-  {
-    id: 2,
-    title: 'Marketing Specialist',
-    company: 'Global Marketing Solutions',
-    location: 'New York, NY',
-    salary: '$60K - $80K',
-    emoji: '📢',
-  },
-  {
-    id: 3,
-    title: 'UI/UX Designer',
-    company: 'Creative Designs Studio',
-    location: 'Austin, TX',
-    salary: '$85K - $110K',
-    emoji: '🎨',
-  },
-  {
-    id: 4,
-    title: 'Data Analyst',
-    company: 'Analytics Pro',
-    location: 'Chicago, IL',
-    salary: '$70K - $95K',
-    emoji: '📊',
-  },
-];
+const EMOJI_MAP: Record<string, string> = {
+  engineer: '👨‍💻', developer: '👨‍💻', software: '👨‍💻',
+  designer: '🎨', ux: '🎨', ui: '🎨',
+  marketing: '📢', analyst: '📊', data: '📊',
+  manager: '💼', director: '💼', lead: '💼',
+};
+
+function jobEmoji(title: string) {
+  const t = title.toLowerCase();
+  for (const [k, v] of Object.entries(EMOJI_MAP)) {
+    if (t.includes(k)) return v;
+  }
+  return '💼';
+}
+
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 export default function FeaturedJobs() {
+  const [jobs, setJobs] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`${API}/jobs`)
+      .then(r => r.json())
+      .then(d => setJobs((d.jobs || []).slice(0, 4)))
+      .catch(() => {});
+  }, []);
+
+  if (jobs.length === 0) return null;
+
   return (
     <section className="py-20 px-4 bg-transparent">
       <div className="max-w-6xl mx-auto">
@@ -53,7 +47,7 @@ export default function FeaturedJobs() {
         </motion.h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {featuredJobs.map((job, i) => (
+          {jobs.map((job, i) => (
             <motion.div
               key={job.id}
               initial={{ opacity: 0, y: 20 }}
@@ -64,7 +58,7 @@ export default function FeaturedJobs() {
               className="glass rounded-2xl p-6 shadow-md hover:shadow-purple-500/30 transition-all duration-300"
             >
               <div className="flex items-center gap-4 mb-3 text-white text-xl">
-                <span className="text-2xl">{job.emoji}</span>
+                <span className="text-2xl">{job.emoji || jobEmoji(job.title || '')}</span>
                 <div>
                   <h3 className="text-lg font-semibold">{job.title}</h3>
                   <p className="text-sm text-zinc-300">{job.company}</p>
@@ -73,11 +67,13 @@ export default function FeaturedJobs() {
 
               <div className="text-sm text-zinc-300 flex flex-col gap-1">
                 <p className="flex items-center gap-1">
-                  <MapPin className="w-4 h-4" /> {job.location}
+                  <MapPin className="w-4 h-4" /> {job.location || 'Remote'}
                 </p>
-                <p className="flex items-center gap-1">
-                  <DollarSign className="w-4 h-4" /> {job.salary}
-                </p>
+                {job.salary && (
+                  <p className="flex items-center gap-1">
+                    <DollarSign className="w-4 h-4" /> {job.salary}
+                  </p>
+                )}
               </div>
 
               <button className="mt-4 w-full bg-zinc-100/10 hover:bg-zinc-100/20 text-white text-sm py-2 px-4 rounded transition">

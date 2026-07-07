@@ -20,13 +20,13 @@ if not MASTER_KEY:
     print("WARNING: The vault is running in fallback development encryption mode. Do not use this fallback key in production!")
     MASTER_KEY = FALLBACK_KEY
 
+cipher_suite = None
 try:
-    # Ensure the key is correctly formatted as URL-safe base64 bytes
     fernet_key = MASTER_KEY.encode('utf-8')
     cipher_suite = Fernet(fernet_key)
 except Exception as e:
-    print(f"ERROR: Invalid Fernet key format: {e}. Falling back to default Fernet key for safety.")
-    cipher_suite = Fernet(FALLBACK_KEY.encode('utf-8'))
+    print(f"ERROR: Invalid Fernet key format: {e}. Generating a temporary in-memory key.")
+    cipher_suite = Fernet(Fernet.generate_key())
 
 def encrypt_key(plaintext: str) -> str:
     """

@@ -4,7 +4,7 @@
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import {
   Users, ClipboardList, TrendingUp, Sparkles,
-  ChevronRight, Calendar, UserCheck, Play, Award, ShieldCheck
+  ChevronRight, Calendar, UserCheck, Play, Award, ShieldCheck, FileText, RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRecruiter } from '@/hooks/useRecruiter';
@@ -16,7 +16,7 @@ import { API_BASE, authHeader } from '@/lib/api';
 
 export default function RecruiterDashboardPage() {
   const { name } = useRecruiter();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getToken, loading } = useAuth();
   const router = useRouter();
 
   const [hiringVelocity, setHiringVelocity] = useState(0);
@@ -24,21 +24,23 @@ export default function RecruiterDashboardPage() {
   const [totalApplications, setTotalApplications] = useState(0);
   const [totalInterviews, setTotalInterviews] = useState(0);
   const [completion, setCompletion] = useState<{ score: number; missing: string[] }>({ score: 0, missing: [] });
+  const [recentApps, setRecentApps] = useState<any[]>([]);
 
   useEffect(() => {
+    if (loading) return;
     if (!isAuthenticated) {
       router.push('/');
     } else if (user?.role !== 'recruiter') {
       router.push('/');
     }
-  }, [isAuthenticated, user, router]);
+  }, [isAuthenticated, user, router, loading]);
 
   useEffect(() => {
     if (!user?.id) return;
     const fetchStats = async () => {
       try {
         const res = await fetch(`${API_BASE}/stats/recruiter/${user.id}`, {
-          headers: authHeader(user.id),
+          headers: await authHeader(getToken),
         });
         if (res.ok) {
           const data = await res.json();
@@ -55,7 +57,7 @@ export default function RecruiterDashboardPage() {
     const fetchCompletion = async () => {
       try {
         const res = await fetch(`${API_BASE}/users/${user.id}/completion`, {
-          headers: authHeader(user.id),
+          headers: await authHeader(getToken),
         });
         if (res.ok) {
           const data = await res.json();
@@ -63,8 +65,21 @@ export default function RecruiterDashboardPage() {
         }
       } catch { /* keep defaults */ }
     };
+    const fetchRecentApps = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/applications?recruiterId=${user.id}`, {
+          headers: await authHeader(getToken),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setRecentApps((data.applications || []).slice(0, 4));
+        }
+      } catch { /* keep defaults */ }
+    };
+
     fetchStats();
     fetchCompletion();
+    fetchRecentApps();
   }, [user?.id]);
 
   if (!isAuthenticated || user?.role !== 'recruiter') {
@@ -191,7 +206,7 @@ export default function RecruiterDashboardPage() {
               
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[
-                  { name: 'Post New Requisition', href: '/recruiter/job-post', desc: 'Create and publish open job requisitions.', color: 'hover:border-purple-500/40' },
+                  { name: 'Post New Requisition', href: '/recruiter/requisitions/new', desc: 'Create and publish open job requisitions.', color: 'hover:border-purple-500/40' },
                   { name: 'Review Applications', href: '/recruiter/applications', desc: 'Scan and grade incoming applicant list.', color: 'hover:border-cyan-500/40' },
                   { name: 'Manage Account Profile', href: '/recruiter/profile', desc: 'Update details and settings.', color: 'hover:border-indigo-500/40' }
                 ].map((item) => (
@@ -305,45 +320,47 @@ export default function RecruiterDashboardPage() {
               </div>
             </motion.div>
 
-            {/* Live assessment screen list */}
+            {/* Recent applications feed */}
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, delay: 0.3 }}
               className="bg-slate-950/40 border border-white/10 p-6 rounded-3xl space-y-4 shadow-xl backdrop-blur-md"
             >
-              <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2 border-b border-white/5 pb-2.5">
-                <Calendar className="w-4 h-4 text-cyan-400" /> Active Screenings Feed
-              </h3>
+              <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
+                <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-cyan-400" /> Recent Applications
+                </h3>
+                <Link href="/recruiter/applications" className="text-[9px] font-mono text-purple-400 hover:text-purple-300 uppercase font-bold bg-white/5 py-1 px-2.5 rounded-full border border-white/5 transition">
+                  View All
+                </Link>
+              </div>
 
-              <div className="space-y-3.5">
-                <div className="p-3 bg-zinc-950/60 border border-white/5 rounded-xl space-y-2">
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-0.5">
-                      <span className="text-[8px] font-bold font-mono uppercase tracking-widest text-purple-400">Scheduled Screen</span>
-                      <h4 className="text-xs font-bold text-white">Jane Doe x CareerCraft</h4>
-                      <p className="text-[9px] text-zinc-500 italic">May 28, 2026 at 10:00 AM</p>
-                    </div>
-                    <span className="text-[8px] font-bold font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 rounded">
-                      Upcoming
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-zinc-950/60 border border-white/5 rounded-xl flex justify-between items-center text-xs">
-                  <div className="space-y-0.5">
-                    <span className="text-[8px] font-bold font-mono uppercase tracking-widest text-zinc-500">Video Screening Review</span>
-                    <h4 className="text-xs font-bold text-zinc-300">Technical Test: Marc L.</h4>
-                    <p className="text-[9px] text-emerald-400 flex items-center gap-1 font-mono font-bold">
-                      ✓ Completed (92% match)
-                    </p>
-                  </div>
-                  <Link href="/recruiter/candidates" passHref>
-                    <button type="button" className="py-1 px-2.5 bg-white/5 border border-white/10 hover:bg-purple-600/30 hover:border-purple-500/50 hover:text-white rounded-lg text-[9px] font-bold transition text-zinc-400 cursor-pointer">
-                      Review
-                    </button>
-                  </Link>
-                </div>
+              <div className="space-y-2.5">
+                {recentApps.length === 0 ? (
+                  <p className="text-[10px] text-zinc-500 italic text-center py-3">No applications received yet.</p>
+                ) : (
+                  recentApps.map((app) => {
+                    const statusColor =
+                      app.status === 'Hired' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' :
+                      app.status === 'Rejected' ? 'text-red-400 bg-red-500/10 border-red-500/30' :
+                      app.status === 'Shortlisted' ? 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30' :
+                      app.status === 'Interviewed' ? 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30' :
+                      'text-zinc-400 bg-white/5 border-white/10';
+                    return (
+                      <Link href={`/recruiter/applications/${app.id}`} key={app.id}
+                        className="flex items-center justify-between p-2.5 bg-zinc-950/40 border border-white/5 rounded-xl hover:border-purple-500/20 transition">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white truncate">{app.candidateName}</p>
+                          <p className="text-[9px] text-zinc-500 truncate">{app.jobTitle}</p>
+                        </div>
+                        <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full border shrink-0 ml-2 ${statusColor}`}>
+                          {app.status}
+                        </span>
+                      </Link>
+                    );
+                  })
+                )}
               </div>
             </motion.div>
 

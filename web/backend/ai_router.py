@@ -36,9 +36,9 @@ _ENDPOINTS: dict[str, str] = {
 # Lightweight models (JSON extraction, scoring, search)
 _MODELS_LIGHT: dict[str, str] = {
     "Gemini":     os.getenv("GEMINI_MODEL",  "gemini-2.5-flash"),
-    "Groq":       os.getenv("GROQ_MODEL",    "llama-3.1-8b-instant"),
+    "Groq":       os.getenv("GROQ_MODEL",    "llama3-8b-8192"),
     "OpenAI":     os.getenv("OPENAI_MODEL",  "gpt-4o-mini"),
-    "Anthropic":  os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),
+    "Anthropic":  os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest"),
     "NVIDIA NIM": os.getenv("NVIDIA_MODEL",  "meta/llama-3.1-8b-instruct"),
 }
 
@@ -47,7 +47,7 @@ _MODELS_HEAVY: dict[str, str] = {
     "Gemini":     os.getenv("GEMINI_MODEL_HEAVY",     "gemini-2.5-flash"),
     "Groq":       os.getenv("GROQ_MODEL_HEAVY",       "llama-3.3-70b-versatile"),
     "OpenAI":     os.getenv("OPENAI_MODEL_HEAVY",     "gpt-4o"),
-    "Anthropic":  os.getenv("ANTHROPIC_MODEL_HEAVY",  "claude-sonnet-4-6"),
+    "Anthropic":  os.getenv("ANTHROPIC_MODEL_HEAVY",  "claude-3-5-sonnet-latest"),
     "NVIDIA NIM": os.getenv("NVIDIA_MODEL_HEAVY",     "meta/llama-3.3-70b-instruct"),
 }
 
@@ -165,6 +165,9 @@ def _call_anthropic(key: str, model: str, prompt: str, max_tokens: int) -> str:
 def _dispatch(entry: KeyEntry, prompt: str, max_tokens: int, json_mode: bool, heavy: bool) -> str:
     """Call the correct provider API for one KeyEntry."""
     p = entry.provider
+    # Frontend sends "Claude" but our model tables use "Anthropic"
+    if p == "Claude":
+        p = "Anthropic"
     model = (_MODELS_HEAVY if heavy else _MODELS_LIGHT).get(p, "")
 
     if p == "Gemini":

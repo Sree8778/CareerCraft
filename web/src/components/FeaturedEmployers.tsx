@@ -1,17 +1,36 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 
-const featuredEmployers = [
-  { id: 1, name: 'Nexus Corp', emoji: '🏢' },
-  { id: 2, name: 'Synapse Tech', emoji: '🧠' },
-  { id: 3, name: 'Quantum Innovations', emoji: '🔬' },
-  { id: 4, name: 'Evergreen Solutions', emoji: '🌿' },
-  { id: 5, name: 'Pioneer Works', emoji: '🚀' },
-  { id: 6, name: 'Zenith Labs', emoji: '🧪' },
-];
+const INDUSTRY_EMOJI: Record<string, string> = {
+  tech: '🏢', software: '💻', ai: '🤖', cloud: '☁️',
+  design: '🎨', creative: '✨', health: '🏥', finance: '💰',
+  education: '📚', media: '📡',
+};
+
+function industryEmoji(industry = '') {
+  const t = industry.toLowerCase();
+  for (const [k, v] of Object.entries(INDUSTRY_EMOJI)) {
+    if (t.includes(k)) return v;
+  }
+  return '🏢';
+}
+
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 export default function FeaturedEmployers() {
+  const [employers, setEmployers] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`${API}/companies`)
+      .then(r => r.json())
+      .then(d => setEmployers((d.companies || []).slice(0, 6)))
+      .catch(() => {});
+  }, []);
+
+  if (employers.length === 0) return null;
+
   return (
     <section className="py-20 px-4 bg-transparent">
       <div className="max-w-6xl mx-auto">
@@ -26,9 +45,9 @@ export default function FeaturedEmployers() {
         </motion.h2>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-6">
-          {featuredEmployers.map((employer, i) => (
+          {employers.map((employer, i) => (
             <motion.div
-              key={employer.id}
+              key={employer.id || employer.name}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -41,9 +60,12 @@ export default function FeaturedEmployers() {
                 transition={{ duration: 0.6 }}
                 className="text-3xl mb-3"
               >
-                {employer.emoji}
+                {employer.emoji || industryEmoji(employer.industry)}
               </motion.div>
               <p className="text-white text-sm font-medium">{employer.name}</p>
+              {employer.industry && (
+                <p className="text-zinc-400 text-xs mt-1">{employer.industry}</p>
+              )}
             </motion.div>
           ))}
         </div>

@@ -3,20 +3,24 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Briefcase, User, LogOut, Search, FileEdit, Sparkles, MessageSquare, Building2, Network, Mic } from 'lucide-react';
+import { Briefcase, User, LogOut, Search, FileEdit, Sparkles, MessageSquare, Building2, Network, Mic, Settings, Video, ClipboardList, Zap } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import React from 'react';
 
 const navLinks = [
-  { name: 'Dashboard', href: '/candidate/dashboard', icon: <Briefcase size={18} /> },
-  { name: 'Browse Jobs', href: '/candidate/jobs', icon: <Search size={18} /> },
-  { name: 'Company Explorer', href: '/companies', icon: <Building2 size={18} /> },
-  { name: 'Resume Builder', href: '/candidate/resume-builder', icon: <FileEdit size={18} /> },
-  { name: 'Practice Interview', href: '/candidate/interview/practice', icon: <Mic size={18} /> },
-  { name: 'Messages', href: '/candidate/messages', icon: <MessageSquare size={18} /> },
-  { name: 'Ecosystem Network', href: '/candidate/network', icon: <Network size={18} /> },
-  { name: 'Profile Settings', href: '/candidate/profile', icon: <User size={18} /> },
+  { name: 'Dashboard',        href: '/candidate/dashboard',         icon: <Briefcase size={18} /> },
+  { name: 'Browse Jobs',      href: '/candidate/jobs',              icon: <Search size={18} /> },
+  { name: 'My Applications',  href: '/candidate/applications',      icon: <ClipboardList size={18} /> },
+  { name: 'Company Explorer', href: '/companies',                   icon: <Building2 size={18} /> },
+  { name: 'Resume Builder',   href: '/candidate/resume-builder',    icon: <FileEdit size={18} /> },
+  { name: 'AI Interview',     href: '/candidate/interview',         icon: <Video size={18} /> },
+  { name: 'Practice Mode',    href: '/candidate/interview/practice',icon: <Mic size={18} /> },
+  { name: 'Messages',         href: '/candidate/messages',          icon: <MessageSquare size={18} /> },
+  { name: 'Ecosystem Network',href: '/candidate/network',           icon: <Network size={18} /> },
+  { name: 'My Profile',       href: '/candidate/profile',           icon: <User size={18} /> },
+  { name: 'Smart Apply',      href: '/candidate/smart-apply',       icon: <Zap size={18} /> },
+  { name: 'Settings',         href: '/candidate/settings',          icon: <Settings size={18} /> },
 ];
 
 export default function CandidateSidebar() {
@@ -64,7 +68,7 @@ export default function CandidateSidebar() {
       <div className="border-t border-white/5 pt-4 space-y-4">
         {user && (
           <Link
-            href="/candidate/profile"
+            href="/candidate/settings"
             className="flex items-center gap-3 p-2 rounded-xl bg-zinc-950/40 border border-white/5 shadow-inner hover:bg-white/5 hover:border-white/10 transition cursor-pointer"
           >
             <div className="relative">
