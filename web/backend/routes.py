@@ -3423,109 +3423,116 @@ def smart_apply_search():
         except Exception as e:
             print(f'RemoteOK error: {e}')
 
-    # ── Indeed via Apify actor (bebity/indeed-scraper) ──────────────────────
-    if 'indeed' in sources:
-        if apify_key:
-            # Build per-role search terms; use first role for simpler queries
-            _indeed_query = roles[0] if roles else query
-            try:
-                resp = _requests_lib.post(
-                    'https://api.apify.com/v2/acts/bebity~indeed-scraper/run-sync-get-dataset-items',
-                    params={'token': apify_key, 'timeout': 60, 'memory': 512},
-                    json={
-                        'keyword':      _indeed_query,
-                        'location':     location,
-                        'maxItems':     20,
-                        # Legacy field names some actor versions use:
-                        'searchQuery':  _indeed_query,
-                        'locationQuery': location,
-                        'maxResults':   20,
-                    },
-                    timeout=90,
-                )
-                if resp.ok:
-                    _body = resp.json()
-                    items = _body if isinstance(_body, list) else _body.get('items', []) if isinstance(_body, dict) else []
-                    for item in items[:20]:
-                        url = item.get('url') or item.get('jobUrl') or item.get('applyUrl') or item.get('externalApplyLink') or ''
-                        if not url:
-                            continue
-                        jobs.append({
-                            'title':       item.get('title', '') or item.get('positionName', ''),
-                            'company':     item.get('company') or item.get('companyName', ''),
-                            'location':    item.get('location') or item.get('jobLocation', location),
-                            'salary':      item.get('salary') or item.get('jobSalary', ''),
-                            'description': (item.get('description') or item.get('snippet') or item.get('jobDescription') or '')[:600],
-                            'url':         url,
-                            'source':      'indeed',
-                            'tags':        [],
-                            'logo':        item.get('companyLogo') or item.get('companyImage', ''),
-                        })
+    def _run_apify_actor(actor_slug, input_payload, source_name):
+        """Call an Apify run-sync actor and return a list of raw items (may be empty)."""
+        try:
+            resp = _requests_lib.post(
+                f'https://api.apify.com/v2/acts/{actor_slug}/run-sync-get-dataset-items',
+                params={'token': apify_key, 'timeout': 60, 'memory': 512},
+                json=input_payload,
+                timeout=90,
+            )
+            if resp.ok:
+                body = resp.json()
+                return body if isinstance(body, list) else body.get('items', []) if isinstance(body, dict) else []
+            else:
+                err_body = resp.json() if resp.headers.get('content-type', '').startswith('application/json') else {}
+                err_type = err_body.get('error', {}).get('type', '') if isinstance(err_body.get('error'), dict) else ''
+                if err_type in ('actor-is-not-rented', 'actor-not-rented'):
+                    print(f'Apify {source_name}: actor requires rental — skipping')
                 else:
-                    print(f'Apify Indeed {resp.status_code}: {resp.text[:300]}')
-            except Exception as e:
-                print(f'Apify Indeed error: {e}')
-        else:
-            print('Indeed skipped — no Apify key in user wallet')
+                    print(f'Apify {source_name} {resp.status_code}: {resp.text[:200]}')
+        except Exception as e:
+            print(f'Apify {source_name} error: {e}')
+        return []
 
-    # ── LinkedIn via Apify actor (bebity/linkedin-jobs-scraper) ─────────────
-    if 'linkedin' in sources:
-        if apify_key:
-            _linkedin_query = roles[0] if roles else query
-            try:
-                resp = _requests_lib.post(
-                    'https://api.apify.com/v2/acts/bebity~linkedin-jobs-scraper/run-sync-get-dataset-items',
-                    params={'token': apify_key, 'timeout': 60, 'memory': 512},
-                    json={
-                        'keyword':       _linkedin_query,
-                        'location':      location,
-                        'maxItems':      20,
-                        # Legacy field names:
-                        'searchQuery':   _linkedin_query,
-                        'locationQuery': location,
-                        'maxResults':    20,
-                    },
-                    timeout=90,
-                )
-                if resp.ok:
-                    _body = resp.json()
-                    items = _body if isinstance(_body, list) else _body.get('items', []) if isinstance(_body, dict) else []
-                    for item in items[:20]:
-                        url = item.get('url') or item.get('jobUrl') or item.get('link') or item.get('jobLink') or ''
-                        if not url:
-                            continue
-                        jobs.append({
-                            'title':       item.get('title', '') or item.get('position', ''),
-                            'company':     item.get('company') or item.get('companyName', ''),
-                            'location':    item.get('location') or item.get('jobLocation', location),
-                            'salary':      item.get('salary', ''),
-                            'description': (item.get('description') or item.get('snippet') or item.get('jobDescription') or '')[:600],
-                            'url':         url,
-                            'source':      'linkedin',
-                            'tags':        [],
-                            'logo':        item.get('companyLogo') or item.get('companyImage', ''),
-                        })
-                else:
-                    print(f'Apify LinkedIn {resp.status_code}: {resp.text[:300]}')
-            except Exception as e:
-                print(f'Apify LinkedIn error: {e}')
-        else:
-            print('LinkedIn skipped — no Apify key in user wallet')
+    # ── Indeed via Apify (haris2303/indeed-scraper — free public actor) ──────
+    if 'indeed' in sources and apify_key:
+        _indeed_query = roles[0] if roles else query
+        for _actor in ('haris2303~indeed-scraper', 'misceres~indeed-scraper',
+                       'maxcopell~indeed-scraper', 'bebity~indeed-scraper'):
+            _items = _run_apify_actor(_actor, {
+                'keyword': _indeed_query, 'location': location, 'maxItems': 20,
+                'country': 'US', 'position': _indeed_query,
+            }, 'Indeed')
+            if _items:
+                for item in _items[:20]:
+                    url = (item.get('url') or item.get('jobUrl') or item.get('applyUrl')
+                           or item.get('externalApplyLink') or item.get('positionLink') or '')
+                    if not url:
+                        continue
+                    jobs.append({
+                        'title':       item.get('title', '') or item.get('positionName', ''),
+                        'company':     item.get('company') or item.get('companyName', ''),
+                        'location':    item.get('location') or item.get('jobLocation', location),
+                        'salary':      item.get('salary') or item.get('jobSalary', ''),
+                        'description': (item.get('description') or item.get('snippet') or '')[:600],
+                        'url':         url,
+                        'source':      'indeed',
+                        'tags':        [],
+                        'logo':        item.get('companyLogo') or item.get('companyImage', ''),
+                    })
+                break  # stop trying actors once one succeeds
+
+    # ── LinkedIn via Apify ───────────────────────────────────────────────────
+    if 'linkedin' in sources and apify_key:
+        _linkedin_query = roles[0] if roles else query
+        for _actor in ('haris2303~linkedin-jobs-scraper', 'curious_coder~linkedin-jobs-scraper',
+                       'bebity~linkedin-jobs-scraper'):
+            _items = _run_apify_actor(_actor, {
+                'keyword': _linkedin_query, 'location': location, 'maxJobs': 20,
+                'searchKeywords': _linkedin_query,
+            }, 'LinkedIn')
+            if _items:
+                for item in _items[:20]:
+                    url = (item.get('url') or item.get('jobUrl') or item.get('link')
+                           or item.get('jobLink') or item.get('applyUrl') or '')
+                    if not url:
+                        continue
+                    jobs.append({
+                        'title':       item.get('title', '') or item.get('position', ''),
+                        'company':     item.get('company') or item.get('companyName', ''),
+                        'location':    item.get('location') or item.get('jobLocation', location),
+                        'salary':      item.get('salary', ''),
+                        'description': (item.get('description') or item.get('snippet') or '')[:600],
+                        'url':         url,
+                        'source':      'linkedin',
+                        'tags':        [],
+                        'logo':        item.get('companyLogo') or item.get('companyImage', ''),
+                    })
+                break
 
     now_str = datetime.datetime.utcnow().isoformat()
+
+    def _flat_tags(raw):
+        """Flatten/stringify tags so Firestore never sees nested arrays."""
+        if not isinstance(raw, list):
+            return []
+        out = []
+        for t in raw:
+            if isinstance(t, list):
+                out.extend(str(x) for x in t if x is not None)
+            elif t is not None:
+                out.append(str(t))
+        return out
 
     # ── Write to shared Firestore pool ───────────────────────────────────────
     if db and jobs:
         batch = db.batch()
         result = []
         for job in jobs:
+            job['tags'] = _flat_tags(job.get('tags', []))
             key     = _hashlib_lib.md5(f"{job['source']}|{job['url']}".encode()).hexdigest()
             ref     = db.collection('scraped_jobs').document(key)
             payload = {**job, 'search_key': search_key, 'query': query,
                        'scraped_at': datetime.datetime.utcnow(), 'scraped_by': uid}
             batch.set(ref, payload, merge=True)
             result.append({'id': key, **job, 'scraped_at': now_str})
-        batch.commit()
+        try:
+            batch.commit()
+        except Exception as _batch_err:
+            print(f'Firestore batch write failed: {_batch_err}')
+            result = [{'id': str(i), **j, 'scraped_at': now_str} for i, j in enumerate(jobs)]
     else:
         result = [{'id': str(i), **j, 'scraped_at': now_str} for i, j in enumerate(jobs)]
 
