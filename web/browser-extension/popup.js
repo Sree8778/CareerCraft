@@ -25,7 +25,7 @@ const FIELD_MAP = [
   { keys: ['full.?name', 'your.?name', 'applicant.?name', 'candidate.?name', 'contact.?name', '^name$', 'your name'], profileKey: 'name' },
 ];
 
-// This function is injected and runs inside the PAGE's JS context (world: MAIN)
+// Injected into PAGE main world — no chrome.* APIs allowed inside
 function doFillForm(profile, fieldMap) {
   function resolve(key) {
     const parts = (profile.name || '').trim().split(/\s+/).filter(Boolean);
@@ -38,55 +38,60 @@ function doFillForm(profile, fieldMap) {
     return (m[key] || '').trim();
   }
 
+  // Collect text clues about what this field is for
   function haystack(el) {
     const parts = [];
     const add = s => { if (s && s.trim()) parts.push(s.trim().toLowerCase()); };
 
-    // Attributes
+    // Direct attributes — most reliable signal
     if (el.name)        add(el.name.replace(/[_\-]/g, ' '));
     if (el.id)          add(el.id.replace(/[_\-]/g, ' '));
     if (el.placeholder) add(el.placeholder);
     add(el.getAttribute('aria-label'));
     add(el.getAttribute('data-label'));
     add(el.getAttribute('data-field-label'));
+    add(el.getAttribute('data-automation-id'));   // Workday
+    add(el.getAttribute('data-testid'));
     add(el.getAttribute('title'));
-    add(el.getAttribute('name'));
 
-    // aria-labelledby
+    // aria-labelledby — may reference multiple element ids
     const lbBy = el.getAttribute('aria-labelledby');
-    if (lbBy) lbBy.split(/\s+/).forEach(id => { const e = document.getElementById(id); if (e) add(e.textContent); });
+    if (lbBy) {
+      lbBy.split(/\s+/).forEach(id => {
+        const ref = document.getElementById(id) || el.getRootNode().getElementById?.(id);
+        if (ref) add(ref.textContent);
+      });
+    }
 
-    // Native label association
-    if (el.id) document.querySelectorAll('label').forEach(l => { if (l.htmlFor === el.id) add(l.textContent); });
-    if (el.labels) Array.from(el.labels).forEach(l => add(l.textContent));
+    // Native <label for="id"> association
+    if (el.id) {
+      (el.getRootNode() || document).querySelectorAll('label').forEach(l => {
+        if (l.htmlFor === el.id || l.getAttribute('for') === el.id) add(l.textContent);
+      });
+    }
+    if (el.labels && el.labels.length) Array.from(el.labels).forEach(l => add(l.textContent));
 
-    // Walk up DOM — at each level grab prev siblings + label-like children
+    // Walk up DOM — grab prev siblings and label-like elements near the input
     let node = el.parentElement;
-    for (let d = 0; d < 10 && node && node.tagName !== 'BODY'; d++) {
+    for (let d = 0; d < 10 && node && !/^(BODY|HTML)$/.test(node.tagName); d++) {
       if (node.tagName === 'LABEL') { add(node.textContent); break; }
 
-      // Previous siblings
+      // data-automation-id on parent containers (Workday pattern)
+      add(node.getAttribute('data-automation-id'));
+
+      // Previous siblings at this level
       let sib = node.previousElementSibling;
-      for (let s = 0; s < 4 && sib; s++, sib = sib.previousElementSibling) {
+      for (let s = 0; s < 3 && sib; s++, sib = sib.previousElementSibling) {
         const t = sib.textContent.trim();
-        if (t.length > 0 && t.length < 150) add(t);
+        if (t.length > 0 && t.length < 120) add(t);
       }
 
-      // Any label-like element inside this container that doesn't contain the input
-      ['label', 'legend', 'dt'].forEach(sel => {
-        node.querySelectorAll(sel).forEach(l => {
-          if (!l.contains(el)) { const t = l.textContent.trim(); if (t.length > 0 && t.length < 150) add(t); }
+      // Label/legend elements inside this container
+      try {
+        node.querySelectorAll('label,legend,dt,[class*="label" i],[class*="Label"]').forEach(l => {
+          if (!l.contains(el)) { const t = l.textContent.trim(); if (t.length < 120) add(t); }
         });
-      });
-      // class-based label selectors (case insensitive via attribute)
-      node.querySelectorAll('[class]').forEach(el2 => {
-        if (el2.contains(el)) return;
-        const cls = el2.className.toLowerCase();
-        if (cls.includes('label') || cls.includes('title') || cls.includes('heading')) {
-          const t = el2.textContent.trim();
-          if (t.length > 0 && t.length < 150) add(t);
-        }
-      });
+      } catch {}
 
       node = node.parentElement;
     }
@@ -98,27 +103,42 @@ function doFillForm(profile, fieldMap) {
     if (!value || el.disabled || el.readOnly) return false;
     try {
       el.focus();
-      const tag = el.tagName;
-      const proto = tag === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-      const setter = Object.getOwnPropertyDescriptor(proto, 'value');
-      if (setter && setter.set) setter.set.call(el, value);
+      const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+      if (desc && desc.set) desc.set.call(el, value);
       else el.value = value;
-      ['input', 'change', 'blur'].forEach(e => el.dispatchEvent(new Event(e, { bubbles: true, cancelable: true })));
+      ['input', 'change', 'blur'].forEach(t => el.dispatchEvent(new Event(t, { bubbles: true, cancelable: true })));
       el.dispatchEvent(new KeyboardEvent('keyup', { key: 'End', bubbles: true }));
       return true;
     } catch { return false; }
   }
 
-  const SKIP = ['hidden','submit','button','checkbox','radio','file','image','reset'];
-  const inputs = Array.from(document.querySelectorAll('input, textarea')).filter(el => {
-    if (el.tagName === 'INPUT' && SKIP.includes(el.type)) return false;
-    if (el.disabled || el.readOnly) return false;
-    return true;
-  });
+  // Collect inputs from normal DOM + shadow DOM
+  const SKIP = new Set(['hidden','submit','button','checkbox','radio','file','image','reset']);
+  function collectInputs(root) {
+    const list = [];
+    try {
+      root.querySelectorAll('input,textarea').forEach(el => {
+        if (el.tagName === 'INPUT' && SKIP.has(el.type)) return;
+        if (el.disabled || el.readOnly) return;
+        list.push(el);
+        // Check for shadow root on this element
+        if (el.shadowRoot) list.push(...collectInputs(el.shadowRoot));
+      });
+      // Traverse all shadow roots
+      root.querySelectorAll('*').forEach(el => {
+        if (el.shadowRoot) list.push(...collectInputs(el.shadowRoot));
+      });
+    } catch {}
+    return list;
+  }
+
+  const inputs = collectInputs(document);
 
   let filled = 0;
   for (const el of inputs) {
     const hs = haystack(el);
+    if (!hs) continue;
     for (const { keys, profileKey } of fieldMap) {
       let matched = false;
       for (const pat of keys) {
@@ -226,15 +246,26 @@ btnFill.addEventListener('click', async () => {
 
   let count = 0;
   try {
+    // allFrames: true so we reach forms embedded in iframes (Workday, Taleo, iCIMS, etc.)
     const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
+      target: { tabId: tab.id, allFrames: true },
       world: 'MAIN',
       func: doFillForm,
       args: [profile, FIELD_MAP],
     });
-    count = results?.[0]?.result ?? 0;
+    count = (results || []).reduce((sum, r) => sum + (r?.result || 0), 0);
   } catch (err) {
     console.error('executeScript failed:', err);
+    // Fallback: try main frame only
+    try {
+      const r2 = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: 'MAIN',
+        func: doFillForm,
+        args: [profile, FIELD_MAP],
+      });
+      count = r2?.[0]?.result || 0;
+    } catch {}
   }
 
   fillResult.style.display = 'block';
