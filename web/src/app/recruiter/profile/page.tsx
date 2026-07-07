@@ -7,7 +7,7 @@ import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { toast } from 'sonner';
 import { encryptApiKey } from '@/lib/crypto';
 import { KeyRound, CheckCircle, Trash2, ExternalLink, PlusCircle, RefreshCw, ShieldAlert, ShieldCheck, QrCode, Lock } from 'lucide-react';
-import { jsonHeaders } from '@/lib/api';
+import { API_BASE, jsonHeaders } from '@/lib/api';
 
 type Provider = 'Gemini' | 'OpenAI' | 'Claude' | 'Groq';
 
@@ -18,10 +18,9 @@ interface WalletKey {
   encryptedKey?: string;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 export default function RecruiterProfilePage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getToken, loading } = useAuth();
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
 
@@ -44,12 +43,13 @@ export default function RecruiterProfilePage() {
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (loading) return;
     if (!isAuthenticated) {
       router.push('/');
     } else if (user?.role !== 'recruiter') {
       router.push('/');
     }
-  }, [isAuthenticated, user, router]);
+  }, [isAuthenticated, user, router, loading]);
 
   // Load wallet from localStorage on mount
   useEffect(() => {
@@ -77,7 +77,7 @@ export default function RecruiterProfilePage() {
     try {
       const res = await fetch(`${API_BASE}/vault/verify-key`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${await getToken()}` },
         body: JSON.stringify({ provider: selectedProvider, key: keyVal }),
       });
       const result = await res.json();
@@ -92,7 +92,7 @@ export default function RecruiterProfilePage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user?.id}`,
+          'Authorization': `Bearer ${await getToken()}`,
         },
         body: JSON.stringify({ uid: user?.id, provider: selectedProvider, key: keyVal }),
       });
@@ -144,7 +144,7 @@ export default function RecruiterProfilePage() {
   const handleSetup2FA = async () => {
     setTfaLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/2fa/setup`, { method: 'POST', headers: jsonHeaders(user!.id) });
+      const res = await fetch(`${API_BASE}/auth/2fa/setup`, { method: 'POST', headers: await jsonHeaders(getToken) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setTfaSecret(data.secret); setTfaUri(data.uri); setTfaStep('setup');
@@ -156,7 +156,7 @@ export default function RecruiterProfilePage() {
     if (tfaOtp.length < 6) { toast.error('Enter the 6-digit code'); return; }
     setTfaLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/2fa/verify`, { method: 'POST', headers: jsonHeaders(user!.id), body: JSON.stringify({ otp: tfaOtp }) });
+      const res = await fetch(`${API_BASE}/auth/2fa/verify`, { method: 'POST', headers: await jsonHeaders(getToken), body: JSON.stringify({ otp: tfaOtp }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setTfaEnabled(true); setTfaStep('idle'); setTfaOtp('');
@@ -169,7 +169,7 @@ export default function RecruiterProfilePage() {
     if (tfaOtp.length < 6) { toast.error('Enter your current authenticator code'); return; }
     setTfaLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/2fa/disable`, { method: 'POST', headers: jsonHeaders(user!.id), body: JSON.stringify({ otp: tfaOtp }) });
+      const res = await fetch(`${API_BASE}/auth/2fa/disable`, { method: 'POST', headers: await jsonHeaders(getToken), body: JSON.stringify({ otp: tfaOtp }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setTfaEnabled(false); setTfaStep('idle'); setTfaOtp('');
@@ -184,7 +184,7 @@ export default function RecruiterProfilePage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user?.id}`,
+          'Authorization': `Bearer ${await getToken()}`,
         },
         body: JSON.stringify({ uid: user?.id, keyId: id }),
       });
@@ -206,7 +206,7 @@ export default function RecruiterProfilePage() {
     try {
       const res = await fetch(`${API_BASE}/users/${user?.id}/profile`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer mock_token_for_${user?.id}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${await getToken()}` },
         body: JSON.stringify({ fullName: hrName, organizationName, industry: industryId }),
       });
       if (!res.ok) throw new Error('Save failed');

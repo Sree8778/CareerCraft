@@ -3,14 +3,14 @@
 
 import { useState, useEffect } from 'react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Webhook, Plus, Play, Link2, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { API_BASE } from '@/lib/api';
 
 export default function WebhooksPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getToken, loading: authLoading } = useAuth();
   const router = useRouter();
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,19 +24,20 @@ export default function WebhooksPage() {
   const [pingStatus, setPingStatus] = useState<Record<string, 'idle' | 'pinging' | 'success' | 'failed'>>({});
 
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated || user?.role !== 'recruiter') {
       router.push('/');
       return;
     }
     fetchSubscriptions();
-  }, [isAuthenticated, user, router]);
+  }, [isAuthenticated, user, router, authLoading]);
 
   const fetchSubscriptions = async () => {
     if (!user) return;
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/webhooks/subscriptions`, {
-        headers: { 'Authorization': `Bearer mock_token_for_${user.id}` },
+        headers: { 'Authorization': `Bearer ${await getToken()}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -73,7 +74,7 @@ export default function WebhooksPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user.id}`,
+          'Authorization': `Bearer ${await getToken()}`,
         },
         body: JSON.stringify({ url, description }),
       });
@@ -103,7 +104,7 @@ export default function WebhooksPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user.id}`,
+          'Authorization': `Bearer ${await getToken()}`,
         },
         body: JSON.stringify({ url: subUrl }),
       });

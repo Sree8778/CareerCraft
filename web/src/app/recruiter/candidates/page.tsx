@@ -1,184 +1,94 @@
 ﻿// src/app/recruiter/candidates/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import CandidateCard from '@/components/recruiter/CandidateCard';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Search, SlidersHorizontal, ArrowRightLeft, UserCheck, Award, X, RefreshCw } from 'lucide-react';
+import { Sparkles, SlidersHorizontal, X, RefreshCw } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-
-const defaultCandidates = [
-  {
-    id: '1',
-    name: 'Jane Doe',
-    role: 'Frontend Developer',
-    status: 'Shortlisted',
-    location: 'New York',
-    experience: '3 years',
-    skills: 'React, Next.js, CSS, TailwindCSS'
-  },
-  {
-    id: '2',
-    name: 'John Smith',
-    role: 'Backend Developer',
-    status: 'Interviewed',
-    location: 'San Francisco',
-    experience: '5 years',
-    skills: 'Python, Flask, PostgreSQL, Docker, AWS'
-  },
-  {
-    id: '3',
-    name: 'Alice Johnson',
-    role: 'Frontend Developer',
-    status: 'Applied',
-    location: 'Remote',
-    experience: '2 years',
-    skills: 'Vue.js, Nuxt.js, CSS Grid, HTML5'
-  },
-  {
-    id: '4',
-    name: 'Robert Chen',
-    role: 'Full Stack Engineer',
-    status: 'Applied',
-    location: 'Seattle',
-    experience: '4 years',
-    skills: 'Node.js, Express, React, MongoDB, Redis'
-  }
-];
+import { useAuth } from '@/contexts/AuthContext';
+import { API_BASE } from '@/lib/api';
 
 const statusOptions = ['All', 'Shortlisted', 'Interviewed', 'Applied'];
-const roleOptions = ['All', 'Frontend Developer', 'Backend Developer', 'Full Stack Engineer'];
 
 export default function CandidateListPage() {
-  const [candidates, setCandidates] = useState<any[]>(defaultCandidates);
-  const [displayedCandidates, setDisplayedCandidates] = useState<any[]>(defaultCandidates);
+  const { getToken } = useAuth();
+  const [candidates, setCandidates] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState('All');
   const [roleFilter, setRoleFilter] = useState('All');
-  
+
   // AI Recruiter Copilot States
   const [copilotQuery, setCopilotQuery] = useState('');
   const [isCopilotActive, setIsCopilotActive] = useState(false);
+  const [copilotResults, setCopilotResults] = useState<any[]>([]);
   const [showCopilotSidebar, setShowCopilotSidebar] = useState(false);
   const [copilotLoading, setCopilotLoading] = useState(false);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
-
-  // Load candidates from Firestore if available, otherwise use default mocks
+  // Real-time Firestore listener for candidates
   useEffect(() => {
-    const loadCandidates = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'users'));
-        const usersList: any[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.role === 'candidate') {
-            usersList.push({
-              id: doc.id,
-              name: data.name || 'Candidate',
-              role: data.targetRole || 'Software Engineer',
-              status: data.status || 'Applied',
-              location: data.location || 'Remote',
-              experience: data.experienceYears || '2 years',
-              skills: data.skills || 'React, SQL, Node.js'
-            });
-          }
-        });
-        
-        if (usersList.length > 0) {
-          setCandidates(usersList);
-          setDisplayedCandidates(usersList);
-        }
-      } catch (err) {
-        console.warn("Could not read candidates from Firestore. Using default mock candidates instead.");
-      }
-    };
-    loadCandidates();
+    const q = query(collection(db, 'users'), where('role', '==', 'candidate'));
+    const unsub = onSnapshot(q, snap => {
+      setCandidates(snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: data.name || data.fullName || 'Candidate',
+          role: data.targetRole || data.currentRole || '',
+          status: data.status || 'Applied',
+          location: data.location || 'Remote',
+          experience: data.experienceYears || '',
+          skills: data.skills || '',
+        };
+      }));
+    }, () => {});
+    return () => unsub();
   }, []);
 
-  // Standard Filters
-  useEffect(() => {
-    if (isCopilotActive) return; // Don't run standard filter when Copilot matches are active
-    
-    const filtered = candidates.filter(candidate => {
-      const statusMatch = statusFilter === 'All' || candidate.status === statusFilter;
-      const roleMatch = roleFilter === 'All' || candidate.role === roleFilter;
+  // Dynamic role options derived from loaded candidates
+  const roleOptions = useMemo(() => {
+    const roles = Array.from(new Set(candidates.map(c => c.role).filter(Boolean)));
+    return ['All', ...roles.sort()];
+  }, [candidates]);
+
+  // Filtered candidates (standard filters — bypassed when Copilot is active)
+  const displayedCandidates = useMemo(() => {
+    if (isCopilotActive) return copilotResults;
+    return candidates.filter(c => {
+      const statusMatch = statusFilter === 'All' || c.status === statusFilter;
+      const roleMatch   = roleFilter   === 'All' || c.role   === roleFilter;
       return statusMatch && roleMatch;
     });
-    setDisplayedCandidates(filtered);
-  }, [statusFilter, roleFilter, candidates, isCopilotActive]);
+  }, [candidates, statusFilter, roleFilter, isCopilotActive, copilotResults]);
 
   // AI Recruiter Copilot Search
   const handleCopilotSearch = async () => {
     if (!copilotQuery.trim()) {
-      toast.info("Please ask Copilot a question, e.g. 'Find candidates with 4+ years React experience'");
+      toast.info("Ask Copilot something, e.g. 'Find candidates with 4+ years React experience'");
       return;
     }
-
     setCopilotLoading(true);
-    const toastId = toast.loading("AI Recruiter Copilot is analyzing candidate resumes...");
+    const toastId = toast.loading('AI Recruiter Copilot is analyzing candidate resumes…');
     try {
-      const response = await fetch(`${API_BASE_URL}/candidates/search-copilot`, {
+      const res = await fetch(`${API_BASE}/candidates/search-copilot`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_recruiter_uid`
-        },
-        body: JSON.stringify({
-          query: copilotQuery,
-          candidates: candidates
-        })
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${await getToken()}` },
+        body: JSON.stringify({ query: copilotQuery, candidates }),
       });
-
-      if (!response.ok) {
-        throw new Error("Copilot search backend failed.");
-      }
-
-      const results = await response.json();
-      
+      if (!res.ok) throw new Error('Copilot search failed');
+      const results = await res.json();
       if (Array.isArray(results) && results.length > 0) {
-        setDisplayedCandidates(results);
+        setCopilotResults(results);
         setIsCopilotActive(true);
         toast.success(`AI Copilot found ${results.length} matched candidates!`, { id: toastId });
       } else {
-        toast.info("No candidates matched this criteria semantically.", { id: toastId });
+        toast.info('No candidates matched this criteria semantically.', { id: toastId });
       }
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to connect to backend AI search. Running local semantic evaluator...", { id: toastId });
-      
-      // Local semantic fallbacks
-      const localMatches = candidates.map(cand => {
-        let score = 50;
-        let reasoning = "Candidate is qualified, but skills mismatch key attributes of your custom query.";
-        let matchSkills = ["Python"];
-
-        if (copilotQuery.toLowerCase().includes('react') || copilotQuery.toLowerCase().includes('frontend')) {
-          if (cand.role.includes('Frontend') || cand.skills.includes('React')) {
-            score = 94;
-            reasoning = "Stellar front-end match: candidate possesses direct modern framework competencies (React/Next.js) with structured layout patterns.";
-            matchSkills = ["React", "Next.js", "TailwindCSS"];
-          }
-        } else if (copilotQuery.toLowerCase().includes('backend') || copilotQuery.toLowerCase().includes('python')) {
-          if (cand.role.includes('Backend') || cand.skills.includes('Python')) {
-            score = 96;
-            reasoning = "Outstanding back-end candidate: candidate has solid Flask capabilities, cloud synchronization skills, and structured database expertise.";
-            matchSkills = ["Python", "Flask", "PostgreSQL", "Docker"];
-          }
-        }
-
-        return {
-          ...cand,
-          matchScore: score,
-          matchingSkills: matchSkills,
-          copilotReasoning: reasoning
-        };
-      }).sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
-
-      setDisplayedCandidates(localMatches.filter(c => (c.matchScore || 0) > 40));
-      setIsCopilotActive(true);
+    } catch {
+      toast.dismiss(toastId);
+      toast.error('Copilot backend unavailable');
     } finally {
       setCopilotLoading(false);
     }
@@ -187,8 +97,8 @@ export default function CandidateListPage() {
   const resetCopilot = () => {
     setCopilotQuery('');
     setIsCopilotActive(false);
-    setDisplayedCandidates(candidates);
-    toast.success("AI Copilot filters cleared.");
+    setCopilotResults([]);
+    toast.success('AI Copilot filters cleared.');
   };
 
   return (

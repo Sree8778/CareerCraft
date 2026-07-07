@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import CandidateLayout from '@/components/layout/CandidateLayout';
 import { toast, Toaster } from 'sonner';
 import { encryptApiKey } from '@/lib/crypto';
-import { jsonHeaders } from '@/lib/api';
+import { API_BASE, jsonHeaders } from '@/lib/api';
 import {
   User, Phone, Mail, MapPin, FileText, Briefcase, Shield, KeyRound,
   Bell, ChevronRight, CheckCircle, Trash2, ExternalLink, PlusCircle,
@@ -19,9 +19,10 @@ import { db } from '@/lib/firebase';
 type Section = 'profile' | 'account' | 'api-keys' | 'security' | 'preferences';
 type Provider = 'Gemini' | 'OpenAI' | 'Claude' | 'Groq' | 'NVIDIA NIM' | 'Apify' | 'Firecrawl';
 
-interface WalletKey { id: string; provider: Provider; status: 'Active' | 'Standby' | 'Invalid' | 'Exhausted'; encryptedKey?: string }
+const AI_PROVIDERS: Provider[]      = ['Gemini', 'OpenAI', 'Claude', 'Groq', 'NVIDIA NIM'];
+const SCRAPER_PROVIDERS: Provider[] = ['Apify', 'Firecrawl'];
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
+interface WalletKey { id: string; provider: Provider; status: 'Active' | 'Standby' | 'Invalid' | 'Exhausted'; encryptedKey?: string }
 
 const NAV: { id: Section; label: string; icon: React.ReactNode }[] = [
   { id: 'profile',     label: 'Profile',      icon: <User className="w-4 h-4" /> },
@@ -67,6 +68,13 @@ export default function CandidateSettingsPage() {
   const [showKey, setShowKey] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  // Scraping keys (separate section)
+  const [scraperProvider, setScraperProvider] = useState<Provider>('Apify');
+  const [scraperInputKey, setScraperInputKey] = useState('');
+  const [scraperShowKey, setScraperShowKey] = useState(false);
+  const [scraperVerifying, setScraperVerifying] = useState(false);
+  const [scraperVerifyError, setScraperVerifyError] = useState<string | null>(null);
 
   // Security / 2FA
   const [tfaEnabled, setTfaEnabled] = useState(false);
@@ -166,46 +174,57 @@ export default function CandidateSettingsPage() {
 
   const persistWallet = (w: WalletKey[]) => localStorage.setItem('user_api_keys_wallet', JSON.stringify(w));
 
-  const handleStackKey = async () => {
-    setVerifyError(null);
-    const keyVal = inputKey.trim();
+  const addKey = async (
+    provider: Provider,
+    keyVal: string,
+    setVerifying: (v: boolean) => void,
+    setError: (e: string | null) => void,
+    clearInput: () => void,
+  ) => {
+    setError(null);
     if (!keyVal) { toast.error('Please enter an API key.'); return; }
-    setIsVerifying(true);
-    const toastId = toast.loading(`Verifying ${selectedProvider} key…`);
+    setVerifying(true);
+    const toastId = toast.loading(`Verifying ${provider} key…`);
     try {
       const res = await fetch(`${API_BASE}/vault/verify-key`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${await getToken()}` },
-        body: JSON.stringify({ provider: selectedProvider, key: keyVal }),
+        body: JSON.stringify({ provider, key: keyVal }),
       });
       const result = await res.json();
       if (!result.valid) {
-        setVerifyError(result.error || 'Invalid key. Please check and try again.');
+        setError(result.error || 'Invalid key. Please check and try again.');
         toast.error('Verification failed.', { id: toastId }); return;
       }
       const stackRes = await fetch(`${API_BASE}/vault/wallet/stack`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${await getToken()}` },
-        body: JSON.stringify({ uid: user?.id, provider: selectedProvider, key: keyVal }),
+        body: JSON.stringify({ uid: user?.id, provider, key: keyVal }),
       });
       const stackResult = await stackRes.json();
-      const newEntry: WalletKey = stackResult.entry ?? { id: Math.random().toString(36).slice(2, 9), provider: selectedProvider, status: wallet.length === 0 ? 'Active' : 'Standby' };
+      const newEntry: WalletKey = stackResult.entry ?? { id: Math.random().toString(36).slice(2, 9), provider, status: wallet.filter(k => AI_PROVIDERS.includes(k.provider as Provider)).length === 0 ? 'Active' : 'Standby' };
       const updated = [...wallet, newEntry];
       setWallet(updated); persistWallet(updated);
-      if (selectedProvider === 'Gemini' && user?.id) {
+      if (provider === 'Gemini' && user?.id) {
         localStorage.setItem('user_gemini_api_key', await encryptApiKey(keyVal, user.id));
       }
-      setInputKey('');
-      toast.success(`${selectedProvider} key verified and stacked!`, { id: toastId });
+      clearInput();
+      toast.success(`${provider} key verified and saved!`, { id: toastId });
     } catch {
       toast.error('Could not reach backend. Key stacked locally.', { id: toastId });
-      const newEntry: WalletKey = { id: Math.random().toString(36).slice(2, 9), provider: selectedProvider, status: wallet.length === 0 ? 'Active' : 'Standby' };
+      const newEntry: WalletKey = { id: Math.random().toString(36).slice(2, 9), provider, status: 'Active' };
       const updated = [...wallet, newEntry];
       setWallet(updated); persistWallet(updated);
-      if (selectedProvider === 'Gemini' && user?.id) localStorage.setItem('user_gemini_api_key', await encryptApiKey(keyVal, user.id));
-      setInputKey('');
-    } finally { setIsVerifying(false); }
+      if (provider === 'Gemini' && user?.id) localStorage.setItem('user_gemini_api_key', await encryptApiKey(keyVal, user.id));
+      clearInput();
+    } finally { setVerifying(false); }
   };
+
+  const handleStackKey = () =>
+    addKey(selectedProvider, inputKey.trim(), setIsVerifying, setVerifyError, () => setInputKey(''));
+
+  const handleStackScraperKey = () =>
+    addKey(scraperProvider, scraperInputKey.trim(), setScraperVerifying, setScraperVerifyError, () => setScraperInputKey(''));
 
   const handleRemoveKey = async (id: string) => {
     try {
@@ -367,100 +386,209 @@ export default function CandidateSettingsPage() {
 
             {/* API KEYS */}
             {active === 'api-keys' && (
-              <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 space-y-5">
-                <div className="flex items-center gap-3">
-                  <KeyRound className="w-5 h-5 text-indigo-400" />
-                  <h2 className="text-base font-bold text-white">API Keys Wallet</h2>
-                  {wallet.length > 0 && (
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                      <CheckCircle className="w-3 h-3" /> {wallet.length} key{wallet.length > 1 ? 's' : ''} active
-                    </span>
-                  )}
-                </div>
+              <div className="space-y-5">
 
+                {/* ── Security banner ── */}
                 <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl p-3.5 flex gap-3 text-xs text-amber-300">
                   <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
-                  <p>Keys are encrypted server-side using Fernet AES before storage. Nobody can read your keys — not even us.</p>
+                  <p>All keys are encrypted server-side with Fernet AES before storage. Nobody can read your keys — not even us.</p>
                 </div>
 
-                {/* Add key */}
-                <div className="space-y-3">
-                  <label className={LABEL}>Add New Key</label>
-                  <select value={selectedProvider} onChange={e => setSelectedProvider(e.target.value as Provider)}
-                    className={FIELD + ' cursor-pointer'}>
-                    <option value="Gemini" className="bg-zinc-900">Gemini AI (Recommended)</option>
-                    <option value="OpenAI" className="bg-zinc-900">OpenAI GPT-4</option>
-                    <option value="Claude" className="bg-zinc-900">Claude (Anthropic)</option>
-                    <option value="Groq" className="bg-zinc-900">Groq High-Speed</option>
-                    <option value="NVIDIA NIM" className="bg-zinc-900">NVIDIA NIM — Llama 3.x</option>
-                    <option value="Apify" className="bg-zinc-900">Apify — Job Scraping (Indeed / LinkedIn)</option>
-                    <option value="Firecrawl" className="bg-zinc-900">Firecrawl — Web Scraping &amp; Career Pages</option>
-                  </select>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        type={showKey ? 'text' : 'password'}
-                        value={inputKey}
-                        onChange={e => setInputKey(e.target.value)}
-                        placeholder={`Paste your ${selectedProvider} key…`}
-                        disabled={isVerifying}
-                        className={FIELD + ' pr-10'}
-                      />
-                      <button type="button" onClick={() => setShowKey(v => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition">
-                        {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {/* ── Section 1: AI Model Keys ── */}
+                <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 space-y-5">
+                  <div className="flex items-center gap-3">
+                    <KeyRound className="w-5 h-5 text-indigo-400" />
+                    <div>
+                      <h2 className="text-base font-bold text-white">AI Model Keys</h2>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">Power resume analysis, cover letter generation, AI screening, and interview practice.</p>
+                    </div>
+                    {wallet.filter(k => AI_PROVIDERS.includes(k.provider as Provider)).length > 0 && (
+                      <span className="ml-auto flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                        <CheckCircle className="w-3 h-3" />
+                        {wallet.filter(k => AI_PROVIDERS.includes(k.provider as Provider)).length} configured
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className={LABEL}>Add AI Key</label>
+                    <select value={selectedProvider} onChange={e => setSelectedProvider(e.target.value as Provider)}
+                      className={FIELD + ' cursor-pointer'}>
+                      <option value="Gemini" className="bg-zinc-900">Gemini AI (Recommended — free tier available)</option>
+                      <option value="OpenAI" className="bg-zinc-900">OpenAI GPT-4</option>
+                      <option value="Claude" className="bg-zinc-900">Claude (Anthropic)</option>
+                      <option value="Groq" className="bg-zinc-900">Groq High-Speed</option>
+                      <option value="NVIDIA NIM" className="bg-zinc-900">NVIDIA NIM — Llama 3.x</option>
+                    </select>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type={showKey ? 'text' : 'password'}
+                          value={inputKey}
+                          onChange={e => setInputKey(e.target.value)}
+                          placeholder={`Paste your ${selectedProvider} key…`}
+                          disabled={isVerifying}
+                          className={FIELD + ' pr-10'}
+                        />
+                        <button type="button" onClick={() => setShowKey(v => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition">
+                          {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <button onClick={handleStackKey} disabled={isVerifying || !inputKey.trim()}
+                        className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition whitespace-nowrap">
+                        {isVerifying ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
+                        {isVerifying ? 'Verifying…' : 'Add Key'}
                       </button>
                     </div>
-                    <button onClick={handleStackKey} disabled={isVerifying || !inputKey.trim()}
-                      className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition whitespace-nowrap">
-                      {isVerifying ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
-                      {isVerifying ? 'Verifying…' : 'Add Key'}
-                    </button>
+                    {verifyError && <p className="text-[11px] text-rose-400 font-mono">{verifyError}</p>}
+                    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer"
+                      className="text-[11px] text-indigo-400 hover:underline flex items-center gap-1">
+                      Get a free Gemini key <ExternalLink className="w-3 h-3" />
+                    </a>
                   </div>
-                  {verifyError && <p className="text-[11px] text-rose-400 font-mono">{verifyError}</p>}
-                  <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer"
-                    className="text-[11px] text-indigo-400 hover:underline flex items-center gap-1">
-                    Get a free Gemini key <ExternalLink className="w-3 h-3" />
-                  </a>
+
+                  {/* AI keys wallet */}
+                  {(() => {
+                    const aiKeys = wallet.filter(k => AI_PROVIDERS.includes(k.provider as Provider));
+                    return aiKeys.length === 0 ? (
+                      <div className="text-center py-6 border border-dashed border-white/8 rounded-xl text-zinc-500 text-xs">
+                        No AI keys yet. Add your first key above.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Saved AI Keys ({aiKeys.length})</p>
+                        {aiKeys.map(item => (
+                          <div key={item.id} className="flex items-center justify-between bg-white/3 border border-white/8 rounded-xl px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                                <KeyRound className="w-4 h-4 text-indigo-400" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-white">{item.provider}</p>
+                                <p className="text-[10px] font-mono text-zinc-500">••••••••••••••••••••</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                item.status === 'Active'    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' :
+                                item.status === 'Invalid'   ? 'bg-red-500/15 border-red-500/30 text-red-400' :
+                                item.status === 'Exhausted' ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' :
+                                'bg-zinc-800/60 border-white/10 text-zinc-400'
+                              }`}>{item.status}</span>
+                              <button onClick={() => handleRemoveKey(item.id)}
+                                className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
 
-                {/* Wallet */}
-                <div className="space-y-2">
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Your Keys ({wallet.length})</p>
-                  {wallet.length === 0 ? (
-                    <div className="text-center py-8 border border-dashed border-white/8 rounded-xl text-zinc-500 text-xs">
-                      No keys yet. Add your first key above to enable AI features.
+                {/* ── Section 2: Web Scraping Keys ── */}
+                <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 space-y-5">
+                  <div className="flex items-center gap-3">
+                    <Globe className="w-5 h-5 text-orange-400" />
+                    <div>
+                      <h2 className="text-base font-bold text-white">Web Scraping Keys</h2>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">Used exclusively for live job scraping from Indeed, LinkedIn, and company career pages.</p>
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {wallet.map(item => (
-                        <div key={item.id} className="flex items-center justify-between bg-white/3 border border-white/8 rounded-xl px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-                              <KeyRound className="w-4 h-4 text-indigo-400" />
+                    {wallet.filter(k => SCRAPER_PROVIDERS.includes(k.provider as Provider)).length > 0 && (
+                      <span className="ml-auto flex items-center gap-1 text-[10px] font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-full">
+                        <CheckCircle className="w-3 h-3" />
+                        {wallet.filter(k => SCRAPER_PROVIDERS.includes(k.provider as Provider)).length} configured
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Info banner */}
+                  <div className="bg-orange-500/8 border border-orange-500/20 rounded-xl p-3.5 flex gap-3 text-xs text-orange-200">
+                    <Globe className="w-4 h-4 shrink-0 text-orange-400 mt-0.5" />
+                    <div className="space-y-1">
+                      <p><span className="font-bold text-orange-300">Apify</span> — scrapes Indeed, LinkedIn, and other job boards in real-time. Required for the Jobs search page to fetch fresh listings.</p>
+                      <p><span className="font-bold text-orange-300">Firecrawl</span> — crawls company career pages and unlisted job postings directly from the source.</p>
+                      <p className="text-orange-400/70">These keys are separate from AI keys and are only used when you trigger a job search.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className={LABEL}>Add Scraping Key</label>
+                    <select value={scraperProvider} onChange={e => setScraperProvider(e.target.value as Provider)}
+                      className={FIELD + ' cursor-pointer'}>
+                      <option value="Apify" className="bg-zinc-900">Apify — Job boards (Indeed, LinkedIn, Glassdoor)</option>
+                      <option value="Firecrawl" className="bg-zinc-900">Firecrawl — Company career pages</option>
+                    </select>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type={scraperShowKey ? 'text' : 'password'}
+                          value={scraperInputKey}
+                          onChange={e => setScraperInputKey(e.target.value)}
+                          placeholder={scraperProvider === 'Apify' ? 'Paste your Apify API token…' : 'Paste your Firecrawl API key…'}
+                          disabled={scraperVerifying}
+                          className={FIELD + ' pr-10'}
+                        />
+                        <button type="button" onClick={() => setScraperShowKey(v => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition">
+                          {scraperShowKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <button onClick={handleStackScraperKey} disabled={scraperVerifying || !scraperInputKey.trim()}
+                        className="flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition whitespace-nowrap">
+                        {scraperVerifying ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlusCircle className="w-3.5 h-3.5" />}
+                        {scraperVerifying ? 'Verifying…' : 'Add Key'}
+                      </button>
+                    </div>
+                    {scraperVerifyError && <p className="text-[11px] text-rose-400 font-mono">{scraperVerifyError}</p>}
+                    <a href="https://console.apify.com/account/integrations" target="_blank" rel="noreferrer"
+                      className="text-[11px] text-orange-400 hover:underline flex items-center gap-1">
+                      Get your Apify API token <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  {/* Scraping keys wallet */}
+                  {(() => {
+                    const scraperKeys = wallet.filter(k => SCRAPER_PROVIDERS.includes(k.provider as Provider));
+                    return scraperKeys.length === 0 ? (
+                      <div className="text-center py-6 border border-dashed border-white/8 rounded-xl text-zinc-500 text-xs">
+                        No scraping keys yet. Add your Apify token above to enable live job search.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Saved Scraping Keys ({scraperKeys.length})</p>
+                        {scraperKeys.map(item => (
+                          <div key={item.id} className="flex items-center justify-between bg-white/3 border border-white/8 rounded-xl px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
+                                <Globe className="w-4 h-4 text-orange-400" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-white">{item.provider}</p>
+                                <p className="text-[10px] font-mono text-zinc-500">••••••••••••••••••••</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-xs font-bold text-white">{item.provider}</p>
-                              <p className="text-[10px] font-mono text-zinc-500">••••••••••••••••••••</p>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                item.status === 'Active'    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' :
+                                item.status === 'Invalid'   ? 'bg-red-500/15 border-red-500/30 text-red-400' :
+                                item.status === 'Exhausted' ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' :
+                                'bg-zinc-800/60 border-white/10 text-zinc-400'
+                              }`}>{item.status}</span>
+                              <button onClick={() => handleRemoveKey(item.id)}
+                                className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                              item.status === 'Active'    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' :
-                              item.status === 'Invalid'   ? 'bg-red-500/15 border-red-500/30 text-red-400' :
-                              item.status === 'Exhausted' ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' :
-                              'bg-zinc-800/60 border-white/10 text-zinc-400'
-                            }`}>{item.status}</span>
-                            <button onClick={() => handleRemoveKey(item.id)}
-                              className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
+
               </div>
             )}
 

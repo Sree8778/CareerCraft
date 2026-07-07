@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,8 +11,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { toast, Toaster } from 'sonner';
+import { API_BASE } from '@/lib/api';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 const SILENCE_MS = 2500; // auto-submit after 2.5s silence
 
 type InterviewType = 'Technical' | 'Behavioral' | 'HR' | 'Mixed';
@@ -102,7 +102,7 @@ function UserAvatar({ listening, name }: { listening: boolean; name: string }) {
 }
 
 export default function PracticeInterviewPage() {
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
   const router = useRouter();
 
   // ── Setup ──────────────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ export default function PracticeInterviewPage() {
   useEffect(() => { mutedRef.current = muted; }, [muted]);
   useEffect(() => { selectedVoiceRef.current = selectedVoiceName; }, [selectedVoiceName]);
 
-  const authHeader = () => ({ 'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}` });
+  const getAuthHeader = async () => ({ 'Authorization': `Bearer ${await getToken()}` });
 
   // ── Load voices & pick a good default ─────────────────────────────────────
   useEffect(() => {
@@ -259,7 +259,7 @@ export default function PracticeInterviewPage() {
     try {
       const res = await fetch(`${API_BASE}/practice-interview/ai-turn`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
+        headers: { 'Content-Type': 'application/json', ...await getAuthHeader() },
         body: JSON.stringify({
           conversation: conv,
           role, interviewType, difficulty,
@@ -323,7 +323,7 @@ export default function PracticeInterviewPage() {
     try {
       const res = await fetch(`${API_BASE}/practice-interview/final-feedback`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
+        headers: { 'Content-Type': 'application/json', ...await getAuthHeader() },
         body: JSON.stringify({ conversation: conv, role, interviewType }),
       });
       const data = await res.json();

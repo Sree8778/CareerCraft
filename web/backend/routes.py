@@ -1005,69 +1005,136 @@ def store_application_ats_score(app_id):
         return jsonify({"error": str(e)}), 500
 
 
-# --- NEW: Google Calendar Scheduler Endpoint ---
+@api_bp.route('/interviews', methods=['GET'])
+@require_auth
+def get_interviews():
+    application_id = request.args.get('applicationId')
+    if not application_id:
+        return jsonify({"error": "applicationId is required"}), 400
+    try:
+        from firebase_utils import db, firebase_initialized
+        if firebase_initialized and db:
+            docs = db.collection('interviews').where('applicationId', '==', application_id).stream()
+            interviews = []
+            for d in docs:
+                item = d.to_dict()
+                item['id'] = d.id
+                interviews.append(item)
+            interviews.sort(key=lambda x: x.get('scheduledAt', ''), reverse=True)
+            return jsonify({"interviews": interviews}), 200
+        return jsonify({"interviews": []}), 200
+    except Exception as e:
+        print(f"Error getting interviews: {e}")
+        return jsonify({"interviews": []}), 200
+
+
 @api_bp.route('/interviews/schedule', methods=['POST'])
 @require_auth
 def schedule_interview_route():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
-        
+
     data = request.json
-    title = data.get('title', 'Technical Interview')
-    description = data.get('description', 'Technical Screening Interview')
-    start_time_str = data.get('startTime') # ISO string format
-    duration_mins = data.get('durationMinutes', 30)
-    attendees = data.get('attendees', []) # List of emails
-    
-    if not start_time_str or not attendees:
-        return jsonify({"error": "Missing startTime or attendees in request"}), 400
-        
+    application_id = data.get('applicationId', '')
+    candidate_id   = data.get('candidateId', '')
+    job_id         = data.get('jobId', '')
+    scheduled_at   = data.get('scheduledAt', '')   # "2026-06-25T10:00" from datetime-local
+    duration_mins  = int(data.get('duration', 60))
+    interview_type = data.get('type', 'video')
+    meeting_link   = data.get('meetingLink', '')
+    notes          = data.get('notes', '')
+    recruiter_id   = request.user.get('uid', '')
+    recruiter_email = request.user.get('email', '')
+
+    if not scheduled_at:
+        return jsonify({"error": "scheduledAt is required"}), 400
+
     try:
-        # Parse ISO date string
-        # Next.js sends ISO e.g. "2026-05-30T10:00:00.000Z" or "2026-05-30T10:00:00"
-        # We clean the string format to parse it
-        clean_time_str = start_time_str.split('.')[0].replace('Z', '')
-        start_time = datetime.datetime.fromisoformat(clean_time_str)
-        end_time = start_time + datetime.timedelta(minutes=int(duration_mins))
-        
-        # Call calendar utility
+        from firebase_utils import db, firebase_initialized
+        from firebase_admin import firestore as fs
+
+        # Resolve job title / company from Firestore if available
+        job_title, company, candidate_email, candidate_name = '', '', '', ''
+        if firebase_initialized and db:
+            if job_id:
+                jdoc = db.collection('jobs').document(job_id).get()
+                if jdoc.exists:
+                    jd = jdoc.to_dict()
+                    job_title = jd.get('title', '')
+                    company   = jd.get('company', '')
+            if candidate_id:
+                cdoc = db.collection('users').document(candidate_id).get()
+                if cdoc.exists:
+                    cd = cdoc.to_dict()
+                    candidate_email = cd.get('email', '')
+                    candidate_name  = cd.get('fullName', cd.get('name', ''))
+
+        # Store interview to Firestore
+        interview_doc = {
+            'applicationId': application_id,
+            'candidateId':   candidate_id,
+            'recruiterId':   recruiter_id,
+            'jobId':         job_id,
+            'jobTitle':      job_title,
+            'company':       company,
+            'scheduledAt':   scheduled_at,
+            'duration':      duration_mins,
+            'type':          interview_type,
+            'meetingLink':   meeting_link,
+            'notes':         notes,
+            'status':        'scheduled',
+            'createdAt':     datetime.datetime.utcnow().isoformat() + 'Z',
+        }
+        interview_id = ''
+        if firebase_initialized and db:
+            ref = db.collection('interviews').add(interview_doc)
+            interview_id = ref[1].id
+
+            # Notify the candidate
+            if candidate_id:
+                dt_display = scheduled_at.replace('T', ' ')
+                db.collection('notifications').add({
+                    'candidateId': candidate_id,
+                    'title': 'Interview Scheduled',
+                    'message': f"Your interview for '{job_title}' at '{company}' is scheduled for {dt_display}.",
+                    'timestamp': datetime.datetime.utcnow().isoformat() + 'Z',
+                    'read': False,
+                })
+
+        # Attempt Google Calendar event — graceful fallback
+        cal_link = meeting_link
         try:
-            event_link = create_calendar_event(
-                summary=title,
-                description=description,
-                start_time=start_time,
-                end_time=end_time,
-                attendees=attendees
-            )
-            # Email every attendee
-            interview_dt_str = start_time.strftime("%B %d, %Y at %I:%M %p UTC")
-            job_title_hint = title.replace("Technical Interview", "").replace("Interview", "").strip() or title
-            for email_addr in attendees:
-                send_interview_scheduled_email(
-                    to=email_addr,
-                    candidate_name=email_addr.split('@')[0],
-                    job_title=job_title_hint,
-                    company=description,
-                    interview_datetime=interview_dt_str,
-                    meet_link=event_link
+            clean_time = scheduled_at.split('.')[0].replace('Z', '')
+            start_dt = datetime.datetime.fromisoformat(clean_time)
+            end_dt   = start_dt + datetime.timedelta(minutes=duration_mins)
+            attendees = [e for e in [candidate_email, recruiter_email] if e]
+            if attendees:
+                cal_link = create_calendar_event(
+                    summary=f"{interview_type.title()} Interview – {job_title}",
+                    description=notes or f"Interview for {job_title} at {company}",
+                    start_time=start_dt,
+                    end_time=end_dt,
+                    attendees=attendees,
                 )
-            return jsonify({
-                "status": "success",
-                "message": "Interview scheduled successfully on Google Calendar!",
-                "eventLink": event_link,
-                "meetLink": event_link
-            }), 200
-        except FileNotFoundError as calendar_err:
-            # Handle unconfigured Google Calendar developer settings gracefully
-            print(f"Google Calendar credentials missing. Running developer simulator mode: {calendar_err}")
-            # Generate a realistic mock Google Meet link for development ease
-            simulated_meet_link = f"https://meet.google.com/abc-mock-{datetime.datetime.now().strftime('%M%S')}"
-            return jsonify({
-                "status": "simulated",
-                "message": "Simulated developer schedule complete (Live Calendar credentials unconfigured).",
-                "meetLink": simulated_meet_link
-            }), 200
-            
+                dt_str = start_dt.strftime("%B %d, %Y at %I:%M %p UTC")
+                for email_addr in attendees:
+                    send_interview_scheduled_email(
+                        to=email_addr,
+                        candidate_name=candidate_name or email_addr.split('@')[0],
+                        job_title=job_title,
+                        company=company,
+                        interview_datetime=dt_str,
+                        meet_link=cal_link,
+                    )
+        except FileNotFoundError:
+            pass  # Calendar credentials not configured — use stored meetingLink
+        except Exception as cal_err:
+            print(f"[schedule] calendar/email non-fatal error: {cal_err}")
+
+        interview_doc['id'] = interview_id
+        interview_doc['meetLink'] = cal_link
+        return jsonify({"status": "success", "interview": interview_doc, "meetLink": cal_link}), 200
+
     except Exception as e:
         print(f"Error in interview scheduling endpoint: {e}")
         return jsonify({"error": f"An error occurred while scheduling: {str(e)}"}), 500
@@ -1641,6 +1708,16 @@ def apply_to_job(job_id):
             app_data['id'] = ref[1].id
             print(f"[apply] saved application {app_data['id']} with recruiterId={recruiter_id!r}")
 
+            # Notify recruiter of new application
+            if recruiter_id:
+                db.collection('notifications').add({
+                    'recruiterId': recruiter_id,
+                    'title': 'New Application',
+                    'message': f"{candidate_name} applied for '{job_title}' at {company}.",
+                    'timestamp': datetime.datetime.utcnow().isoformat() + 'Z',
+                    'read': False,
+                })
+
             # Launch background analysis — uses candidate's own API key, zero platform cost
             try:
                 import threading
@@ -1703,7 +1780,16 @@ def get_applications():
                 docs = db.collection('applications').where('candidateId', '==', candidate_id).stream()
                 apps = []
                 for doc in docs:
-                    a = doc.to_dict(); a['id'] = doc.id; apps.append(a)
+                    a = doc.to_dict(); a['id'] = doc.id
+                    # Normalize appliedAt → appliedDate string for the frontend
+                    applied_at = a.get('appliedAt')
+                    if applied_at is not None and not isinstance(applied_at, str):
+                        try:
+                            dt = applied_at if isinstance(applied_at, datetime.datetime) else applied_at.datetime
+                            a['appliedDate'] = f"{dt.strftime('%b')} {dt.day}" if hasattr(dt, 'strftime') else str(applied_at)
+                        except Exception:
+                            a['appliedDate'] = ''
+                    apps.append(a)
                 return jsonify({"applications": apps}), 200
             return jsonify({"applications": []}), 200
         return jsonify({"applications": []}), 200
@@ -2032,19 +2118,20 @@ def send_chat_message(chat_id):
 @api_bp.route('/notifications', methods=['GET'])
 @require_auth
 def get_notifications():
-    uid = request.user.get('uid')
+    uid  = request.user.get('uid')
+    role = request.user.get('role', 'candidate')
+    field = 'recruiterId' if role == 'recruiter' else 'candidateId'
     try:
         from firebase_utils import db, firebase_initialized
         if firebase_initialized and db:
-            from firebase_admin import firestore
-            docs = db.collection('notifications').where('candidateId', '==', uid).order_by('timestamp', direction=firestore.Query.DESCENDING).stream()
+            docs = db.collection('notifications').where(field, '==', uid).stream()
             notifs = []
             for doc in docs:
                 n = doc.to_dict()
                 n['id'] = doc.id
                 notifs.append(n)
-            return jsonify({"notifications": notifs}), 200
-
+            notifs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            return jsonify({"notifications": notifs[:20]}), 200
         return jsonify({"notifications": []}), 200
     except Exception as e:
         print(f"Error getting notifications: {e}")
@@ -2053,15 +2140,15 @@ def get_notifications():
 @api_bp.route('/notifications/read-all', methods=['POST'])
 @require_auth
 def read_all_notifications():
-    uid = request.user.get('uid')
+    uid  = request.user.get('uid')
+    role = request.user.get('role', 'candidate')
+    field = 'recruiterId' if role == 'recruiter' else 'candidateId'
     try:
         from firebase_utils import db, firebase_initialized
         if firebase_initialized and db:
-            docs = db.collection('notifications').where('candidateId', '==', uid).where('read', '==', False).stream()
+            docs = db.collection('notifications').where(field, '==', uid).where('read', '==', False).stream()
             for doc in docs:
                 db.collection('notifications').document(doc.id).update({"read": True})
-            return jsonify({"status": "success"}), 200
-
         return jsonify({"status": "success"}), 200
     except Exception as e:
         print(f"Error reading notifications: {e}")

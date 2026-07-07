@@ -2,9 +2,8 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 import Link from 'next/link';
+import { API_BASE } from '@/lib/api';
 import React, { useEffect, useState } from 'react';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,7 +30,7 @@ const getInitials = (name: string) => {
 
 export default function ApplicationsListPage() {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
   const [applications, setApplications] = useState<any[]>([]);
   const [jobTitle, setJobTitle] = useState('');
   const [loading, setLoading] = useState(true);
@@ -39,7 +38,7 @@ export default function ApplicationsListPage() {
   const [filterStage, setFilterStage] = useState('All');
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
 
-  const authHeader = { 'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}` };
+  const getAuthHeader = async () => ({ 'Authorization': `Bearer ${await getToken()}` });
 
   useEffect(() => {
     if (!id) return;
@@ -47,8 +46,8 @@ export default function ApplicationsListPage() {
       setLoading(true);
       try {
         const [appsRes, jobRes] = await Promise.all([
-          fetch(`${API_BASE}/jobs/${id}/applications`, { headers: authHeader }),
-          fetch(`${API_BASE}/jobs/${id}`, { headers: authHeader }),
+          fetch(`${API_BASE}/jobs/${id}/applications`, { headers: await getAuthHeader() }),
+          fetch(`${API_BASE}/jobs/${id}`, { headers: await getAuthHeader() }),
         ]);
         const appsData = await appsRes.json();
         setApplications(appsData.applications || []);

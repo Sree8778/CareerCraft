@@ -9,11 +9,10 @@ import CandidateLayout from '@/components/layout/CandidateLayout';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { Building2, Search, Star, MapPin, Users, ChevronRight, Briefcase } from 'lucide-react';
 import { motion } from 'framer-motion';
-
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
+import { API_BASE as API } from '@/lib/api';
 
 export default function CompanyDirectoryPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const [companies, setCompanies] = useState<any[]>([]);
@@ -24,10 +23,11 @@ export default function CompanyDirectoryPage() {
 
   // Authentication check
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       router.push('/');
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, authLoading]);
 
   const loadData = async (query = '') => {
     if (query) setSearching(true);

@@ -1,67 +1,69 @@
 ﻿// src/app/recruiter/network/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Network, Search, UserPlus, CheckCircle, RefreshCw, Mail, Phone, Users, Shield, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { API_BASE as API } from '@/lib/api';
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 export default function RecruiterNetworkPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getToken, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Tab State
   const [activeTab, setActiveTab] = useState<'directory' | 'pending' | 'connections'>('directory');
-
-  // Data States
   const [usersList, setUsersList] = useState<any[]>([]);
   const [connectionsList, setConnectionsList] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  
-  // Loading & Submitting States
-  const [loading, setLoading] = useState(true);
+  const [loadingDir, setLoadingDir] = useState(true);
   const [actioningId, setActioningId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated || user?.role !== 'recruiter') {
-      router.push('/');
-      return;
-    }
-    fetchData();
-  }, [isAuthenticated, user, router]);
+    if (authLoading) return;
+    if (!isAuthenticated || user?.role !== 'recruiter') { router.push('/'); return; }
+  }, [authLoading, isAuthenticated, user, router]);
 
-  const fetchData = async () => {
+  // ── Real-time connections via Firestore ─────────────────────────────────
+  useEffect(() => {
+    if (!user?.id) return;
+    const uid = user.id;
+    const seen = new Map<string, any>();
+
+    const merge = () => setConnectionsList([...seen.values()]);
+
+    const q1 = query(collection(db, 'connections'), where('senderId',   '==', uid));
+    const q2 = query(collection(db, 'connections'), where('receiverId', '==', uid));
+
+    const u1 = onSnapshot(q1, snap => { snap.docs.forEach(d => seen.set(d.id, { id: d.id, ...d.data() })); merge(); }, () => {});
+    const u2 = onSnapshot(q2, snap => { snap.docs.forEach(d => seen.set(d.id, { id: d.id, ...d.data() })); merge(); }, () => {});
+
+    return () => { u1(); u2(); };
+  }, [user?.id]);
+
+  const fetchDirectory = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    setLoadingDir(true);
     try {
-      // Fetch users
-      const usersRes = await fetch(`${API}/users?search=${searchQuery}&role=${roleFilter}`, {
-        headers: { 'Authorization': `Bearer mock_token_for_${user.id}` }
+      const res = await fetch(`${API}/users?search=${searchQuery}&role=${roleFilter}`, {
+        headers: { 'Authorization': `Bearer ${await getToken()}` },
       });
-      const usersData = await usersRes.json();
-      const allUsers = usersData.users || [];
+      const data = await res.json();
+      setUsersList(data.users || []);
+    } catch { toast.error('Failed to load directory.'); }
+    finally { setLoadingDir(false); }
+  }, [user, searchQuery, roleFilter, getToken]);
 
-      // Fetch connections
-      const connRes = await fetch(`${API}/connections`, {
-        headers: { 'Authorization': `Bearer mock_token_for_${user.id}` }
-      });
-      const connData = await connRes.json();
-      const allConnections = connData.connections || [];
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && user?.role === 'recruiter') fetchDirectory();
+  }, [authLoading, isAuthenticated, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-      setUsersList(allUsers);
-      setConnectionsList(allConnections);
-    } catch (err) {
-      console.error('Failed to load network data:', err);
-      toast.error('Failed to load directory data.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const fetchData = fetchDirectory;
 
   const handleSendRequest = async (targetUid: string) => {
     if (!user) return;
@@ -69,25 +71,17 @@ export default function RecruiterNetworkPage() {
     try {
       const res = await fetch(`${API}/connections/request`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user.id}`
-        },
-        body: JSON.stringify({ receiverId: targetUid })
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${await getToken()}` },
+        body: JSON.stringify({ receiverId: targetUid }),
       });
-
       const result = await res.json();
       if (res.ok) {
-        toast.success('Connection invitation sent successfully!');
-        fetchData();
+        toast.success('Connection invitation sent!');
       } else {
         toast.error(result.error || 'Failed to send request.');
       }
-    } catch (err) {
-      toast.error('Network error. Failed to dispatch invitation.');
-    } finally {
-      setActioningId(null);
-    }
+    } catch { toast.error('Network error. Failed to dispatch invitation.'); }
+    finally { setActioningId(null); }
   };
 
   const handleRespond = async (connectionId: string, status: 'accepted' | 'declined') => {
@@ -96,41 +90,31 @@ export default function RecruiterNetworkPage() {
     try {
       const res = await fetch(`${API}/connections/${connectionId}/respond`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user.id}`
-        },
-        body: JSON.stringify({ status })
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${await getToken()}` },
+        body: JSON.stringify({ status }),
       });
-
       const result = await res.json();
       if (res.ok) {
         toast.success(status === 'accepted' ? 'Request accepted!' : 'Request declined.');
-        fetchData();
       } else {
         toast.error(result.error || 'Failed to respond.');
       }
-    } catch (err) {
-      toast.error('Network error. Response failed.');
-    } finally {
-      setActioningId(null);
-    }
+    } catch { toast.error('Network error. Response failed.'); }
+    finally { setActioningId(null); }
   };
 
-  // Helper to determine connection state between user and target
   const getConnectionState = (targetUid: string) => {
-    const conn = connectionsList.find(c => 
-      (c.senderId === user?.id && c.receiverId === targetUid) || 
+    const conn = connectionsList.find(c =>
+      (c.senderId === user?.id && c.receiverId === targetUid) ||
       (c.senderId === targetUid && c.receiverId === user?.id)
     );
-    if (!conn) return { status: 'none', id: null };
+    if (!conn) return { status: 'none', id: null, isSender: false };
     return { status: conn.status, id: conn.id, isSender: conn.senderId === user?.id };
   };
 
   if (!isAuthenticated || user?.role !== 'recruiter') return null;
 
-  // Filtered directories & counts
-  const pendingReceived = connectionsList.filter(c => c.receiverId === user?.id && c.status === 'pending');
+  const pendingReceived   = connectionsList.filter(c => c.receiverId === user?.id && c.status === 'pending');
   const activeConnections = connectionsList.filter(c => c.status === 'accepted');
 
   return (
@@ -147,11 +131,9 @@ export default function RecruiterNetworkPage() {
               Search and discover registered professionals in the system, connect, and collaborate via direct chats.
             </p>
           </div>
-          <button
-            onClick={fetchData}
+          <button onClick={fetchData}
             className="p-2 bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-300 rounded-lg transition"
-            title="Refresh directory"
-          >
+            title="Refresh directory">
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
@@ -160,29 +142,21 @@ export default function RecruiterNetworkPage() {
         <div className="flex flex-col md:flex-row gap-4 bg-[#0F1424]/60 border border-white/5 backdrop-blur-xl p-4 rounded-2xl">
           <div className="flex-1 relative">
             <Search className="absolute left-3.5 top-3 w-4 h-4 text-zinc-500" />
-            <input
-              type="text"
-              placeholder="Search users by name or email..."
+            <input type="text" placeholder="Search users by name or email..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && fetchData()}
-              className="w-full bg-[#070A13]/90 border border-white/10 focus:border-purple-500 rounded-xl pl-10 pr-4 py-2 text-sm outline-none transition"
-            />
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && fetchData()}
+              className="w-full bg-[#070A13]/90 border border-white/10 focus:border-purple-500 rounded-xl pl-10 pr-4 py-2 text-sm outline-none transition" />
           </div>
           <div className="flex gap-2">
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="bg-[#070A13]/90 border border-white/10 focus:border-purple-500 rounded-xl px-4 py-2 text-sm outline-none transition text-zinc-300"
-            >
+            <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
+              className="bg-[#070A13]/90 border border-white/10 focus:border-purple-500 rounded-xl px-4 py-2 text-sm outline-none transition text-zinc-300">
               <option value="">All Roles</option>
               <option value="candidate">Candidates</option>
               <option value="recruiter">Recruiters</option>
             </select>
-            <button
-              onClick={fetchData}
-              className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-semibold transition"
-            >
+            <button onClick={fetchData}
+              className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-semibold transition">
               Search
             </button>
           </div>
@@ -190,46 +164,31 @@ export default function RecruiterNetworkPage() {
 
         {/* Tab Selection */}
         <div className="flex border-b border-white/10 gap-6 text-sm font-bold">
-          <button
-            onClick={() => setActiveTab('directory')}
-            className={`pb-3 border-b-2 transition ${
-              activeTab === 'directory' ? 'border-purple-500 text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            Search Directory ({usersList.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('pending')}
-            className={`pb-3 border-b-2 transition flex items-center gap-2 ${
-              activeTab === 'pending' ? 'border-purple-500 text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            Pending Invites 
-            {pendingReceived.length > 0 && (
-              <span className="bg-red-500 text-white text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full">
-                {pendingReceived.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('connections')}
-            className={`pb-3 border-b-2 transition ${
-              activeTab === 'connections' ? 'border-purple-500 text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            My Connections ({activeConnections.length})
-          </button>
+          {[
+            { id: 'directory',    label: `Search Directory (${usersList.length})` },
+            { id: 'pending',      label: 'Pending Invites',  badge: pendingReceived.length },
+            { id: 'connections',  label: `My Connections (${activeConnections.length})` },
+          ].map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id as any)}
+              className={`pb-3 border-b-2 transition flex items-center gap-2 ${
+                activeTab === t.id ? 'border-purple-500 text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}>
+              {t.label}
+              {t.badge && t.badge > 0 && (
+                <span className="bg-red-500 text-white text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full">{t.badge}</span>
+              )}
+            </button>
+          ))}
         </div>
 
-        {/* Tab Contents */}
-        {loading ? (
+        {loadingDir ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white/5 border border-white/5 rounded-2xl gap-3 text-zinc-400">
             <RefreshCw className="w-6 h-6 animate-spin text-purple-400" />
             <span className="text-sm">Loading directory data...</span>
           </div>
         ) : (
           <div>
-            {/* DIRECTORY VIEW */}
+            {/* DIRECTORY */}
             {activeTab === 'directory' && (
               usersList.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 bg-white/5 border border-white/5 rounded-2xl text-zinc-400 text-center">
@@ -250,37 +209,24 @@ export default function RecruiterNetworkPage() {
                             <div>
                               <h3 className="font-bold text-sm">{item.fullName}</h3>
                               <span className={`px-2 py-0.5 text-[8px] font-bold font-mono tracking-wider rounded-md uppercase border ${
-                                item.role === 'recruiter' 
-                                  ? 'bg-purple-500/10 border-purple-500/20 text-purple-400' 
+                                item.role === 'recruiter'
+                                  ? 'bg-purple-500/10 border-purple-500/20 text-purple-400'
                                   : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400'
                               }`}>
                                 {item.role}
                               </span>
                             </div>
                           </div>
-
                           <div className="text-xs text-zinc-400 space-y-1 pt-2">
-                            <p className="flex items-center gap-1.5">
-                              <Mail className="w-3.5 h-3.5 text-zinc-500" /> {item.email}
-                            </p>
-                            {item.phone && (
-                              <p className="flex items-center gap-1.5">
-                                <Phone className="w-3.5 h-3.5 text-zinc-500" /> {item.phone}
-                              </p>
-                            )}
+                            <p className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-zinc-500" /> {item.email}</p>
+                            {item.phone && <p className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-zinc-500" /> {item.phone}</p>}
                           </div>
                         </div>
-
-                        {/* CTA Connect Button */}
                         <div className="pt-2">
                           {conn.status === 'none' && (
-                            <button
-                              onClick={() => handleSendRequest(item.uid)}
-                              disabled={actioningId === item.uid}
-                              className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                            >
-                              <UserPlus className="w-4 h-4" />
-                              Send Chat Request
+                            <button onClick={() => handleSendRequest(item.uid)} disabled={actioningId === item.uid}
+                              className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50">
+                              <UserPlus className="w-4 h-4" /> Send Chat Request
                             </button>
                           )}
                           {conn.status === 'pending' && conn.isSender && (
@@ -290,29 +236,16 @@ export default function RecruiterNetworkPage() {
                           )}
                           {conn.status === 'pending' && !conn.isSender && (
                             <div className="flex gap-2">
-                              <button
-                                onClick={() => handleRespond(conn.id!, 'accepted')}
-                                disabled={actioningId === conn.id}
-                                className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
-                              >
-                                Accept
-                              </button>
-                              <button
-                                onClick={() => handleRespond(conn.id!, 'declined')}
-                                disabled={actioningId === conn.id}
-                                className="flex-1 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-400 rounded-xl text-xs font-bold transition cursor-pointer"
-                              >
-                                Decline
-                              </button>
+                              <button onClick={() => handleRespond(conn.id!, 'accepted')} disabled={actioningId === conn.id}
+                                className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold transition">Accept</button>
+                              <button onClick={() => handleRespond(conn.id!, 'declined')} disabled={actioningId === conn.id}
+                                className="flex-1 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-400 rounded-xl text-xs font-bold transition">Decline</button>
                             </div>
                           )}
                           {conn.status === 'accepted' && (
-                            <button
-                              onClick={() => router.push('/recruiter/messages')}
-                              className="w-full py-2 bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 text-purple-400 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
-                            >
-                              Connected • Chat
-                              <ArrowRight className="w-3 h-3" />
+                            <button onClick={() => router.push('/recruiter/messages')}
+                              className="w-full py-2 bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 text-purple-400 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5">
+                              Connected • Chat <ArrowRight className="w-3 h-3" />
                             </button>
                           )}
                         </div>
@@ -323,7 +256,7 @@ export default function RecruiterNetworkPage() {
               )
             )}
 
-            {/* PENDING REQUESTS VIEW */}
+            {/* PENDING */}
             {activeTab === 'pending' && (
               pendingReceived.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 bg-white/5 border border-white/5 rounded-2xl text-zinc-400 text-center">
@@ -336,26 +269,20 @@ export default function RecruiterNetworkPage() {
                     <div key={conn.id} className="bg-[#0F1424]/40 border border-white/5 backdrop-blur-xl rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-purple-600/20 text-purple-400 border border-purple-500/25 flex items-center justify-center font-bold text-sm">
-                          {conn.senderName.charAt(0).toUpperCase()}
+                          {(conn.senderName ?? '?').charAt(0).toUpperCase()}
                         </div>
                         <div>
                           <h3 className="font-bold text-sm">{conn.senderName}</h3>
-                          <p className="text-xs text-zinc-400">{conn.senderEmail} • {conn.senderRole}</p>
+                          <p className="text-xs text-zinc-400">{conn.senderEmail} · {conn.senderRole}</p>
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => handleRespond(conn.id, 'accepted')}
-                          disabled={actioningId === conn.id}
-                          className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
-                        >
+                        <button onClick={() => handleRespond(conn.id, 'accepted')} disabled={actioningId === conn.id}
+                          className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold transition">
                           Accept Request
                         </button>
-                        <button
-                          onClick={() => handleRespond(conn.id, 'declined')}
-                          disabled={actioningId === conn.id}
-                          className="px-5 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-400 rounded-xl text-xs font-bold transition cursor-pointer"
-                        >
+                        <button onClick={() => handleRespond(conn.id, 'declined')} disabled={actioningId === conn.id}
+                          className="px-5 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-400 rounded-xl text-xs font-bold transition">
                           Decline
                         </button>
                       </div>
@@ -365,7 +292,7 @@ export default function RecruiterNetworkPage() {
               )
             )}
 
-            {/* CONNECTIONS LIST VIEW */}
+            {/* CONNECTIONS */}
             {activeTab === 'connections' && (
               activeConnections.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 bg-white/5 border border-white/5 rounded-2xl text-zinc-400 text-center">
@@ -377,16 +304,15 @@ export default function RecruiterNetworkPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {activeConnections.map(conn => {
                     const isSender = conn.senderId === user?.id;
-                    const cName = isSender ? conn.receiverName : conn.senderName;
+                    const cName  = isSender ? conn.receiverName  : conn.senderName;
                     const cEmail = isSender ? conn.receiverEmail : conn.senderEmail;
-                    const cRole = isSender ? conn.receiverRole : conn.senderRole;
-                    
+                    const cRole  = isSender ? conn.receiverRole  : conn.senderRole;
                     return (
                       <div key={conn.id} className="bg-[#0F1424]/40 border border-white/5 backdrop-blur-xl rounded-2xl p-5 hover:border-white/10 transition flex flex-col justify-between space-y-4">
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
                             <div className="w-10 h-10 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
-                              {cName.charAt(0).toUpperCase()}
+                              {(cName ?? '?').charAt(0).toUpperCase()}
                             </div>
                             <div>
                               <h3 className="font-bold text-sm">{cName}</h3>
@@ -394,19 +320,15 @@ export default function RecruiterNetworkPage() {
                                 cRole === 'recruiter'
                                   ? 'bg-purple-500/10 border-purple-500/20 text-purple-400'
                                   : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400'
-                              }`}>
-                                {cRole}
-                              </span>
+                              }`}>{cRole}</span>
                             </div>
                           </div>
                           <div className="text-xs text-zinc-400 pt-2">
                             <p className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-zinc-500" /> {cEmail}</p>
                           </div>
                         </div>
-                        <button
-                          onClick={() => router.push('/recruiter/messages')}
-                          className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 cursor-pointer"
-                        >
+                        <button onClick={() => router.push('/recruiter/messages')}
+                          className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2">
                           Send Message
                         </button>
                       </div>

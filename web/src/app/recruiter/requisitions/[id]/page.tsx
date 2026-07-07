@@ -11,8 +11,7 @@ import {
   ArrowLeft, Users, Calendar, MapPin, Briefcase, Edit3, Archive,
   RefreshCw, ChevronRight, CheckCircle, Clock, TrendingUp
 } from 'lucide-react';
-
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
+import { API_BASE as API } from '@/lib/api';
 
 const STATUS_COLORS: Record<string, string> = {
   Applied: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
@@ -31,13 +30,13 @@ const getInitials = (name: string) => {
 export default function RequisitionDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
   const [job, setJob] = useState<any>(null);
   const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [archiving, setArchiving] = useState(false);
 
-  const authHeader = { 'Authorization': `Bearer mock_token_for_${user?.id || 'mock_uid'}` };
+  const getAuthHeader = async () => ({ 'Authorization': `Bearer ${await getToken()}` });
 
   useEffect(() => {
     if (!id) return;
@@ -45,8 +44,8 @@ export default function RequisitionDetailPage() {
       setLoading(true);
       try {
         const [jobRes, appsRes] = await Promise.all([
-          fetch(`${API}/jobs/${id}`, { headers: authHeader }),
-          fetch(`${API}/jobs/${id}/applications`, { headers: authHeader }),
+          fetch(`${API}/jobs/${id}`, { headers: await getAuthHeader() }),
+          fetch(`${API}/jobs/${id}/applications`, { headers: await getAuthHeader() }),
         ]);
         if (!jobRes.ok) { router.push('/recruiter/requisitions'); return; }
         const jobData = await jobRes.json();
@@ -65,7 +64,7 @@ export default function RequisitionDetailPage() {
     try {
       const res = await fetch(`${API}/jobs/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...authHeader },
+        headers: { 'Content-Type': 'application/json', ...await getAuthHeader() },
         body: JSON.stringify({ status: 'Archived' }),
       });
       if (!res.ok) throw new Error('Failed to archive');

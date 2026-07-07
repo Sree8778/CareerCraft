@@ -12,13 +12,12 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
+import { API_BASE as API } from '@/lib/api';
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const companyId = resolvedParams.id;
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getToken } = useAuth();
   const router = useRouter();
 
   const [company, setCompany] = useState<any | null>(null);
@@ -92,12 +91,11 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
     setSubmittingReview(true);
     try {
-      const token = user?.id ? `mock_token_for_${user.id}` : 'mock_token';
       const res = await fetch(`${API}/companies/${companyId}/reviews`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${await getToken()}`
         },
         body: JSON.stringify({
           rating,
@@ -129,12 +127,11 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
     setSubmittingQuestion(true);
     try {
-      const token = user?.id ? `mock_token_for_${user.id}` : 'mock_token';
       const res = await fetch(`${API}/companies/${companyId}/qna`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${await getToken()}`
         },
         body: JSON.stringify({
           question: questionText,
@@ -162,12 +159,11 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     if (!text || !text.trim()) return;
 
     try {
-      const token = user?.id ? `mock_token_for_${user.id}` : 'mock_token';
       const res = await fetch(`${API}/companies/${companyId}/qna`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${await getToken()}`
         },
         body: JSON.stringify({
           question: qna.find(q => q.id === questionId)?.question || '',

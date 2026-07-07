@@ -1,67 +1,71 @@
-// src/app/candidate/network/page.tsx
+﻿// src/app/candidate/network/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import CandidateLayout from '@/components/layout/CandidateLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { Network, Search, UserPlus, CheckCircle, RefreshCw, Mail, Phone, Users, Shield, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
+import { Network, Search, UserPlus, CheckCircle, RefreshCw, Mail, Phone, Users, Shield, ArrowRight, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { API_BASE as API } from '@/lib/api';
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
 export default function CandidateNetworkPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getToken, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Tab State
   const [activeTab, setActiveTab] = useState<'directory' | 'pending' | 'connections'>('directory');
-
-  // Data States
   const [usersList, setUsersList] = useState<any[]>([]);
   const [connectionsList, setConnectionsList] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  
-  // Loading & Submitting States
-  const [loading, setLoading] = useState(true);
+  const [loadingDir, setLoadingDir] = useState(true);
   const [actioningId, setActioningId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated || user?.role !== 'candidate') {
-      router.push('/');
-      return;
-    }
-    fetchData();
-  }, [isAuthenticated, user, router]);
+    if (authLoading) return;
+    if (!isAuthenticated || user?.role !== 'candidate') { router.push('/'); return; }
+  }, [authLoading, isAuthenticated, user, router]);
 
-  const fetchData = async () => {
+  // ── Real-time connections via Firestore ─────────────────────────────────
+  useEffect(() => {
+    if (!user?.id) return;
+    const uid = user.id;
+    const seen = new Map<string, any>();
+
+    const merge = () => setConnectionsList([...seen.values()]);
+
+    const q1 = query(collection(db, 'connections'), where('senderId',   '==', uid));
+    const q2 = query(collection(db, 'connections'), where('receiverId', '==', uid));
+
+    const u1 = onSnapshot(q1, snap => { snap.docs.forEach(d => seen.set(d.id, { id: d.id, ...d.data() })); merge(); }, () => {});
+    const u2 = onSnapshot(q2, snap => { snap.docs.forEach(d => seen.set(d.id, { id: d.id, ...d.data() })); merge(); }, () => {});
+
+    return () => { u1(); u2(); };
+  }, [user?.id]);
+
+  const fetchDirectory = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    setLoadingDir(true);
     try {
-      // Fetch users
-      const usersRes = await fetch(`${API}/users?search=${searchQuery}&role=${roleFilter}`, {
-        headers: { 'Authorization': `Bearer mock_token_for_${user.id}` }
+      const res = await fetch(`${API}/users?search=${searchQuery}&role=${roleFilter}`, {
+        headers: { 'Authorization': `Bearer ${await getToken()}` },
       });
-      const usersData = await usersRes.json();
-      const allUsers = usersData.users || [];
+      const data = await res.json();
+      setUsersList(data.users || []);
+    } catch { toast.error('Failed to load directory.'); }
+    finally { setLoadingDir(false); }
+  }, [user, searchQuery, roleFilter, getToken]);
 
-      // Fetch connections
-      const connRes = await fetch(`${API}/connections`, {
-        headers: { 'Authorization': `Bearer mock_token_for_${user.id}` }
-      });
-      const connData = await connRes.json();
-      const allConnections = connData.connections || [];
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && user?.role === 'candidate') fetchDirectory();
+  }, [authLoading, isAuthenticated, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-      setUsersList(allUsers);
-      setConnectionsList(allConnections);
-    } catch (err) {
-      console.error('Failed to load network data:', err);
-      toast.error('Failed to load directory data.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Keep fetchData alias for backwards compat with existing JSX
+  const fetchData = fetchDirectory;
 
   const handleSendRequest = async (targetUid: string) => {
     if (!user) return;
@@ -71,15 +75,14 @@ export default function CandidateNetworkPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user.id}`
+          'Authorization': `Bearer ${await getToken()}`
         },
         body: JSON.stringify({ receiverId: targetUid })
       });
 
       const result = await res.json();
       if (res.ok) {
-        toast.success('Connection invitation sent successfully!');
-        fetchData();
+        toast.success('Connection invitation sent!');
       } else {
         toast.error(result.error || 'Failed to send request.');
       }
@@ -98,7 +101,7 @@ export default function CandidateNetworkPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer mock_token_for_${user.id}`
+          'Authorization': `Bearer ${await getToken()}`
         },
         body: JSON.stringify({ status })
       });
@@ -106,7 +109,6 @@ export default function CandidateNetworkPage() {
       const result = await res.json();
       if (res.ok) {
         toast.success(status === 'accepted' ? 'Request accepted!' : 'Request declined.');
-        fetchData();
       } else {
         toast.error(result.error || 'Failed to respond.');
       }
@@ -222,7 +224,7 @@ export default function CandidateNetworkPage() {
         </div>
 
         {/* Tab Contents */}
-        {loading ? (
+        {loadingDir ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white/5 border border-white/5 rounded-2xl gap-3 text-zinc-400">
             <RefreshCw className="w-6 h-6 animate-spin text-indigo-400" />
             <span className="text-sm">Loading directory data...</span>
@@ -244,14 +246,14 @@ export default function CandidateNetworkPage() {
                       <div key={item.uid} className="bg-[#0F1424]/40 border border-white/5 backdrop-blur-xl rounded-2xl p-5 hover:border-white/10 transition flex flex-col justify-between space-y-4">
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
+                            <Link href={`/profile/${item.uid}`} className="w-10 h-10 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm shrink-0 hover:opacity-80 transition">
                               {item.fullName.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-sm">{item.fullName}</h3>
+                            </Link>
+                            <div className="flex-1 min-w-0">
+                              <Link href={`/profile/${item.uid}`} className="font-bold text-sm hover:text-indigo-300 transition block truncate">{item.fullName}</Link>
                               <span className={`px-2 py-0.5 text-[8px] font-bold font-mono tracking-wider rounded-md uppercase border ${
-                                item.role === 'recruiter' 
-                                  ? 'bg-purple-500/10 border-purple-500/20 text-purple-400' 
+                                item.role === 'recruiter'
+                                  ? 'bg-purple-500/10 border-purple-500/20 text-purple-400'
                                   : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400'
                               }`}>
                                 {item.role}
@@ -272,7 +274,11 @@ export default function CandidateNetworkPage() {
                         </div>
 
                         {/* CTA Connect Button */}
-                        <div className="pt-2">
+                        <div className="pt-2 space-y-2">
+                          <Link href={`/profile/${item.uid}`}
+                            className="w-full py-2 border border-white/10 bg-white/3 hover:bg-white/8 text-zinc-300 hover:text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5">
+                            <ExternalLink className="w-3.5 h-3.5" /> View Profile
+                          </Link>
                           {conn.status === 'none' && (
                             <button
                               onClick={() => handleSendRequest(item.uid)}
@@ -280,7 +286,7 @@ export default function CandidateNetworkPage() {
                               className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                             >
                               <UserPlus className="w-4 h-4" />
-                              Send Chat Request
+                              Connect
                             </button>
                           )}
                           {conn.status === 'pending' && conn.isSender && (

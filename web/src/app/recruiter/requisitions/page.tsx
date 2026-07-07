@@ -3,13 +3,13 @@
 
 import { useState, useEffect } from 'react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 import RequisitionCard from '@/components/recruiter/RequisitionCard';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { RefreshCw, Plus, Briefcase } from 'lucide-react';
+import { API_BASE } from '@/lib/api';
 
 type StatusFilter = 'All' | 'Open' | 'Archived' | 'Closed' | 'In Review';
 
@@ -17,10 +17,11 @@ export default function RequisitionListPage() {
   const [filter, setFilter] = useState<StatusFilter>('All');
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getToken, loading: authLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated || user?.role !== 'recruiter') { router.push('/'); return; }
 
     const fetchJobs = async () => {
@@ -28,7 +29,7 @@ export default function RequisitionListPage() {
       try {
         // Fetch jobs and their application counts in parallel
         const res = await fetch(`${API_BASE}/jobs?recruiterId=${user.id}`, {
-          headers: { 'Authorization': `Bearer mock_token_for_${user.id}` },
+          headers: { 'Authorization': `Bearer ${await getToken()}` },
         });
         const data = await res.json();
         const jobList: any[] = data.jobs || [];
@@ -38,7 +39,7 @@ export default function RequisitionListPage() {
           jobList.map(async (job: any) => {
             try {
               const appsRes = await fetch(`${API_BASE}/jobs/${job.id}/applications`, {
-                headers: { 'Authorization': `Bearer mock_token_for_${user.id}` },
+                headers: { 'Authorization': `Bearer ${await getToken()}` },
               });
               const appsData = await appsRes.json();
               return { ...job, applicants: (appsData.applications || []).length };
@@ -56,7 +57,7 @@ export default function RequisitionListPage() {
     };
 
     fetchJobs();
-  }, [isAuthenticated, user, router]);
+  }, [isAuthenticated, user, router, authLoading]);
 
   if (!isAuthenticated || user?.role !== 'recruiter') return null;
 

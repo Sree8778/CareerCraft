@@ -455,574 +455,492 @@ export default function SmartApplyPage() {
 
   return (
     <CandidateLayout>
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* ── Header ───────────────────────────────────────────────────────── */}
+        {/* ── Page header ──────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
-                <Zap className="w-6 h-6 text-indigo-400" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white">Smart Apply</h1>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  Scrape jobs from the web · share the pool · apply in one click
-                </p>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
+              <Zap className="w-6 h-6 text-indigo-400" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white">Smart Apply</h1>
+              <p className="text-xs text-zinc-400 mt-0.5">Scrape jobs from the web · share the pool · apply in one click</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <div className="text-xs text-zinc-400">Applied today</div>
-              <div className="text-lg font-bold text-white">
-                {appliedToday}
-                <span className="text-zinc-500 text-xs font-normal">/{DAILY_CAP}</span>
-              </div>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Applied today</p>
+              <p className="text-lg font-bold text-white leading-none">
+                {appliedToday}<span className="text-zinc-500 text-xs font-normal">/{DAILY_CAP}</span>
+              </p>
             </div>
-            <div className={`w-2 h-2 rounded-full ${autoRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+            <div className={`w-2.5 h-2.5 rounded-full ${autoRunning ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-700'}`} />
           </div>
         </div>
 
-        {/* ── Search Panel ─────────────────────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white/3 border border-white/8 rounded-2xl p-6 space-y-4"
-        >
-          <div className="flex items-center gap-2 mb-1">
-            <Search className="w-4 h-4 text-indigo-400" />
-            <span className="text-sm font-semibold text-white">Find Jobs</span>
-          </div>
+        {/* ── Two-column layout ─────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-          {/* ── Multi-role tag input ─────────────────────────────────────── */}
-          <div>
-            <div className="flex flex-wrap items-center gap-1.5 min-h-[42px] bg-zinc-900/60 border border-white/8 rounded-xl px-3 py-2 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/20">
-              <Briefcase className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-              {roles.map((r, i) => (
-                <span key={i} className="flex items-center gap-1 bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-xs font-semibold px-2 py-0.5 rounded-lg">
-                  {r}
-                  <button type="button" onClick={() => removeRole(i)} className="text-indigo-400 hover:text-white">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-              <input
-                value={roleInput}
-                onChange={e => setRoleInput(e.target.value)}
-                onKeyDown={handleRoleKeyDown}
-                onBlur={() => { if (roleInput.trim()) addRole(roleInput); }}
-                placeholder={roles.length === 0 ? 'e.g. React Developer — press Enter to add more roles…' : 'Add another role…'}
-                className="flex-1 min-w-[180px] bg-transparent text-sm text-white placeholder-zinc-500 focus:outline-none"
-              />
-            </div>
-            <p className="text-[11px] text-zinc-600 mt-1 ml-1">Press <kbd className="bg-zinc-800 text-zinc-400 px-1 rounded text-[10px]">Enter</kbd> or <kbd className="bg-zinc-800 text-zinc-400 px-1 rounded text-[10px]">,</kbd> to add each role · backspace removes last</p>
-          </div>
+          {/* ── LEFT: Search + Results ───────────────────────────────────────── */}
+          <div className="lg:col-span-8 space-y-5">
 
-          {/* ── Location with suggestions ────────────────────────────────── */}
-          <div className="relative">
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <input
-                ref={locationInputRef}
-                value={location}
-                onChange={e => { setLocation(e.target.value); setShowLocationSuggestions(true); }}
-                onFocus={() => setShowLocationSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 150)}
-                onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                placeholder="Remote, New York, London…"
-                className="w-full bg-zinc-900/60 border border-white/8 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20"
-              />
-            </div>
-            <AnimatePresence>
-              {showLocationSuggestions && filteredSuggestions.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  className="absolute z-30 mt-1 w-full bg-zinc-900 border border-white/10 rounded-xl shadow-xl overflow-hidden"
-                >
-                  {filteredSuggestions.slice(0, 6).map(s => (
-                    <button
-                      key={s}
-                      type="button"
-                      onMouseDown={() => { setLocation(s); setShowLocationSuggestions(false); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-white transition-colors text-left"
-                    >
-                      <MapPin className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
-                      {s}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-zinc-500">Sources:</span>
-              {Object.entries(SOURCE_LABELS).map(([src, meta]) => (
-                <button
-                  key={src}
-                  onClick={() => toggleSource(src)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                    sources.includes(src)
-                      ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300'
-                      : 'bg-zinc-900/40 border-white/5 text-zinc-500 hover:border-white/15'
-                  }`}
-                >
-                  {meta.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] text-zinc-600">
-                Arbeitnow &amp; Jobicy work without any key. Indeed &amp; LinkedIn require{' '}
-                <a href="/candidate/settings?section=api-keys" className="text-indigo-400 hover:underline">Apify</a>.
-              </p>
-              <button
-                onClick={handleSearch}
-                disabled={searching}
-                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all"
-              >
-                {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                {searching ? 'Scraping…' : 'Find Jobs'}
-              </button>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* ── Results ──────────────────────────────────────────────────────── */}
-        {jobs.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-            <div className="flex items-center justify-between">
+            {/* Search panel */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white/3 border border-white/8 rounded-2xl p-5 space-y-4"
+            >
               <div className="flex items-center gap-2">
-                <LayoutList className="w-4 h-4 text-zinc-400" />
-                <span className="text-sm font-semibold text-white">{jobs.length} Jobs Found</span>
-                {wasCached && (
-                  <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-mono">
-                    cached · shared pool
-                  </span>
-                )}
+                <Search className="w-4 h-4 text-indigo-400" />
+                <span className="text-sm font-semibold text-white">Find Jobs</span>
               </div>
-              <button
-                onClick={handleSearch}
-                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Refresh
-              </button>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {jobs.map(job => (
-                <motion.div
-                  key={job.id}
-                  layout
-                  className={`bg-white/3 border rounded-xl p-4 transition-all ${
-                    inQueue(job.id)
-                      ? 'border-indigo-500/40 bg-indigo-500/5'
-                      : alreadyApplied(job.id)
-                      ? 'border-emerald-500/30 bg-emerald-500/5'
-                      : 'border-white/8 hover:border-white/15'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    {job.logo ? (
-                      <img src={job.logo} alt={job.company} className="w-9 h-9 rounded-lg object-cover bg-zinc-800 flex-shrink-0" />
-                    ) : (
-                      <div className="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                        <Building2 className="w-4 h-4 text-zinc-500" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h3 className="text-sm font-semibold text-white truncate">{job.title}</h3>
-                          <p className="text-xs text-zinc-400 truncate">{job.company}</p>
-                        </div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 font-mono ${
-                          SOURCE_LABELS[job.source]?.color ?? 'bg-zinc-700 text-zinc-300 border-zinc-600'
-                        }`}>
-                          {SOURCE_LABELS[job.source]?.label ?? job.source}
-                        </span>
-                      </div>
+              {/* Multi-role tag input */}
+              <div>
+                <div className="flex flex-wrap items-center gap-1.5 min-h-[42px] bg-zinc-900/60 border border-white/8 rounded-xl px-3 py-2 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/20">
+                  <Briefcase className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                  {roles.map((r, i) => (
+                    <span key={i} className="flex items-center gap-1 bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-xs font-semibold px-2 py-0.5 rounded-lg">
+                      {r}
+                      <button type="button" onClick={() => removeRole(i)} className="text-indigo-400 hover:text-white">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    value={roleInput}
+                    onChange={e => setRoleInput(e.target.value)}
+                    onKeyDown={handleRoleKeyDown}
+                    onBlur={() => { if (roleInput.trim()) addRole(roleInput); }}
+                    placeholder={roles.length === 0 ? 'e.g. React Developer — press Enter to add more roles…' : 'Add another role…'}
+                    className="flex-1 min-w-[180px] bg-transparent text-sm text-white placeholder-zinc-500 focus:outline-none"
+                  />
+                </div>
+                <p className="text-[11px] text-zinc-600 mt-1 ml-1">
+                  Press <kbd className="bg-zinc-800 text-zinc-400 px-1 rounded text-[10px]">Enter</kbd> or{' '}
+                  <kbd className="bg-zinc-800 text-zinc-400 px-1 rounded text-[10px]">,</kbd> to add each role · backspace removes last
+                </p>
+              </div>
 
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
-                        {job.location && (
-                          <span className="flex items-center gap-1 text-[11px] text-zinc-400">
-                            <MapPin className="w-3 h-3" />{job.location}
-                          </span>
-                        )}
-                        {job.salary && (
-                          <span className="flex items-center gap-1 text-[11px] text-emerald-400">
-                            <DollarSign className="w-3 h-3" />{job.salary}
-                          </span>
-                        )}
-                      </div>
+              {/* Location with suggestions */}
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 z-10" />
+                <input
+                  ref={locationInputRef}
+                  value={location}
+                  onChange={e => { setLocation(e.target.value); setShowLocationSuggestions(true); }}
+                  onFocus={() => setShowLocationSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 150)}
+                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  placeholder="Remote, New York, London…"
+                  className="w-full bg-zinc-900/60 border border-white/8 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20"
+                />
+                <AnimatePresence>
+                  {showLocationSuggestions && filteredSuggestions.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="absolute z-30 mt-1 w-full bg-zinc-900 border border-white/10 rounded-xl shadow-xl overflow-hidden"
+                    >
+                      {filteredSuggestions.slice(0, 6).map(s => (
+                        <button key={s} type="button"
+                          onMouseDown={() => { setLocation(s); setShowLocationSuggestions(false); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-white transition-colors text-left">
+                          <MapPin className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />{s}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
-                      {job.tags?.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {job.tags.slice(0, 4).map(tag => (
-                            <span key={tag} className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-mono">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+              {/* Sources + search button */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-zinc-500">Sources:</span>
+                {Object.entries(SOURCE_LABELS).map(([src, meta]) => (
+                  <button key={src} onClick={() => toggleSource(src)}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                      sources.includes(src)
+                        ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300'
+                        : 'bg-zinc-900/40 border-white/5 text-zinc-500 hover:border-white/15'
+                    }`}>
+                    {meta.label}
+                  </button>
+                ))}
+              </div>
 
-                      {/* Description expand */}
-                      {job.description && (
-                        <div className="mt-2">
-                          <button
-                            onClick={() => setExpandedJob(expandedJob === job.id ? null : job.id)}
-                            className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
-                          >
-                            {expandedJob === job.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                            {expandedJob === job.id ? 'Hide' : 'Preview'} description
-                          </button>
-                          <AnimatePresence>
-                            {expandedJob === job.id && (
-                              <motion.p
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="text-[11px] text-zinc-400 mt-1 leading-relaxed overflow-hidden"
-                                dangerouslySetInnerHTML={{ __html: job.description.replace(/<[^>]*>/g, '') }}
-                              />
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2 mt-3">
-                        <a
-                          href={job.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-white transition-colors"
-                        >
-                          <ExternalLink className="w-3 h-3" /> View
-                        </a>
-
-                        {alreadyApplied(job.id) ? (
-                          <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-semibold">
-                            <CheckCircle className="w-3 h-3" /> Applied
-                          </span>
-                        ) : inQueue(job.id) ? (
-                          <span className="flex items-center gap-1 text-[11px] text-indigo-400 font-semibold">
-                            <Clock className="w-3 h-3" /> In Queue
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => addToQueue(job)}
-                            className="flex items-center gap-1 text-[11px] bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-lg font-semibold transition-all"
-                          >
-                            <Plus className="w-3 h-3" /> Queue
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* ── Apply Queue ───────────────────────────────────────────────────── */}
-        <div className="bg-white/3 border border-white/8 rounded-2xl overflow-hidden">
-          {/* Queue header + mode toggle */}
-          <div className="flex items-center justify-between p-5 border-b border-white/8">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-indigo-400" />
-              <span className="text-sm font-semibold text-white">Apply Queue</span>
-              <span className="text-xs bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded-full">
-                {queue.length} jobs
-              </span>
-            </div>
-
-            {/* Resume selector — always visible */}
-            <div className="flex items-center gap-2">
-              <FileText className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-zinc-500">Resume:</span>
-                <button
-                  onClick={() => setShowResumePicker(v => !v)}
-                  className="flex items-center gap-1 text-xs text-white font-medium hover:text-indigo-300 transition-colors max-w-[160px] truncate"
-                >
-                  {resumes.find(r => r.id === selectedResumeId)?.name ?? 'My Resume'}
-                  {showResumePicker ? <ChevronUp className="w-3 h-3 flex-shrink-0" /> : <ChevronDown className="w-3 h-3 flex-shrink-0" />}
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] text-zinc-600">
+                  Arbeitnow &amp; Jobicy work without a key. Indeed &amp; LinkedIn require{' '}
+                  <a href="/candidate/settings?section=api-keys" className="text-indigo-400 hover:underline">Apify</a>.
+                </p>
+                <button onClick={handleSearch} disabled={searching}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all whitespace-nowrap shrink-0">
+                  {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  {searching ? 'Scraping…' : 'Find Jobs'}
                 </button>
               </div>
-            </div>
+            </motion.div>
 
-          {/* Mode toggle */}
-            <div className="flex items-center bg-zinc-900/60 border border-white/8 rounded-xl p-1">
-              <button
-                onClick={() => setApplyMode('supervised')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  applyMode === 'supervised'
-                    ? 'bg-indigo-600 text-white shadow'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                <User className="w-3.5 h-3.5" /> Supervised
-              </button>
-              <button
-                onClick={() => setApplyMode('autonomous')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  applyMode === 'autonomous'
-                    ? 'bg-indigo-600 text-white shadow'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                <Bot className="w-3.5 h-3.5" /> Autonomous
-              </button>
-            </div>
-          </div>
-
-          {/* ── Resume picker dropdown ─────────────────────────────────────── */}
-          <AnimatePresence>
-            {showResumePicker && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden border-b border-white/8"
-              >
-                <div className="p-3 space-y-1">
-                  {resumes.map(r => (
-                    <button
-                      key={r.id}
-                      onClick={() => { setSelectedResumeId(r.id); setShowResumePicker(false); }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
-                        selectedResumeId === r.id
-                          ? 'bg-indigo-500/15 border border-indigo-500/30'
-                          : 'hover:bg-white/5 border border-transparent'
-                      }`}
-                    >
-                      <FileText className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">{r.name}</p>
-                        {r.savedAt && (
-                          <p className="text-[10px] text-zinc-500">Saved {new Date(r.savedAt).toLocaleDateString()}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {selectedResumeId === r.id && <CheckCircle className="w-3.5 h-3.5 text-indigo-400" />}
-                        <button
-                          onClick={e => { e.stopPropagation(); saveDefaultResume(r.id); }}
-                          title="Set as default"
-                          className="p-1 text-zinc-500 hover:text-amber-400 transition-colors"
-                        >
-                          <Star className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </button>
-                  ))}
-                  <a
-                    href="/candidate/resume-builder"
-                    className="flex items-center gap-2 px-3 py-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                  >
-                    <Plus className="w-3 h-3" /> Create a new resume version in Resume Builder
-                  </a>
-
-                  {/* Upload from device */}
-                  <input
-                    ref={resumeUploadRef}
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    className="hidden"
-                    onChange={handleResumeUpload}
-                  />
-                  <button
-                    onClick={() => resumeUploadRef.current?.click()}
-                    disabled={uploadingResume}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50"
-                  >
-                    {uploadingResume
-                      ? <><Loader2 className="w-3 h-3 animate-spin" /> Uploading…</>
-                      : <><UploadCloud className="w-3 h-3" /> Upload resume from device (PDF / DOCX)</>
-                    }
+            {/* Results */}
+            {jobs.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <LayoutList className="w-4 h-4 text-zinc-400" />
+                    <span className="text-sm font-semibold text-white">{jobs.length} Jobs Found</span>
+                    {wasCached && (
+                      <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-mono">
+                        cached · shared pool
+                      </span>
+                    )}
+                  </div>
+                  <button onClick={handleSearch}
+                    className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
+                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
                   </button>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                  {jobs.map(job => (
+                    <motion.div key={job.id} layout
+                      className={`bg-white/3 border rounded-xl p-4 transition-all ${
+                        inQueue(job.id)       ? 'border-indigo-500/40 bg-indigo-500/5'
+                        : alreadyApplied(job.id) ? 'border-emerald-500/30 bg-emerald-500/5'
+                        : 'border-white/8 hover:border-white/15'
+                      }`}>
+                      <div className="flex items-start gap-3">
+                        {job.logo
+                          ? <img src={job.logo} alt={job.company} className="w-9 h-9 rounded-lg object-cover bg-zinc-800 flex-shrink-0" />
+                          : <div className="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0"><Building2 className="w-4 h-4 text-zinc-500" /></div>
+                        }
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <h3 className="text-sm font-semibold text-white truncate">{job.title}</h3>
+                              <p className="text-xs text-zinc-400 truncate">{job.company}</p>
+                            </div>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 font-mono ${
+                              SOURCE_LABELS[job.source]?.color ?? 'bg-zinc-700 text-zinc-300 border-zinc-600'
+                            }`}>
+                              {SOURCE_LABELS[job.source]?.label ?? job.source}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
+                            {job.location && (
+                              <span className="flex items-center gap-1 text-[11px] text-zinc-400">
+                                <MapPin className="w-3 h-3" />{job.location}
+                              </span>
+                            )}
+                            {job.salary && (
+                              <span className="flex items-center gap-1 text-[11px] text-emerald-400">
+                                <DollarSign className="w-3 h-3" />{job.salary}
+                              </span>
+                            )}
+                          </div>
+
+                          {job.tags?.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {job.tags.slice(0, 4).map(tag => (
+                                <span key={tag} className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-mono">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+
+                          {job.description && (
+                            <div className="mt-2">
+                              <button onClick={() => setExpandedJob(expandedJob === job.id ? null : job.id)}
+                                className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors">
+                                {expandedJob === job.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                {expandedJob === job.id ? 'Hide' : 'Preview'} description
+                              </button>
+                              <AnimatePresence>
+                                {expandedJob === job.id && (
+                                  <motion.p
+                                    initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                                    className="text-[11px] text-zinc-400 mt-1 leading-relaxed overflow-hidden"
+                                    dangerouslySetInnerHTML={{ __html: job.description.replace(/<[^>]*>/g, '') }}
+                                  />
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2 mt-3">
+                            <a href={job.url} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-white transition-colors">
+                              <ExternalLink className="w-3 h-3" /> View
+                            </a>
+                            {alreadyApplied(job.id) ? (
+                              <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-semibold">
+                                <CheckCircle className="w-3 h-3" /> Applied
+                              </span>
+                            ) : inQueue(job.id) ? (
+                              <span className="flex items-center gap-1 text-[11px] text-indigo-400 font-semibold">
+                                <Clock className="w-3 h-3" /> In Queue
+                              </span>
+                            ) : (
+                              <button onClick={() => addToQueue(job)}
+                                className="flex items-center gap-1 text-[11px] bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-lg font-semibold transition-all">
+                                <Plus className="w-3 h-3" /> Queue
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
               </motion.div>
             )}
-          </AnimatePresence>
 
-          <div className="p-5 space-y-4">
-            {/* ── Supervised mode ── */}
-            {applyMode === 'supervised' && (
-              <div className="space-y-3">
-                <p className="text-xs text-zinc-400">
-                  Review each job and AI-generated cover letter before submitting. Opens the application page in a new tab.
-                </p>
-
-                {queue.length === 0 ? (
-                  <div className="flex flex-col items-center py-8 text-zinc-600">
-                    <Briefcase className="w-8 h-8 mb-2" />
-                    <p className="text-sm">No jobs in queue. Search above and click <strong className="text-zinc-400">Queue</strong>.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {queue.map(job => (
-                      <div key={job.id} className="flex items-center justify-between p-3 bg-zinc-900/40 border border-white/5 rounded-xl">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">{job.title}</p>
-                          <p className="text-xs text-zinc-400 truncate">{job.company} · {job.location}</p>
-                        </div>
-                        <div className="flex items-center gap-2 ml-3">
-                          <button
-                            onClick={() => openSupervised(job)}
-                            className="flex items-center gap-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap"
-                          >
-                            <BookOpen className="w-3 h-3" /> Review & Apply
-                          </button>
-                          <button
-                            onClick={() => removeFromQueue(job.id)}
-                            className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Autonomous mode ── */}
-            {applyMode === 'autonomous' && (
-              <div className="space-y-4">
-                <div className="flex items-start gap-3 p-3 bg-amber-500/8 border border-amber-500/20 rounded-xl">
-                  <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-300/80">
-                    Autonomous mode applies to all queued jobs automatically (max {DAILY_CAP}/day).
-                    Some job boards may flag bot activity — use responsibly.
-                  </p>
-                </div>
-
-                {/* Daily cap bar */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-xs text-zinc-400">
-                    <span>Daily applications</span>
-                    <span>{appliedToday} / {DAILY_CAP}</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all"
-                      style={{ width: `${Math.min((appliedToday / DAILY_CAP) * 100, 100)}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Start / Stop */}
-                {!autoRunning ? (
-                  <button
-                    onClick={startAutonomous}
-                    disabled={queue.length === 0 || appliedToday >= DAILY_CAP}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-all"
-                  >
-                    <Play className="w-4 h-4" />
-                    Start Autonomous Apply ({Math.min(queue.length, DAILY_CAP - appliedToday)} jobs)
-                  </button>
-                ) : (
-                  <button
-                    onClick={stopAutonomous}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-600/80 hover:bg-red-500 text-white text-sm font-semibold rounded-xl transition-all"
-                  >
-                    <Square className="w-4 h-4" /> Stop Applying
-                  </button>
-                )}
-
-                {/* Live progress log */}
-                {(autoRunning || progress.length > 0) && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <Cpu className={`w-3.5 h-3.5 ${autoRunning ? 'text-indigo-400 animate-pulse' : 'text-zinc-500'}`} />
-                      <span className="text-xs font-semibold text-zinc-300">
-                        {autoRunning ? 'Applying…' : 'Session complete'}
-                      </span>
-                    </div>
-                    <div className="bg-zinc-950/60 rounded-xl p-3 font-mono text-xs space-y-1.5 max-h-48 overflow-y-auto">
-                      <AnimatePresence initial={false}>
-                        {progress.map((p, i) => (
-                          <motion.div
-                            key={i}
-                            initial={{ opacity: 0, x: -8 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="flex items-center gap-2"
-                          >
-                            {p.status === 'applied' ? (
-                              <CheckCircle className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                            ) : (
-                              <XCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
-                            )}
-                            <span className={p.status === 'applied' ? 'text-emerald-300' : 'text-red-300'}>
-                              {p.status === 'applied' ? '✓' : '✗'} {p.title} @ {p.company}
-                            </span>
-                          </motion.div>
-                        ))}
-                        {autoRunning && (
-                          <motion.div
-                            key="spinner"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="flex items-center gap-2 text-zinc-500"
-                          >
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            <span>Processing next application…</span>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                )}
-
-                {/* Queue list in autonomous mode */}
-                {queue.length > 0 && !autoRunning && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Queued</p>
-                    {queue.map(job => (
-                      <div key={job.id} className="flex items-center justify-between p-3 bg-zinc-900/40 border border-white/5 rounded-xl">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">{job.title}</p>
-                          <p className="text-xs text-zinc-400">{job.company}</p>
-                        </div>
-                        <button
-                          onClick={() => removeFromQueue(job.id)}
-                          className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all ml-3"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Applied history ── */}
-            {appliedJobs.length > 0 && (
-              <div className="space-y-2 pt-2 border-t border-white/5">
-                <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Applied This Session</p>
-                {appliedJobs.slice(-5).reverse().map((a, i) => (
-                  <div key={i} className="flex items-center gap-2 p-2.5 bg-emerald-500/5 border border-emerald-500/15 rounded-xl">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-white truncate">{a.job_data?.title ?? 'Job'}</p>
-                      <p className="text-[10px] text-zinc-500">{a.job_data?.company} · {a.mode}</p>
-                    </div>
-                    <span className="ml-auto text-[10px] text-zinc-500 whitespace-nowrap">
-                      {a.applied_at ? new Date(a.applied_at).toLocaleTimeString() : ''}
-                    </span>
-                  </div>
-                ))}
+            {/* Empty state */}
+            {!searching && jobs.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 text-zinc-700 gap-2">
+                <Search className="w-10 h-10" />
+                <p className="text-sm">Search for jobs above to get started</p>
               </div>
             )}
           </div>
-        </div>
+
+          {/* ── RIGHT: Apply Queue (sticky) ────────────────────────────────── */}
+          <div className="lg:col-span-4">
+            <div className="sticky top-24 bg-white/3 border border-white/8 rounded-2xl overflow-hidden">
+
+              {/* Queue header — row 1: title + mode toggle */}
+              <div className="flex items-center justify-between px-5 pt-5 pb-3">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-indigo-400" />
+                  <span className="text-sm font-semibold text-white">Apply Queue</span>
+                  <span className="text-xs bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded-full font-mono">
+                    {queue.length}
+                  </span>
+                </div>
+                <div className="flex items-center bg-zinc-900/80 border border-white/8 rounded-xl p-1 shrink-0">
+                  <button onClick={() => setApplyMode('supervised')}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      applyMode === 'supervised' ? 'bg-indigo-600 text-white shadow' : 'text-zinc-400 hover:text-white'
+                    }`}>
+                    <User className="w-3 h-3" /> Supervised
+                  </button>
+                  <button onClick={() => setApplyMode('autonomous')}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      applyMode === 'autonomous' ? 'bg-indigo-600 text-white shadow' : 'text-zinc-400 hover:text-white'
+                    }`}>
+                    <Bot className="w-3 h-3" /> Auto
+                  </button>
+                </div>
+              </div>
+
+              {/* Queue header — row 2: resume selector */}
+              <div className="px-5 pb-4 border-b border-white/8">
+                <button onClick={() => setShowResumePicker(v => !v)}
+                  className="w-full flex items-center gap-2 px-3 py-2 bg-zinc-900/60 border border-white/8 hover:border-white/15 rounded-xl text-xs text-white transition-colors group">
+                  <FileText className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                  <span className="flex-1 text-left truncate text-zinc-300 group-hover:text-white font-medium">
+                    {resumes.find(r => r.id === selectedResumeId)?.name ?? 'My Resume'}
+                  </span>
+                  {showResumePicker ? <ChevronUp className="w-3.5 h-3.5 text-zinc-500 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-zinc-500 shrink-0" />}
+                </button>
+              </div>
+
+              {/* Resume picker dropdown */}
+              <AnimatePresence>
+                {showResumePicker && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden border-b border-white/8"
+                  >
+                    <div className="p-3 space-y-1">
+                      {resumes.map(r => (
+                        <button key={r.id}
+                          onClick={() => { setSelectedResumeId(r.id); setShowResumePicker(false); }}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
+                            selectedResumeId === r.id
+                              ? 'bg-indigo-500/15 border border-indigo-500/30'
+                              : 'hover:bg-white/5 border border-transparent'
+                          }`}>
+                          <FileText className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-white truncate">{r.name}</p>
+                            {r.savedAt && <p className="text-[10px] text-zinc-500">Saved {new Date(r.savedAt).toLocaleDateString()}</p>}
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {selectedResumeId === r.id && <CheckCircle className="w-3.5 h-3.5 text-indigo-400" />}
+                            <button onClick={e => { e.stopPropagation(); saveDefaultResume(r.id); }} title="Set as default"
+                              className="p-1 text-zinc-500 hover:text-amber-400 transition-colors">
+                              <Star className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </button>
+                      ))}
+                      <a href="/candidate/resume-builder"
+                        className="flex items-center gap-2 px-3 py-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                        <Plus className="w-3 h-3" /> Create a new resume version
+                      </a>
+                      <input ref={resumeUploadRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handleResumeUpload} />
+                      <button onClick={() => resumeUploadRef.current?.click()} disabled={uploadingResume}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50">
+                        {uploadingResume
+                          ? <><Loader2 className="w-3 h-3 animate-spin" /> Uploading…</>
+                          : <><UploadCloud className="w-3 h-3" /> Upload from device (PDF / DOCX)</>
+                        }
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Queue content */}
+              <div className="p-5 space-y-4 max-h-[calc(100vh-18rem)] overflow-y-auto">
+
+                {/* Supervised mode */}
+                {applyMode === 'supervised' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-zinc-500">Review each job + AI cover letter before applying. Opens the job page in a new tab.</p>
+                    {queue.length === 0 ? (
+                      <div className="flex flex-col items-center py-10 text-zinc-700 gap-2">
+                        <Briefcase className="w-7 h-7" />
+                        <p className="text-xs text-center">No jobs queued yet.<br />Search and click <strong className="text-zinc-500">Queue</strong>.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {queue.map(job => (
+                          <div key={job.id} className="p-3 bg-zinc-900/40 border border-white/5 rounded-xl space-y-2">
+                            <div>
+                              <p className="text-xs font-semibold text-white truncate">{job.title}</p>
+                              <p className="text-[11px] text-zinc-500 truncate">{job.company} · {job.location}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => openSupervised(job)}
+                                className="flex-1 flex items-center justify-center gap-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-semibold transition-all">
+                                <BookOpen className="w-3 h-3" /> Review &amp; Apply
+                              </button>
+                              <button onClick={() => removeFromQueue(job.id)}
+                                className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Autonomous mode */}
+                {applyMode === 'autonomous' && (
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-2.5 p-3 bg-amber-500/8 border border-amber-500/20 rounded-xl">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-amber-300/80">
+                        Applies to all queued jobs automatically (max {DAILY_CAP}/day). Use responsibly.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs text-zinc-400">
+                        <span>Daily cap</span>
+                        <span className="font-mono">{appliedToday} / {DAILY_CAP}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all"
+                          style={{ width: `${Math.min((appliedToday / DAILY_CAP) * 100, 100)}%` }} />
+                      </div>
+                    </div>
+
+                    {!autoRunning ? (
+                      <button onClick={startAutonomous} disabled={queue.length === 0 || appliedToday >= DAILY_CAP}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-all">
+                        <Play className="w-4 h-4" />
+                        Start ({Math.min(queue.length, DAILY_CAP - appliedToday)} jobs)
+                      </button>
+                    ) : (
+                      <button onClick={stopAutonomous}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-600/80 hover:bg-red-500 text-white text-sm font-semibold rounded-xl transition-all">
+                        <Square className="w-4 h-4" /> Stop Applying
+                      </button>
+                    )}
+
+                    {(autoRunning || progress.length > 0) && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <Cpu className={`w-3.5 h-3.5 ${autoRunning ? 'text-indigo-400 animate-pulse' : 'text-zinc-500'}`} />
+                          <span className="text-xs font-semibold text-zinc-300">{autoRunning ? 'Applying…' : 'Session complete'}</span>
+                        </div>
+                        <div className="bg-zinc-950/60 rounded-xl p-3 font-mono text-xs space-y-1.5 max-h-40 overflow-y-auto">
+                          <AnimatePresence initial={false}>
+                            {progress.map((p, i) => (
+                              <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                                className="flex items-center gap-2">
+                                {p.status === 'applied'
+                                  ? <CheckCircle className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                                  : <XCircle className="w-3 h-3 text-red-400 flex-shrink-0" />}
+                                <span className={p.status === 'applied' ? 'text-emerald-300 truncate' : 'text-red-300 truncate'}>
+                                  {p.status === 'applied' ? '✓' : '✗'} {p.title} @ {p.company}
+                                </span>
+                              </motion.div>
+                            ))}
+                            {autoRunning && (
+                              <motion.div key="spinner" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                className="flex items-center gap-2 text-zinc-500">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span>Processing next…</span>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                    )}
+
+                    {queue.length > 0 && !autoRunning && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Queued ({queue.length})</p>
+                        {queue.map(job => (
+                          <div key={job.id} className="flex items-center justify-between p-2.5 bg-zinc-900/40 border border-white/5 rounded-xl">
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-white truncate">{job.title}</p>
+                              <p className="text-[10px] text-zinc-500 truncate">{job.company}</p>
+                            </div>
+                            <button onClick={() => removeFromQueue(job.id)}
+                              className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all ml-2 shrink-0">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Applied history */}
+                {appliedJobs.length > 0 && (
+                  <div className="space-y-2 pt-3 border-t border-white/5">
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Applied This Session</p>
+                    {appliedJobs.slice(-5).reverse().map((a, i) => (
+                      <div key={i} className="flex items-center gap-2 p-2.5 bg-emerald-500/5 border border-emerald-500/15 rounded-xl">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-white truncate">{a.job_data?.title ?? 'Job'}</p>
+                          <p className="text-[10px] text-zinc-500">{a.job_data?.company} · {a.mode}</p>
+                        </div>
+                        <span className="text-[10px] text-zinc-600 whitespace-nowrap shrink-0">
+                          {a.applied_at ? new Date(a.applied_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+        </div>{/* end two-column grid */}
       </div>
 
       {/* ── Supervised Review Modal ───────────────────────────────────────── */}
