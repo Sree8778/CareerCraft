@@ -12,56 +12,104 @@ function detectATS() {
   return null;
 }
 
-// Field matching
+// FIELD_MAP — ordered specific → general to avoid false matches
 const FIELD_MAP = [
-  { keys: ['first.*name', 'first_name', 'firstname'], profileKey: 'firstName' },
-  { keys: ['last.*name', 'last_name', 'lastname'], profileKey: 'lastName' },
-  { keys: ['full.*name', 'name', 'your.*name'], profileKey: 'name' },
-  { keys: ['email', 'e-mail', 'email.*address'], profileKey: 'email' },
-  { keys: ['phone', 'mobile', 'cell', 'telephone'], profileKey: 'phone' },
-  { keys: ['location', 'city', 'address', 'where.*based'], profileKey: 'location' },
-  { keys: ['linkedin', 'linked.*in'], profileKey: 'linkedin' },
-  { keys: ['website', 'portfolio', 'personal.*site', 'url'], profileKey: 'website' },
-  { keys: ['summary', 'cover.*letter', 'about.*you', 'tell.*us'], profileKey: 'summary' },
-  { keys: ['current.*company', 'employer', 'company'], profileKey: 'currentCompany' },
-  { keys: ['title', 'job.*title', 'current.*title', 'role'], profileKey: 'headline' },
+  { keys: ['first.?name', 'first_name', 'firstname', 'fname', 'given.?name', 'forename'], profileKey: 'firstName' },
+  { keys: ['last.?name', 'last_name', 'lastname', 'lname', 'family.?name', 'surname'], profileKey: 'lastName' },
+  { keys: ['middle.?name', 'middle_name', 'middlename', 'mname'], profileKey: 'middleName' },
+  { keys: ['e.?mail', 'email.?address', 'email.?id'], profileKey: 'email' },
+  { keys: ['phone', 'mobile', 'cell', 'telephone', 'tel', 'contact.?number', 'phone.?number'], profileKey: 'phone' },
+  { keys: ['linkedin', 'linked.?in'], profileKey: 'linkedin' },
+  { keys: ['website', 'portfolio', 'personal.?site', 'web.?site', 'homepage', 'personal.?url'], profileKey: 'website' },
+  { keys: ['current.?company', 'current.?employer', 'employer', 'organization', 'organisation'], profileKey: 'currentCompany' },
+  { keys: ['job.?title', 'current.?title', 'current.?position', 'position.?title', 'headline', 'designation'], profileKey: 'headline' },
+  { keys: ['city', 'location', 'current.?location', 'where.?are.?you', 'based.?in', 'zip', 'postal', 'address'], profileKey: 'location' },
+  { keys: ['cover.?letter', 'cover.?note', 'about.?yourself', 'tell.?us', 'additional.?info', 'message', 'introduction', 'summary', 'why.?interested', 'motivation'], profileKey: 'summary' },
+  { keys: ['\\bname\\b', 'full.?name', 'your.?name', 'applicant.?name', 'candidate.?name', 'contact.?name'], profileKey: 'name' },
 ];
 
 function resolveValue(profile, key) {
-  const parts = profile.name?.split(' ') || [];
+  const nameParts = (profile.name || '').trim().split(/\s+/);
   const extras = {
-    firstName: parts[0] || '',
-    lastName: parts.slice(1).join(' ') || '',
+    firstName:  nameParts[0] || '',
+    lastName:   nameParts.length > 1 ? nameParts.slice(1).join(' ') : '',
+    middleName: nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '',
   };
-  const merged = { ...profile, ...extras };
-  return merged[key] || '';
+  return ({ ...profile, ...extras })[key] || '';
 }
 
-function matchesField(labelText, fieldName, profileKey) {
-  const haystack = `${labelText} ${fieldName}`.toLowerCase();
-  return FIELD_MAP.find(m =>
-    m.profileKey === profileKey &&
-    m.keys.some(pattern => new RegExp(pattern, 'i').test(haystack))
-  );
+// Aggressive label extraction — walks DOM, checks all common label patterns
+function getFieldHaystack(el) {
+  const parts = [];
+
+  const push = str => { if (str && str.trim()) parts.push(str.trim().toLowerCase()); };
+
+  // Direct attributes
+  push(el.name?.replace(/[_\-]/g, ' '));
+  push(el.id?.replace(/[_\-]/g, ' '));
+  push(el.placeholder);
+  push(el.getAttribute('aria-label'));
+  push(el.getAttribute('data-label'));
+  push(el.getAttribute('data-field'));
+  push(el.getAttribute('data-testid')?.replace(/[_\-]/g, ' '));
+
+  // aria-labelledby — may reference multiple ids
+  const labelledBy = el.getAttribute('aria-labelledby');
+  if (labelledBy) {
+    labelledBy.split(/\s+/).forEach(id => {
+      const lbl = document.getElementById(id);
+      if (lbl) push(lbl.textContent);
+    });
+  }
+
+  // Native <label for="id"> association
+  if (el.id) {
+    document.querySelectorAll(`label[for="${CSS.escape(el.id)}"]`).forEach(l => push(l.textContent));
+  }
+  if (el.labels?.length) {
+    Array.from(el.labels).forEach(l => push(l.textContent));
+  }
+
+  // Walk up DOM — at each level check for label-like elements
+  let node = el.parentElement;
+  for (let depth = 0; depth < 8 && node && node !== document.body; depth++) {
+    // If the parent itself is a <label>
+    if (node.tagName === 'LABEL') { push(node.textContent); break; }
+
+    // Check previous siblings (label often sits before input wrapper)
+    let sib = node.previousElementSibling;
+    for (let s = 0; s < 3 && sib; s++, sib = sib.previousElementSibling) {
+      const tag = sib.tagName.toLowerCase();
+      const text = sib.textContent.trim();
+      if (text.length > 0 && text.length < 100 &&
+          ['label', 'span', 'p', 'div', 'legend', 'dt', 'th', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
+        push(text);
+      }
+    }
+
+    // Check first text-only child of parent (label above input in same wrapper)
+    const firstTextChild = node.querySelector('label, [class*="label" i], [class*="Label"], legend');
+    if (firstTextChild && !firstTextChild.contains(el)) {
+      const text = firstTextChild.textContent.trim();
+      if (text.length > 0 && text.length < 100) push(text);
+    }
+
+    node = node.parentElement;
+  }
+
+  // fieldset/legend
+  const fieldset = el.closest('fieldset');
+  if (fieldset) {
+    const legend = fieldset.querySelector('legend');
+    if (legend) push(legend.textContent);
+  }
+
+  return parts.join(' ');
 }
 
 function findMatchingField(el, profile) {
-  const name = (el.name || el.id || '').toLowerCase();
-  const placeholder = (el.placeholder || '').toLowerCase();
-  const label = (() => {
-    if (el.labels?.[0]) return el.labels[0].textContent.toLowerCase();
-    const ariaLabel = el.getAttribute('aria-label') || '';
-    const labelledBy = el.getAttribute('aria-labelledby');
-    if (labelledBy) {
-      const lblEl = document.getElementById(labelledBy);
-      if (lblEl) return lblEl.textContent.toLowerCase();
-    }
-    const parent = el.closest('label, [class*="field"], [class*="form-group"], [class*="input"]');
-    if (parent) return parent.textContent.toLowerCase();
-    return ariaLabel.toLowerCase();
-  })();
-
-  const haystack = `${label} ${name} ${placeholder}`;
+  const haystack = getFieldHaystack(el);
+  if (!haystack) return null;
 
   for (const mapping of FIELD_MAP) {
     if (mapping.keys.some(pat => new RegExp(pat, 'i').test(haystack))) {
@@ -73,24 +121,36 @@ function findMatchingField(el, profile) {
 
 function fillField(el, value) {
   if (!value) return false;
-  const tag = el.tagName.toLowerCase();
-  if (tag === 'select') return false;
-  if (el.value === value) return true;
+  if (el.tagName.toLowerCase() === 'select') return false;
+  if (el.value === value) return false; // already filled, don't count as filled
 
-  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-    || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
-  if (nativeInputValueSetter) nativeInputValueSetter.call(el, value);
+  el.focus();
+
+  // Use native setter so React/Vue/Angular see the change
+  const proto = el.tagName.toLowerCase() === 'textarea'
+    ? window.HTMLTextAreaElement.prototype
+    : window.HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+  if (setter) setter.call(el, value);
   else el.value = value;
 
-  el.dispatchEvent(new Event('input', { bubbles: true }));
-  el.dispatchEvent(new Event('change', { bubbles: true }));
+  ['input', 'change', 'blur'].forEach(evt =>
+    el.dispatchEvent(new Event(evt, { bubbles: true, cancelable: true }))
+  );
+
+  // For frameworks that need KeyboardEvent (e.g. some Workday builds)
+  el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+
   return true;
 }
 
 function fillForm(profile) {
-  const inputs = document.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=file]), textarea');
+  const inputs = document.querySelectorAll(
+    'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]):not([type=file]):not([type=image]):not([type=reset]), textarea'
+  );
   let filled = 0;
   inputs.forEach(el => {
+    if (el.disabled || el.readOnly) return;
     const value = findMatchingField(el, profile);
     if (value && fillField(el, value)) filled++;
   });
@@ -99,35 +159,28 @@ function fillForm(profile) {
 
 function getJobMeta() {
   const ats = detectATS();
-  let title = document.title;
-  let company = '';
+  let title = document.querySelector('meta[property="og:title"]')?.content || document.title;
+  let company = document.querySelector('meta[property="og:site_name"]')?.content || '';
 
-  // Try OG / structured data
-  const ogTitle = document.querySelector('meta[property="og:title"]')?.content;
-  if (ogTitle) title = ogTitle;
-
-  // ATS-specific selectors
   if (ats === 'greenhouse') {
     title = document.querySelector('.job-title, h1.app-title, h1')?.textContent?.trim() || title;
-    company = document.querySelector('.company-name, .company')?.textContent?.trim() || '';
+    company = document.querySelector('.company-name, .company')?.textContent?.trim() || company;
   } else if (ats === 'lever') {
     title = document.querySelector('.posting-header h2, h2')?.textContent?.trim() || title;
-    company = document.querySelector('.main-header-logo img')?.alt || document.querySelector('.posting-categories .sort-by-team')?.textContent?.trim() || '';
+    company = document.querySelector('.main-header-logo img')?.alt || company;
   } else if (ats === 'ashby') {
-    title = document.querySelector('h1[class*="title"], h1')?.textContent?.trim() || title;
-    company = document.querySelector('[class*="company"], [class*="org"]')?.textContent?.trim() || '';
+    title = document.querySelector('h1')?.textContent?.trim() || title;
   } else if (ats === 'workday') {
     title = document.querySelector('[data-automation-id="jobPostingHeader"] h2, h2')?.textContent?.trim() || title;
-    company = document.querySelector('[data-automation-id="company"] p')?.textContent?.trim() || '';
   }
 
-  return { title, company, url: location.href, ats };
+  return { title: title.slice(0, 200), company: company.slice(0, 100), url: location.href, ats };
 }
 
-// Inject floating button
+// Floating overlay button
 let _overlay = null;
 function injectOverlay(profile) {
-  if (_overlay) return;
+  if (document.getElementById('__cc_overlay')) return;
   _overlay = document.createElement('div');
   _overlay.id = '__cc_overlay';
   _overlay.innerHTML = `
@@ -140,8 +193,7 @@ function injectOverlay(profile) {
       font-size:13px; font-weight:700; cursor:pointer;
       display:flex; align-items:center; gap:8px;
       border:1px solid rgba(255,255,255,0.15);
-      transition:transform .15s,box-shadow .15s;
-      user-select:none;
+      transition:transform .15s,box-shadow .15s; user-select:none;
     " id="__cc_btn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
@@ -169,14 +221,13 @@ function injectOverlay(profile) {
     btn.style.transform = '';
     btn.style.boxShadow = '0 8px 32px rgba(79,70,229,0.5)';
   });
-
-  btn.addEventListener('click', async () => {
+  btn.addEventListener('click', () => {
     status.style.display = 'block';
     status.textContent = 'Filling form…';
     const filled = fillForm(profile);
     if (filled > 0) {
       status.style.color = '#4ade80';
-      status.textContent = `Filled ${filled} field${filled > 1 ? 's' : ''} successfully!`;
+      status.textContent = `Filled ${filled} field${filled > 1 ? 's' : ''}!`;
       const meta = getJobMeta();
       chrome.runtime.sendMessage({
         type: 'RECORD_APPLIED',
@@ -184,13 +235,13 @@ function injectOverlay(profile) {
       });
     } else {
       status.style.color = '#f87171';
-      status.textContent = 'No matching fields found on this page.';
+      status.textContent = 'No fillable fields detected. Try scrolling to the form first.';
     }
-    setTimeout(() => { status.style.display = 'none'; }, 3500);
+    setTimeout(() => { status.style.display = 'none'; }, 4000);
   });
 }
 
-// Message handler — always register, works on both auto-injected and popup-injected runs
+// Message handler — popup-triggered fill
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'FILL_FORM') {
     const profile = msg.profile;
@@ -208,13 +259,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
-// Auto-init floating overlay — only on first injection (guard via DOM check)
+// Auto-init overlay (guard via DOM element check prevents duplicates on re-injection)
 if (!document.getElementById('__cc_overlay')) {
-  chrome.runtime.sendMessage({ type: 'GET_CACHED_PROFILE' }, ({ profile }) => {
+  chrome.runtime.sendMessage({ type: 'GET_CACHED_PROFILE' }, ({ profile } = {}) => {
     if (profile) {
       injectOverlay(profile);
     } else {
-      chrome.runtime.sendMessage({ type: 'GET_PROFILE' }, ({ profile: p }) => {
+      chrome.runtime.sendMessage({ type: 'GET_PROFILE' }, ({ profile: p } = {}) => {
         if (p) injectOverlay(p);
       });
     }
