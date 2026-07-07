@@ -1,39 +1,20 @@
 rules_version = '2';
-
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Helper function to check authentication
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    // Helper function to check if the user is the owner of the folder path
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    // Helper function to check if user has a recruiter role
-    // Storage rules do not support direct firestore gets natively without special setup,
-    // so we rely on custom auth claims or standard authenticated checks for viewing.
-    function isAuthorizedReader() {
-      return isAuthenticated();
+
+    // Resume uploads — owner can read/write their own files
+    match /resumes/{uid}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
-    // Match files inside user folders (profile pictures, elevator pitches)
-    match /users/{userId}/{allPaths=**} {
-      // Authenticated users can view candidate pictures and pitches
-      allow read: if isAuthorizedReader();
-      // Only the folder owner can upload, update or delete their media files
-      allow write: if isOwner(userId);
+    // User assets (profile picture, elevator pitch videos)
+    match /users/{uid}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
-    // Match files inside interview verification and audio folders (State ID, selfies, recorded audio responses)
-    match /interviews/{userId}/{allPaths=**} {
-      // Restricted reading: only the candidate themselves or authorized users can read their interview materials
-      allow read: if isOwner(userId) || isAuthorizedReader();
-      // Only the folder owner can upload their ID, selfies, and audio answers
-      allow write: if isOwner(userId);
+    // Everything else — deny
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }
