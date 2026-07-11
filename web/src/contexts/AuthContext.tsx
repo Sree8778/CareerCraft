@@ -1,7 +1,7 @@
 'use client';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 export type User = {
@@ -83,17 +83,36 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
           if (userDoc.exists()) {
             const userData = userDoc.data();
+            // Suspended accounts are signed out immediately (set by Super Admin)
+            if (userData.suspended === true) {
+              await signOut(auth);
+              setUser(null);
+              setLoading(false);
+              try { alert('Your account has been suspended. Contact support for assistance.'); } catch {}
+              return;
+            }
+            // Treat existing users with profile data as onboarded even if the flag is missing.
+            // This auto-heals accounts created before the flag was reliably saved.
+            const hasProfileData = !!(userData.fullName || userData.name);
+            const onboardingCompleted =
+              userData.onboardingCompleted === true ||
+              hasProfileData ||
+              localStorage.getItem(`onboarding_done_${firebaseUser.uid}`) === '1';
+            // Back-fill the flag silently so future logins are instant
+            if (onboardingCompleted && !userData.onboardingCompleted) {
+              setDoc(userDocRef, { onboardingCompleted: true }, { merge: true }).catch(() => {});
+              localStorage.setItem(`onboarding_done_${firebaseUser.uid}`, '1');
+            }
             const u: User = {
               id: firebaseUser.uid,
               email: firebaseUser.email || firebaseUser.phoneNumber || '',
               name: userData.name || userData.fullName || firebaseUser.displayName || firebaseUser.phoneNumber || 'User',
-              // Prefer Firestore role; fall back to localStorage role so signup works before doc is readable
               role: (userData.role as 'recruiter' | 'candidate') || savedRole,
               avatar: userData.avatar || userData.profilePicture || firebaseUser.photoURL || '',
-              onboardingCompleted: userData.onboardingCompleted ?? false,
+              onboardingCompleted,
             };
             setUser(u);
-            setNeedsOnboarding(!isOnboardingDone(u.id, u.onboardingCompleted));
+            setNeedsOnboarding(!onboardingCompleted);
           } else {
             // Doc doesn't exist yet (e.g. immediately after account creation) — use localStorage role
             const u: User = {

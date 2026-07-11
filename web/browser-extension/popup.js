@@ -20,7 +20,11 @@ const FIELD_MAP = [
   { keys: ['website', 'portfolio', 'personal.?site', 'web.?site', 'homepage', 'personal.?url'], profileKey: 'website' },
   { keys: ['current.?company', 'current.?employer', 'employer', 'organization', 'organisation'], profileKey: 'currentCompany' },
   { keys: ['job.?title', 'current.?title', 'current.?position', 'position.?title', 'headline', 'designation'], profileKey: 'headline' },
-  { keys: ['city', 'location', 'current.?location', 'zip', 'postal', 'address'], profileKey: 'location' },
+  { keys: ['street.?address', 'address.?line.?1', 'address.?1', 'addr.?1', '^addr$', 'mailing.?address', 'home.?address'], profileKey: 'address' },
+  { keys: ['\\bcity\\b', '\\btown\\b', 'municipality'], profileKey: 'city' },
+  { keys: ['\\bstate\\b', 'province', '\\bregion\\b'], profileKey: 'state' },
+  { keys: ['zip.?code', 'postal.?code', '\\bzip\\b', '\\bpostal\\b'], profileKey: 'zip' },
+  { keys: ['location', 'current.?location', 'where.?are.?you', 'based.?in'], profileKey: 'location' },
   { keys: ['cover.?letter', 'cover.?note', 'about.?yourself', 'tell.?us', 'additional.?info', 'introduction', 'summary', 'motivation'], profileKey: 'summary' },
   { keys: ['full.?name', 'your.?name', 'applicant.?name', 'candidate.?name', 'contact.?name', '^name$', 'your name'], profileKey: 'name' },
 ];
@@ -28,75 +32,85 @@ const FIELD_MAP = [
 // Injected into PAGE main world — no chrome.* APIs allowed inside
 function doFillForm(profile, fieldMap) {
   function resolve(key) {
-    const parts = (profile.name || '').trim().split(/\s+/).filter(Boolean);
+    // Use explicit firstName/lastName from profile if backend provided them
     const m = {
       ...profile,
-      firstName:  parts[0] || '',
-      lastName:   parts.length > 1 ? parts.slice(1).join(' ') : '',
-      middleName: parts.length > 2 ? parts.slice(1, -1).join(' ') : '',
+      // Derive only if not already present as explicit fields
+      firstName:  profile.firstName || (profile.name || '').trim().split(/\s+/).slice(0, -1).join(' ') || (profile.name || '').trim().split(/\s+/)[0] || '',
+      lastName:   profile.lastName  || (profile.name || '').trim().split(/\s+/).slice(-1)[0] || '',
+      middleName: profile.middleName || '',
     };
     return (m[key] || '').trim();
   }
 
-  // Collect text clues about what this field is for
+  // Build a label string ONLY from signals directly associated with this field.
+  // NEVER walk above a container that holds multiple inputs — that poisons every field's haystack.
   function haystack(el) {
     const parts = [];
     const add = s => { if (s && s.trim()) parts.push(s.trim().toLowerCase()); };
 
-    // Direct attributes — most reliable signal
+    // TIER 1: attributes on the element itself (most reliable)
     if (el.name)        add(el.name.replace(/[_\-]/g, ' '));
     if (el.id)          add(el.id.replace(/[_\-]/g, ' '));
     if (el.placeholder) add(el.placeholder);
     add(el.getAttribute('aria-label'));
     add(el.getAttribute('data-label'));
     add(el.getAttribute('data-field-label'));
-    add(el.getAttribute('data-automation-id'));   // Workday
+    add(el.getAttribute('data-automation-id'));  // Workday
     add(el.getAttribute('data-testid'));
     add(el.getAttribute('title'));
 
-    // aria-labelledby — may reference multiple element ids
+    // TIER 2: aria-labelledby (explicit link to label element by id)
     const lbBy = el.getAttribute('aria-labelledby');
     if (lbBy) {
       lbBy.split(/\s+/).forEach(id => {
-        const ref = document.getElementById(id) || el.getRootNode().getElementById?.(id);
+        const ref = document.getElementById(id);
         if (ref) add(ref.textContent);
       });
     }
 
-    // Native <label for="id"> association
+    // TIER 3: native <label for="id"> association
     if (el.id) {
-      (el.getRootNode() || document).querySelectorAll('label').forEach(l => {
-        if (l.htmlFor === el.id || l.getAttribute('for') === el.id) add(l.textContent);
+      document.querySelectorAll('label[for]').forEach(l => {
+        if (l.getAttribute('for') === el.id) add(l.textContent);
       });
     }
     if (el.labels && el.labels.length) Array.from(el.labels).forEach(l => add(l.textContent));
 
-    // Walk up DOM — grab prev siblings and label-like elements near the input
+    // TIER 4: walk up DOM, but STOP the moment a container holds > 1 input
+    // This prevents collecting labels from sibling fields
     let node = el.parentElement;
-    for (let d = 0; d < 10 && node && !/^(BODY|HTML)$/.test(node.tagName); d++) {
+    for (let d = 0; d < 8 && node && !/^(BODY|HTML|FORM)$/.test(node.tagName); d++) {
       if (node.tagName === 'LABEL') { add(node.textContent); break; }
 
-      // data-automation-id on parent containers (Workday pattern)
+      // data-automation-id on wrapper divs (Workday pattern)
       add(node.getAttribute('data-automation-id'));
+      add(node.getAttribute('aria-label'));
 
-      // Previous siblings at this level
-      let sib = node.previousElementSibling;
-      for (let s = 0; s < 3 && sib; s++, sib = sib.previousElementSibling) {
-        const t = sib.textContent.trim();
-        if (t.length > 0 && t.length < 120) add(t);
+      // Only check DIRECT children — never querySelectorAll (that would collect sibling labels)
+      // Skip: the element itself, ancestors of the element, and containers that hold other inputs
+      Array.from(node.children).forEach(child => {
+        if (child === el || child.contains(el)) return;
+        if (child.querySelector('input:not([type=hidden]),textarea,select')) return;
+        const tag = child.tagName.toLowerCase();
+        const text = child.textContent.trim();
+        if (!text || text.length > 150) return;
+        if (['label','legend','span','p','dt','div','h1','h2','h3','h4','h5','h6','li'].includes(tag)) add(text);
+        const cls = (child.className || '').toLowerCase();
+        if (cls.includes('label') || cls.includes('caption') || cls.includes('heading') || cls.includes('title')) add(text);
+      });
+
+      // Previous sibling (label element above input wrapper in DOM order)
+      const prev = node.previousElementSibling;
+      if (prev && !prev.querySelector('input:not([type=hidden]),textarea,select')) {
+        const t = prev.textContent.trim();
+        if (t && t.length < 150) add(t);
       }
-
-      // Label/legend elements inside this container
-      try {
-        node.querySelectorAll('label,legend,dt,[class*="label" i],[class*="Label"]').forEach(l => {
-          if (!l.contains(el)) { const t = l.textContent.trim(); if (t.length < 120) add(t); }
-        });
-      } catch {}
 
       node = node.parentElement;
     }
 
-    return parts.join(' ');
+    return [...new Set(parts)].join(' ');  // deduplicate
   }
 
   function fill(el, value) {
@@ -168,6 +182,7 @@ const setupError      = document.getElementById('setup-error');
 const profileAvatar   = document.getElementById('profile-avatar');
 const profileName     = document.getElementById('profile-name');
 const profileEmail    = document.getElementById('profile-email');
+const resumeSelect    = document.getElementById('resume-select');
 const atsIndicator    = document.getElementById('ats-indicator');
 const btnFill         = document.getElementById('btn-fill');
 const fillResult      = document.getElementById('fill-result');
@@ -184,10 +199,32 @@ function renderProfile(profile) {
   profileEmail.textContent = profile.email || '';
 }
 
+function populateResumeSelect(resumes) {
+  const current = resumeSelect.value;
+  resumeSelect.innerHTML = '';
+  resumes.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.name;
+    resumeSelect.appendChild(opt);
+  });
+  if (resumes.find(r => r.id === current)) resumeSelect.value = current;
+}
+
+async function loadResumes() {
+  chrome.runtime.sendMessage({ type: 'GET_RESUMES' }, ({ resumes } = {}) => {
+    if (resumes && resumes.length > 1) populateResumeSelect(resumes);
+  });
+}
+
 async function showConnected() {
   screenSetup.style.display = 'none';
   screenConnected.style.display = 'flex';
-  chrome.storage.local.get(['cachedProfile'], ({ cachedProfile }) => renderProfile(cachedProfile));
+  chrome.storage.local.get(['cachedProfile', 'selectedResumeId'], ({ cachedProfile, selectedResumeId }) => {
+    renderProfile(cachedProfile);
+    if (selectedResumeId) resumeSelect.value = selectedResumeId;
+  });
+  loadResumes();
 
   const tab = await getCurrentTab();
   if (tab?.url) {
@@ -282,10 +319,22 @@ btnFill.addEventListener('click', async () => {
   btnFill.innerHTML = FILL_BTN_DEFAULT;
 });
 
+// Resume selection — re-fetch profile for selected resume
+resumeSelect.addEventListener('change', () => {
+  const resumeId = resumeSelect.value;
+  chrome.storage.local.set({ selectedResumeId: resumeId });
+  resumeSelect.disabled = true;
+  chrome.runtime.sendMessage({ type: 'GET_PROFILE', resumeId }, ({ profile } = {}) => {
+    resumeSelect.disabled = false;
+    if (profile) renderProfile(profile);
+  });
+});
+
 // Refresh profile
 btnRefresh.addEventListener('click', () => {
+  const resumeId = resumeSelect.value || 'profile';
   btnRefresh.textContent = 'Refreshing…';
-  chrome.runtime.sendMessage({ type: 'GET_PROFILE' }, ({ profile } = {}) => {
+  chrome.runtime.sendMessage({ type: 'GET_PROFILE', resumeId }, ({ profile } = {}) => {
     renderProfile(profile);
     btnRefresh.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg> Refresh Profile`;
   });
@@ -293,7 +342,7 @@ btnRefresh.addEventListener('click', () => {
 
 // Disconnect
 btnDisconnect.addEventListener('click', () => {
-  chrome.storage.local.remove(['pluginToken', 'cachedProfile'], () => {
+  chrome.storage.local.remove(['pluginToken', 'cachedProfile', 'selectedResumeId'], () => {
     screenConnected.style.display = 'none';
     screenSetup.style.display = 'flex';
     tokenInput.value = '';

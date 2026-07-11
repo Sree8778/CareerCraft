@@ -69,6 +69,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Connections — participants can read their own edges; backend writes.
+    // (Was missing entirely: the deny-all default silently blocked every
+    // client listener, so connection counts always showed zero.)
+    match /connections/{connId} {
+      allow read: if request.auth != null &&
+        (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // Notifications — recipient can read and mark-as-read; backend creates.
+    // (Also missing: the navbar bell listener was silently denied on every page.)
+    match /notifications/{notifId} {
+      allow read: if request.auth != null &&
+        (resource.data.candidateId == request.auth.uid || resource.data.recruiterId == request.auth.uid);
+      allow update: if request.auth != null &&
+        (resource.data.candidateId == request.auth.uid || resource.data.recruiterId == request.auth.uid) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if false;
+    }
+
     // Everything else — deny
     match /{document=**} {
       allow read, write: if false;

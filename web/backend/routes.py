@@ -1197,9 +1197,10 @@ def get_jobs():
                 j = doc.to_dict()
                 j['id'] = doc.id
                 jobs.append(j)
-            # Hide archived jobs from candidate search; recruiters see all their own jobs
+            # Candidates only see live postings; recruiters see all their own jobs
+            # (Draft, Paused, Closed, Archived are recruiter-side states.)
             if not recruiter_id:
-                jobs = [j for j in jobs if j.get('status') != 'Archived']
+                jobs = [j for j in jobs if j.get('status', 'Open') in ('Open', 'In Review')]
             # If filtering by recruiter return empty list (not mock data) when none found
             return jsonify({"jobs": jobs}), 200
         return jsonify({"jobs": []}), 200
@@ -1229,8 +1230,13 @@ def update_job(job_id):
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
     data = request.json
-    allowed = {'title', 'description', 'jobType', 'department', 'location', 'status', 'company'}
+    allowed = {'title', 'description', 'jobType', 'department', 'location', 'status', 'company',
+               'requirements', 'benefits', 'skills', 'workMode', 'experienceLevel',
+               'salaryMin', 'salaryMax', 'salaryVisible', 'visaSponsorship', 'screeningQuestions'}
     update_data = {k: v for k, v in data.items() if k in allowed and v is not None}
+    valid_statuses = {'Draft', 'Open', 'Paused', 'In Review', 'Closed', 'Archived'}
+    if 'status' in update_data and update_data['status'] not in valid_statuses:
+        return jsonify({"error": f"Invalid status. Use one of: {sorted(valid_statuses)}"}), 400
     if not update_data:
         return jsonify({"error": "No valid fields to update"}), 400
     try:
@@ -1240,7 +1246,8 @@ def update_job(job_id):
             if not jdoc.exists:
                 return jsonify({"error": "Job not found"}), 404
             jd = jdoc.to_dict()
-            if jd.get('recruiterId') and jd.get('recruiterId') != request.user.get('uid', ''):
+            from firebase_utils import is_admin_user as _adm
+            if jd.get('recruiterId') and jd.get('recruiterId') != request.user.get('uid', '') and not _adm(request.user):
                 return jsonify({"error": "Unauthorized"}), 403
             db.collection('jobs').document(job_id).update(update_data)
             updated = {**jd, **update_data, 'id': job_id}
@@ -1261,7 +1268,13 @@ def post_job_v1():
     description = data.get('description')
     job_type = data.get('jobType')
 
-    if not title or not description or not job_type:
+    # Drafts only need a title; publishing requires the full trio.
+    status = data.get('status', 'Open')
+    if status not in ('Draft', 'Open'):
+        status = 'Open'
+    if not title:
+        return jsonify({"error": "Missing title"}), 400
+    if status == 'Open' and (not description or not job_type):
         return jsonify({"error": "Missing title, description or jobType"}), 400
 
     try:
@@ -1269,14 +1282,27 @@ def post_job_v1():
         recruiter_id = request.user.get('uid', '')
         new_job = {
             "title": title,
-            "description": description,
-            "jobType": job_type,
+            "description": description or '',
+            "jobType": job_type or 'Full-time',
             "department": data.get('department', ''),
             "location": data.get('location', 'Remote'),
-            "company": request.user.get('name', data.get('company', 'CareerCraft Client')),
+            # The company on a posting is what the recruiter typed — never
+            # silently replace it with the recruiter's personal name.
+            "company": data.get('company') or request.user.get('name', 'Confidential Employer'),
             "recruiterId": recruiter_id,
             "postedDate": datetime.datetime.utcnow().strftime('%Y-%m-%d'),
-            "status": "Open",
+            "status": status,
+            # Recruiter intake — previously collected by the UI and dropped here.
+            "requirements": data.get('requirements', []),
+            "benefits": data.get('benefits', []),
+            "skills": data.get('skills', ''),
+            "workMode": data.get('workMode', ''),
+            "experienceLevel": data.get('experienceLevel', ''),
+            "salaryMin": data.get('salaryMin', ''),
+            "salaryMax": data.get('salaryMax', ''),
+            "salaryVisible": bool(data.get('salaryVisible', True)),
+            "visaSponsorship": bool(data.get('visaSponsorship', False)),
+            "screeningQuestions": data.get('screeningQuestions', []),
         }
         if db:
             doc_ref = db.collection('jobs').add(new_job)
@@ -2477,27 +2503,37 @@ def get_users():
     try:
         from firebase_utils import db, firebase_initialized
         if firebase_initialized and db:
+            def _mask_email(addr):
+                # jane.doe@gmail.com -> j•••@gmail.com — enough to disambiguate,
+                # not enough to harvest. Full contact info is only shared after
+                # a connection is accepted.
+                if not addr or '@' not in addr:
+                    return ''
+                local, _, domain = addr.partition('@')
+                return f"{local[0]}•••@{domain}"
+
             docs = db.collection('users').stream()
             for doc in docs:
                 u = doc.to_dict()
                 uid = u.get('uid')
                 if uid == current_uid:
                     continue  # Exclude self
+                full_email = u.get('email', '')
                 u_data = {
                     "uid": uid,
                     "fullName": u.get('fullName', 'Anonymous User'),
-                    "email": u.get('email', ''),
+                    # PRIVACY: never expose raw email/phone in the public
+                    # directory. Search still matches on the full email below.
+                    "email": _mask_email(full_email),
                     "role": u.get('role', 'candidate'),
-                    "phone": u.get('phone', '')
                 }
-                
+
                 # Apply filters
                 if role_filter and u_data['role'].lower() != role_filter:
                     continue
                 if search_query:
                     name = u_data['fullName'].lower()
-                    email = u_data['email'].lower()
-                    if search_query not in name and search_query not in email:
+                    if search_query not in name and search_query not in full_email.lower():
                         continue
                     users_list.append(u_data)
                 else:
@@ -3107,6 +3143,72 @@ def verify_email_otp():
 
 # ── Smart Apply ───────────────────────────────────────────────────────────────
 
+def _filter_relevant_jobs(job_list, role_terms, loc):
+    """Keep only jobs matching the requested roles + location.
+
+    Free sources (Arbeitnow especially) ignore or weakly apply their search
+    param and return unrelated roles. Enforce relevance server-side so the
+    user's role and location filters actually mean something.
+    """
+    import re as _re3
+    _generic = {
+        'developer', 'engineer', 'engineering', 'manager', 'designer', 'analyst',
+        'architect', 'consultant', 'specialist', 'lead', 'senior', 'junior',
+        'intern', 'internship', 'staff', 'principal', 'associate',
+    }
+    _skip = {'the', 'and', 'for', 'with', 'role', 'position', 'a', 'an', 'of',
+             'remote', 'onsite', 'hybrid', 'contract', 'part', 'time', 'full'}
+
+    role_kw = []  # (specific_terms, generic_terms) per role
+    for _r in role_terms:
+        words = [w.lower() for w in _re3.findall(r"[a-zA-Z][a-zA-Z0-9#+.]*", str(_r))]
+        spec = [w for w in words if w not in _generic and w not in _skip and len(w) > 1]
+        gen  = [w for w in words if w in _generic]
+        if spec or gen:
+            role_kw.append((spec, gen))
+    if not role_kw:
+        return job_list
+
+    loc_l = (loc or '').lower()
+    want_remote = loc_l in ('remote', 'anywhere', 'worldwide', '')
+
+    kept = []
+    for _j in job_list:
+        title = (_j.get('title') or '').lower()
+        tags  = ' '.join(str(t) for t in (_j.get('tags') or [])).lower()
+        desc  = (_j.get('description') or '').lower()
+        body_txt = f"{tags} {desc}"
+
+        role_ok = False
+        for spec, gen in role_kw:
+            title_spec = any(w in title for w in spec)
+            # A title counts as "generic role match" if it contains the role's own
+            # generic words OR any common role noun (engineer/developer/etc.) —
+            # e.g. "Frontend Engineer" should match a "React Developer" search
+            # when React appears in the tags/description.
+            title_gen  = any(w in title for w in gen) or any(w in title for w in _generic)
+            body_spec  = any(w in body_txt for w in spec)
+            # A specific term in the title is a strong match; a generic title
+            # word ("developer") needs a specific term somewhere in the body.
+            if title_spec or (title_gen and (body_spec or not spec)):
+                role_ok = True
+                break
+        if not role_ok:
+            continue
+
+        jloc = (_j.get('location') or '').lower()
+        if want_remote:
+            loc_ok = 'remote' in jloc or 'anywhere' in jloc or 'worldwide' in jloc
+        else:
+            loc_ok = (not jloc) or loc_l in jloc or 'remote' in jloc
+        if not loc_ok:
+            continue
+
+        kept.append(_j)
+    return kept
+
+
+
 @api_bp.route('/smart-apply/search', methods=['POST'])
 @require_auth
 def smart_apply_search():
@@ -3172,7 +3274,10 @@ def smart_apply_search():
                     d['scraped_at'] = sat.isoformat()
                 cached.append({'id': doc.id, **d})
             if cached:
-                return jsonify({'jobs': cached, 'cached': True, 'count': len(cached)})
+                # Cached docs may predate the relevance filter — re-apply it.
+                cached = _filter_relevant_jobs(cached, roles or [query], location)
+                if cached:
+                    return jsonify({'jobs': cached, 'cached': True, 'count': len(cached)})
         except Exception as _cache_err:
             print(f'Cache check skipped: {_cache_err}')
 
@@ -3515,6 +3620,10 @@ def smart_apply_search():
             elif t is not None:
                 out.append(str(t))
         return out
+
+    _pre_filter_count = len(jobs)
+    jobs = _filter_relevant_jobs(jobs, roles or [query], location)
+    print(f'Smart-apply relevance filter: {_pre_filter_count} -> {len(jobs)} jobs')
 
     # ── Write to shared Firestore pool ───────────────────────────────────────
     if db and jobs:
@@ -3922,6 +4031,25 @@ def _auth_plugin_token():
         return None, (jsonify({"error": str(e)}), 500)
 
 
+@api_bp.route('/plugin/resumes', methods=['GET'])
+def get_plugin_resumes():
+    """Return list of resume options the user can choose from in the extension."""
+    from firebase_utils import db
+    uid, err = _auth_plugin_token()
+    if err:
+        return err
+    try:
+        resume_snap = db.collection('resumes').document(uid).get()
+        resume_doc  = resume_snap.to_dict() if resume_snap.exists else {}
+        options = [{'id': 'profile', 'name': 'Default Profile Resume'}]
+        for v in resume_doc.get('savedVersions', []):
+            if v.get('id') and v.get('name'):
+                options.append({'id': v['id'], 'name': v['name']})
+        return jsonify({'resumes': options}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @api_bp.route('/plugin/profile', methods=['GET'])
 def get_plugin_profile():
     from firebase_utils import db
@@ -3932,22 +4060,57 @@ def get_plugin_profile():
         user_snap = db.collection('users').document(uid).get()
         user_data = user_snap.to_dict() if user_snap.exists else {}
         resume_snap = db.collection('resumes').document(uid).get()
-        resume_data = resume_snap.to_dict().get('resumeData', {}) if resume_snap.exists else {}
+        resume_doc  = resume_snap.to_dict() if resume_snap.exists else {}
+
+        # Support selecting a saved version via ?resume_id=<id>
+        resume_id = request.args.get('resume_id', 'profile')
+        resume_data = {}
+        if resume_id != 'profile':
+            for v in resume_doc.get('savedVersions', []):
+                if v.get('id') == resume_id:
+                    resume_data = v.get('resumeData', {})
+                    break
+        if not resume_data:
+            resume_data = resume_doc.get('resumeData', {})
+
         personal = resume_data.get('personal', {})
+        full_name = (user_data.get('fullName') or user_data.get('name') or
+                     personal.get('name') or '').strip()
+        # Prefer explicit firstName/lastName from resume personal data
+        first_name = (personal.get('firstName') or personal.get('first_name') or
+                      user_data.get('firstName') or '').strip()
+        last_name  = (personal.get('lastName') or personal.get('last_name') or
+                      user_data.get('lastName') or '').strip()
+        # Fall back: if only full name available, split at LAST space so
+        # multi-word first names (e.g. "Sree Ram Varma") stay intact
+        if not first_name and not last_name and full_name:
+            parts = full_name.rsplit(' ', 1)
+            first_name = parts[0] if len(parts) > 1 else full_name
+            last_name  = parts[1] if len(parts) > 1 else ''
+        # Rebuild full name from parts if it was missing
+        if not full_name and (first_name or last_name):
+            full_name = f"{first_name} {last_name}".strip()
+
         return jsonify({
-            "uid": uid,
-            "name": user_data.get('fullName') or user_data.get('name', ''),
-            "email": user_data.get('email', ''),
-            "phone": personal.get('phone') or user_data.get('phone', ''),
-            "location": personal.get('location') or user_data.get('location', ''),
-            "linkedin": personal.get('linkedin', ''),
-            "website": personal.get('website', ''),
-            "summary": resume_data.get('summary', ''),
-            "headline": personal.get('headline', ''),
+            "uid":            uid,
+            "name":           full_name,
+            "firstName":      first_name,
+            "lastName":       last_name,
+            "email":          user_data.get('email', ''),
+            "phone":          personal.get('phone') or user_data.get('phone', ''),
+            "location":       personal.get('location') or user_data.get('location', ''),
+            "address":        personal.get('address') or user_data.get('address', ''),
+            "city":           personal.get('city') or user_data.get('city', ''),
+            "state":          personal.get('state') or user_data.get('state', ''),
+            "zip":            personal.get('zip') or personal.get('zipCode') or user_data.get('zip', ''),
+            "linkedin":       personal.get('linkedin', ''),
+            "website":        personal.get('website', ''),
+            "summary":        resume_data.get('summary', ''),
+            "headline":       personal.get('headline', ''),
             "currentCompany": personal.get('currentCompany', ''),
-            "experience": resume_data.get('experience', []),
-            "education": resume_data.get('education', []),
-            "skills": resume_data.get('skills', []),
+            "experience":     resume_data.get('experience', []),
+            "education":      resume_data.get('education', []),
+            "skills":         resume_data.get('skills', []),
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -3972,5 +4135,311 @@ def record_plugin_applied():
             'status': 'applied',
         })
         return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SUPER ADMIN MODULE — feature flags, platform stats, user & job management
+# ═══════════════════════════════════════════════════════════════════════════════
+from firebase_utils import require_admin, is_admin_user
+
+# Every feature the admin can toggle. New features should launch behind a flag.
+FEATURE_DEFAULTS = {
+    "feed": True,
+    "smartApply": True,
+    "aiInterview": True,
+    "practiceMode": True,
+    "resumeBuilder": True,
+    "network": True,
+    "messages": True,
+    "sourcing": True,
+    "webhooks": True,
+    "companies": True,
+    "signups": True,
+}
+
+_config_cache = {"data": None, "ts": 0}
+
+def get_platform_features():
+    """Feature flags with defaults merged; 60s cache to avoid per-request reads."""
+    import time as _time
+    if _config_cache["data"] is not None and _time.time() - _config_cache["ts"] < 60:
+        return _config_cache["data"]
+    features = dict(FEATURE_DEFAULTS)
+    try:
+        from firebase_utils import db
+        if db:
+            doc = db.collection('platform').document('config').get()
+            if doc.exists:
+                stored = (doc.to_dict() or {}).get('features', {})
+                features.update({k: bool(v) for k, v in stored.items() if k in FEATURE_DEFAULTS})
+    except Exception as e:
+        print(f"Feature flag read failed (using defaults): {e}")
+    _config_cache["data"] = features
+    _config_cache["ts"] = _time.time()
+    return features
+
+def feature_enabled(name: str) -> bool:
+    return get_platform_features().get(name, True)
+
+@api_bp.route('/platform/config', methods=['GET'])
+@require_auth
+def platform_config():
+    """Public (authenticated) — the frontend uses this to hide disabled features."""
+    return jsonify({"features": get_platform_features()}), 200
+
+@api_bp.route('/admin/me', methods=['GET'])
+@require_auth
+def admin_me():
+    return jsonify({"admin": is_admin_user(request.user)}), 200
+
+@api_bp.route('/admin/features', methods=['PUT'])
+@require_admin
+def admin_set_features():
+    data = request.get_json() or {}
+    incoming = data.get('features', {})
+    updates = {k: bool(v) for k, v in incoming.items() if k in FEATURE_DEFAULTS}
+    if not updates:
+        return jsonify({"error": "No valid feature keys"}), 400
+    try:
+        from firebase_utils import db
+        merged = {**get_platform_features(), **updates}
+        db.collection('platform').document('config').set(
+            {'features': merged, 'updatedBy': request.user.get('email', ''),
+             'updatedAt': datetime.datetime.utcnow()}, merge=True)
+        _config_cache["data"] = None  # bust cache
+        return jsonify({"status": "success", "features": merged}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/admin/stats', methods=['GET'])
+@require_admin
+def admin_stats():
+    try:
+        from firebase_utils import db
+        users = [d.to_dict() for d in db.collection('users').stream()]
+        jobs  = [d.to_dict() for d in db.collection('jobs').stream()]
+        apps  = sum(1 for _ in db.collection('applications').stream())
+        conns = sum(1 for _ in db.collection('connections').stream())
+        try:
+            posts = sum(1 for _ in db.collection('posts').stream())
+        except Exception:
+            posts = 0
+        by_role, suspended = {}, 0
+        for u in users:
+            r = u.get('role', 'candidate')
+            by_role[r] = by_role.get(r, 0) + 1
+            if u.get('suspended'): suspended += 1
+        by_status = {}
+        for j in jobs:
+            st = j.get('status', 'Open')
+            by_status[st] = by_status.get(st, 0) + 1
+        return jsonify({
+            "users": {"total": len(users), "byRole": by_role, "suspended": suspended},
+            "jobs": {"total": len(jobs), "byStatus": by_status},
+            "applications": apps, "connections": conns, "posts": posts,
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/admin/users', methods=['GET'])
+@require_admin
+def admin_list_users():
+    try:
+        from firebase_utils import db
+        out = []
+        for d in db.collection('users').stream():
+            u = d.to_dict()
+            out.append({
+                "uid": u.get('uid') or d.id,
+                "fullName": u.get('fullName', ''),
+                "email": u.get('email', ''),
+                "role": u.get('role', 'candidate'),
+                "suspended": bool(u.get('suspended', False)),
+                "emailVerified": bool(u.get('emailVerified', False)),
+            })
+        return jsonify({"users": out}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/admin/users/<uid>/suspend', methods=['POST'])
+@require_admin
+def admin_suspend_user(uid):
+    data = request.get_json() or {}
+    suspended = bool(data.get('suspended', True))
+    if (request.user.get('email', '') or '').lower() in [None, '']:
+        return jsonify({"error": "Invalid admin"}), 403
+    try:
+        from firebase_utils import db
+        udoc = db.collection('users').document(uid).get()
+        if not udoc.exists:
+            return jsonify({"error": "User not found"}), 404
+        target = udoc.to_dict()
+        if is_admin_user({'email': target.get('email', '')}):
+            return jsonify({"error": "Admins cannot suspend other admins"}), 400
+        db.collection('users').document(uid).update({'suspended': suspended})
+        return jsonify({"status": "success", "uid": uid, "suspended": suspended}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/admin/jobs', methods=['GET'])
+@require_admin
+def admin_list_jobs():
+    try:
+        from firebase_utils import db
+        out = []
+        for d in db.collection('jobs').stream():
+            j = d.to_dict(); j['id'] = d.id
+            out.append({k: j.get(k) for k in ('id', 'title', 'company', 'status', 'recruiterId', 'postedDate', 'location')})
+        return jsonify({"jobs": out}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SOCIAL FEED — LinkedIn-style posts (behind the "feed" feature flag)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _feed_guard():
+    if not feature_enabled('feed'):
+        return jsonify({"error": "The feed is currently disabled by the administrator."}), 403
+    return None
+
+def _post_author(uid):
+    """Light author card stored on the post so the feed needs no joins."""
+    try:
+        from firebase_utils import db
+        u = db.collection('users').document(uid).get()
+        if u.exists:
+            d = u.to_dict()
+            return {"name": d.get('fullName', 'Member'), "role": d.get('role', 'candidate'),
+                    "avatar": d.get('avatar', '') or d.get('profilePicture', '')}
+    except Exception:
+        pass
+    return {"name": "Member", "role": "candidate", "avatar": ""}
+
+@api_bp.route('/feed', methods=['GET'])
+@require_auth
+def get_feed():
+    guard = _feed_guard()
+    if guard: return guard
+    try:
+        from firebase_utils import db
+        docs = (db.collection('posts')
+                  .order_by('createdAt', direction=firestore.Query.DESCENDING)
+                  .limit(50).stream())
+        uid = request.uid
+        posts = []
+        for d in docs:
+            p = d.to_dict(); p['id'] = d.id
+            likes = p.get('likes', [])
+            p['likeCount'] = len(likes)
+            p['likedByMe'] = uid in likes
+            p.pop('likes', None)
+            ca = p.get('createdAt')
+            if hasattr(ca, 'isoformat'): p['createdAt'] = ca.isoformat()
+            posts.append(p)
+        return jsonify({"posts": posts}), 200
+    except Exception as e:
+        print(f"Feed error: {e}")
+        return jsonify({"posts": [], "error": str(e)}), 200
+
+@api_bp.route('/posts', methods=['POST'])
+@require_auth
+def create_post():
+    guard = _feed_guard()
+    if guard: return guard
+    data = request.get_json() or {}
+    content = (data.get('content') or '').strip()
+    if not content:
+        return jsonify({"error": "Post content is required"}), 400
+    if len(content) > 2000:
+        return jsonify({"error": "Posts are limited to 2000 characters"}), 400
+    try:
+        from firebase_utils import db
+        uid = request.uid
+        post = {
+            "authorId": uid,
+            "author": _post_author(uid),
+            "content": content,
+            "jobId": data.get('jobId') or None,        # optional shared job
+            "jobTitle": data.get('jobTitle') or None,
+            "likes": [],
+            "comments": [],
+            "createdAt": datetime.datetime.utcnow(),
+        }
+        ref = db.collection('posts').add(post)
+        post['id'] = ref[1].id
+        post['createdAt'] = post['createdAt'].isoformat()
+        post['likeCount'] = 0; post['likedByMe'] = False
+        post.pop('likes', None)
+        return jsonify({"status": "success", "post": post}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/posts/<post_id>/like', methods=['POST'])
+@require_auth
+def toggle_like(post_id):
+    guard = _feed_guard()
+    if guard: return guard
+    try:
+        from firebase_utils import db
+        ref = db.collection('posts').document(post_id)
+        doc = ref.get()
+        if not doc.exists:
+            return jsonify({"error": "Post not found"}), 404
+        uid = request.uid
+        likes = doc.to_dict().get('likes', [])
+        liked = uid in likes
+        ref.update({'likes': firestore.ArrayRemove([uid]) if liked else firestore.ArrayUnion([uid])})
+        return jsonify({"liked": not liked, "likeCount": len(likes) + (-1 if liked else 1)}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/posts/<post_id>/comments', methods=['POST'])
+@require_auth
+def add_comment(post_id):
+    guard = _feed_guard()
+    if guard: return guard
+    data = request.get_json() or {}
+    text = (data.get('text') or '').strip()
+    if not text:
+        return jsonify({"error": "Comment text is required"}), 400
+    if len(text) > 500:
+        return jsonify({"error": "Comments are limited to 500 characters"}), 400
+    try:
+        from firebase_utils import db
+        ref = db.collection('posts').document(post_id)
+        doc = ref.get()
+        if not doc.exists:
+            return jsonify({"error": "Post not found"}), 404
+        if len(doc.to_dict().get('comments', [])) >= 100:
+            return jsonify({"error": "Comment limit reached for this post"}), 400
+        uid = request.uid
+        comment = {
+            "id": _hashlib_lib.md5(f"{uid}{datetime.datetime.utcnow().isoformat()}".encode()).hexdigest()[:10],
+            "uid": uid,
+            "author": _post_author(uid),
+            "text": text,
+            "createdAt": datetime.datetime.utcnow().isoformat(),
+        }
+        ref.update({'comments': firestore.ArrayUnion([comment])})
+        return jsonify({"status": "success", "comment": comment}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/posts/<post_id>', methods=['DELETE'])
+@require_auth
+def delete_post(post_id):
+    try:
+        from firebase_utils import db
+        ref = db.collection('posts').document(post_id)
+        doc = ref.get()
+        if not doc.exists:
+            return jsonify({"error": "Post not found"}), 404
+        if doc.to_dict().get('authorId') != request.uid and not is_admin_user(request.user):
+            return jsonify({"error": "You can only delete your own posts"}), 403
+        ref.delete()
+        return jsonify({"status": "success"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -23,37 +23,42 @@ const FIELD_MAP = [
   { keys: ['website', 'portfolio', 'personal.?site', 'web.?site', 'homepage', 'personal.?url'], profileKey: 'website' },
   { keys: ['current.?company', 'current.?employer', 'employer', 'organization', 'organisation'], profileKey: 'currentCompany' },
   { keys: ['job.?title', 'current.?title', 'current.?position', 'position.?title', 'headline', 'designation'], profileKey: 'headline' },
-  { keys: ['city', 'location', 'current.?location', 'where.?are.?you', 'based.?in', 'zip', 'postal', 'address'], profileKey: 'location' },
+  { keys: ['street.?address', 'address.?line.?1', 'address.?1', 'addr.?1', '^addr$', 'mailing.?address', 'home.?address'], profileKey: 'address' },
+  { keys: ['\\bcity\\b', '\\btown\\b', 'municipality'], profileKey: 'city' },
+  { keys: ['\\bstate\\b', 'province', '\\bregion\\b'], profileKey: 'state' },
+  { keys: ['zip.?code', 'postal.?code', '\\bzip\\b', '\\bpostal\\b'], profileKey: 'zip' },
+  { keys: ['location', 'current.?location', 'where.?are.?you', 'based.?in'], profileKey: 'location' },
   { keys: ['cover.?letter', 'cover.?note', 'about.?yourself', 'tell.?us', 'additional.?info', 'message', 'introduction', 'summary', 'why.?interested', 'motivation'], profileKey: 'summary' },
   { keys: ['\\bname\\b', 'full.?name', 'your.?name', 'applicant.?name', 'candidate.?name', 'contact.?name'], profileKey: 'name' },
 ];
 
 function resolveValue(profile, key) {
-  const nameParts = (profile.name || '').trim().split(/\s+/);
-  const extras = {
-    firstName:  nameParts[0] || '',
-    lastName:   nameParts.length > 1 ? nameParts.slice(1).join(' ') : '',
-    middleName: nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '',
+  // Use explicit firstName/lastName from profile if backend provided them
+  const m = {
+    ...profile,
+    firstName:  profile.firstName || (profile.name || '').trim().split(/\s+/).slice(0, -1).join(' ') || (profile.name || '').trim().split(/\s+/)[0] || '',
+    lastName:   profile.lastName  || (profile.name || '').trim().split(/\s+/).slice(-1)[0] || '',
+    middleName: profile.middleName || '',
   };
-  return ({ ...profile, ...extras })[key] || '';
+  return (m[key] || '').trim();
 }
 
-// Aggressive label extraction — walks DOM, checks all common label patterns
+// Field-scoped label extraction — STOPS when container has >1 input to avoid poisoning haystacks
 function getFieldHaystack(el) {
   const parts = [];
-
   const push = str => { if (str && str.trim()) parts.push(str.trim().toLowerCase()); };
 
-  // Direct attributes
+  // TIER 1: attributes on the element itself
   push(el.name?.replace(/[_\-]/g, ' '));
   push(el.id?.replace(/[_\-]/g, ' '));
   push(el.placeholder);
   push(el.getAttribute('aria-label'));
   push(el.getAttribute('data-label'));
   push(el.getAttribute('data-field'));
+  push(el.getAttribute('data-automation-id'));
   push(el.getAttribute('data-testid')?.replace(/[_\-]/g, ' '));
 
-  // aria-labelledby — may reference multiple ids
+  // TIER 2: aria-labelledby
   const labelledBy = el.getAttribute('aria-labelledby');
   if (labelledBy) {
     labelledBy.split(/\s+/).forEach(id => {
@@ -62,7 +67,7 @@ function getFieldHaystack(el) {
     });
   }
 
-  // Native <label for="id"> association
+  // TIER 3: native <label for="id"> association
   if (el.id) {
     document.querySelectorAll(`label[for="${CSS.escape(el.id)}"]`).forEach(l => push(l.textContent));
   }
@@ -70,41 +75,36 @@ function getFieldHaystack(el) {
     Array.from(el.labels).forEach(l => push(l.textContent));
   }
 
-  // Walk up DOM — at each level check for label-like elements
+  // TIER 4: walk up DOM — STOP if container has >1 input (prevents sibling label collection)
   let node = el.parentElement;
-  for (let depth = 0; depth < 8 && node && node !== document.body; depth++) {
-    // If the parent itself is a <label>
+  for (let depth = 0; depth < 8 && node && !/^(BODY|HTML|FORM)$/.test(node.tagName); depth++) {
     if (node.tagName === 'LABEL') { push(node.textContent); break; }
 
-    // Check previous siblings (label often sits before input wrapper)
-    let sib = node.previousElementSibling;
-    for (let s = 0; s < 3 && sib; s++, sib = sib.previousElementSibling) {
-      const tag = sib.tagName.toLowerCase();
-      const text = sib.textContent.trim();
-      if (text.length > 0 && text.length < 100 &&
-          ['label', 'span', 'p', 'div', 'legend', 'dt', 'th', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
-        push(text);
-      }
-    }
+    push(node.getAttribute('data-automation-id'));
+    push(node.getAttribute('aria-label'));
 
-    // Check first text-only child of parent (label above input in same wrapper)
-    const firstTextChild = node.querySelector('label, [class*="label" i], [class*="Label"], legend');
-    if (firstTextChild && !firstTextChild.contains(el)) {
-      const text = firstTextChild.textContent.trim();
-      if (text.length > 0 && text.length < 100) push(text);
+    // Only check DIRECT children — skip element itself, its ancestors, and containers with inputs
+    Array.from(node.children).forEach(child => {
+      if (child === el || child.contains(el)) return;
+      if (child.querySelector('input:not([type=hidden]),textarea,select')) return;
+      const tag = child.tagName.toLowerCase();
+      const text = child.textContent.trim();
+      if (!text || text.length > 150) return;
+      if (['label','legend','span','p','dt','div','h1','h2','h3','h4','h5','h6','li'].includes(tag)) push(text);
+      const cls = (child.className || '').toLowerCase();
+      if (cls.includes('label') || cls.includes('caption') || cls.includes('heading') || cls.includes('title')) push(text);
+    });
+
+    const prev = node.previousElementSibling;
+    if (prev && !prev.querySelector('input:not([type=hidden]),textarea,select')) {
+      const t = prev.textContent.trim();
+      if (t && t.length < 150) push(t);
     }
 
     node = node.parentElement;
   }
 
-  // fieldset/legend
-  const fieldset = el.closest('fieldset');
-  if (fieldset) {
-    const legend = fieldset.querySelector('legend');
-    if (legend) push(legend.textContent);
-  }
-
-  return parts.join(' ');
+  return [...new Set(parts)].join(' ');
 }
 
 function findMatchingField(el, profile) {

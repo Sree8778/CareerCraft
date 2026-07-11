@@ -4,17 +4,33 @@ async function getToken() {
   return new Promise(resolve => chrome.storage.local.get(['pluginToken'], r => resolve(r.pluginToken || null)));
 }
 
-async function fetchProfile() {
+async function fetchProfile(resumeId) {
   const token = await getToken();
   if (!token) return null;
   try {
-    const res = await fetch(`${API_BASE}/plugin/profile`, {
-      headers: { Authorization: `PluginToken ${token}` },
-    });
+    const url = resumeId && resumeId !== 'profile'
+      ? `${API_BASE}/plugin/profile?resume_id=${encodeURIComponent(resumeId)}`
+      : `${API_BASE}/plugin/profile`;
+    const res = await fetch(url, { headers: { Authorization: `PluginToken ${token}` } });
     if (!res.ok) return null;
     return await res.json();
   } catch {
     return null;
+  }
+}
+
+async function fetchResumes() {
+  const token = await getToken();
+  if (!token) return [];
+  try {
+    const res = await fetch(`${API_BASE}/plugin/resumes`, {
+      headers: { Authorization: `PluginToken ${token}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.resumes || [];
+  } catch {
+    return [];
   }
 }
 
@@ -35,10 +51,16 @@ async function recordApplied(data) {
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'GET_PROFILE') {
-    fetchProfile().then(profile => {
+    const resumeId = msg.resumeId || 'profile';
+    fetchProfile(resumeId).then(profile => {
       if (profile) chrome.storage.local.set({ cachedProfile: profile });
       sendResponse({ profile });
     });
+    return true;
+  }
+
+  if (msg.type === 'GET_RESUMES') {
+    fetchResumes().then(resumes => sendResponse({ resumes }));
     return true;
   }
 
