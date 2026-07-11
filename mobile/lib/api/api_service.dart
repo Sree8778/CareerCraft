@@ -7,7 +7,12 @@ import 'package:recruit_edge/models/employer.dart';
 import 'package:recruit_edge/services/auth_service.dart';
 
 // Define the base URL of your web application's API
-const String baseUrl = 'https://careercraft-backend-u7h4zjepfq-uc.a.run.app/api';
+// Override at build time: flutter run --dart-define=API_BASE=http://10.0.2.2:5000/api
+// (10.0.2.2 reaches the host machine's localhost from the Android emulator.)
+const String baseUrl = String.fromEnvironment(
+  'API_BASE',
+  defaultValue: 'https://careercraft-backend-brkwttcaqq-uc.a.run.app/api',
+);
 
 // --- Data Fetching Functions (Unauthenticated) ---
 
@@ -771,5 +776,338 @@ Future<bool> pingWebhook(String url) async {
   } catch (e) {
     print('Error pinging webhook: $e');
     return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Social Feed
+// ═══════════════════════════════════════════════════════════════════════════
+
+Future<List<dynamic>> fetchFeed() async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/feed'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['posts'] ?? [];
+    }
+    return [];
+  } catch (e) {
+    print('Error loading feed: $e');
+    return [];
+  }
+}
+
+Future<Map<String, dynamic>?> createFeedPost(String content) async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/posts'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'content': content}),
+    );
+    if (response.statusCode == 201) {
+      final data = json.decode(response.body);
+      return data['post'];
+    }
+    return null;
+  } catch (e) {
+    print('Error creating post: $e');
+    return null;
+  }
+}
+
+Future<Map<String, dynamic>?> togglePostLike(String postId) async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/posts/$postId/like'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    return null;
+  } catch (e) {
+    print('Error toggling like: $e');
+    return null;
+  }
+}
+
+Future<Map<String, dynamic>?> addPostComment(String postId, String text) async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/posts/$postId/comments'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'text': text}),
+    );
+    if (response.statusCode == 201) {
+      final data = json.decode(response.body);
+      return data['comment'];
+    }
+    return null;
+  } catch (e) {
+    print('Error adding comment: $e');
+    return null;
+  }
+}
+
+Future<bool> deleteFeedPost(String postId) async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/posts/$postId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    return response.statusCode == 200;
+  } catch (e) {
+    print('Error deleting post: $e');
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Network / Connections
+// ═══════════════════════════════════════════════════════════════════════════
+
+Future<List<dynamic>> fetchDirectory({String search = '', String role = ''}) async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/users?search=$search&role=$role'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['users'] ?? [];
+    }
+    return [];
+  } catch (e) {
+    print('Error loading directory: $e');
+    return [];
+  }
+}
+
+Future<List<dynamic>> fetchConnections() async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/connections'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['connections'] ?? [];
+    }
+    return [];
+  } catch (e) {
+    print('Error loading connections: $e');
+    return [];
+  }
+}
+
+Future<String?> sendConnectionRequest(String receiverId) async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/connections/request'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'receiverId': receiverId}),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return null; // success
+    }
+    final data = json.decode(response.body);
+    return data['error'] ?? 'Failed to send request';
+  } catch (e) {
+    return 'Network error';
+  }
+}
+
+Future<String?> respondToConnection(String connectionId, String status) async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/connections/$connectionId/respond'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'status': status}),
+    );
+    if (response.statusCode == 200) {
+      return null; // success
+    }
+    final data = json.decode(response.body);
+    return data['error'] ?? 'Failed to respond';
+  } catch (e) {
+    return 'Network error';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Platform feature flags (controlled from the Super Admin panel)
+// ═══════════════════════════════════════════════════════════════════════════
+
+Future<Map<String, dynamic>> fetchPlatformFeatures() async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/platform/config'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return Map<String, dynamic>.from(data['features'] ?? {});
+    }
+    return {};
+  } catch (e) {
+    print('Error loading feature flags: $e');
+    return {};
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Smart Apply & Autonomous Bot
+// ═══════════════════════════════════════════════════════════════════════════
+
+Future<List<dynamic>> fetchSmartApplyQueue() async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/smart-apply/queue'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['queue'] ?? [];
+    }
+    return [];
+  } catch (e) {
+    print('Error loading smart apply queue: $e');
+    return [];
+  }
+}
+
+Future<bool> addToSmartApplyQueue(String jobId) async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/smart-apply/queue/add'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'jobId': jobId}),
+    );
+    return response.statusCode == 200 || response.statusCode == 201;
+  } catch (e) {
+    print('Error adding to smart apply queue: $e');
+    return false;
+  }
+}
+
+Future<bool> removeFromSmartApplyQueue(String jobId) async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/smart-apply/queue/remove'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'jobId': jobId}),
+    );
+    return response.statusCode == 200;
+  } catch (e) {
+    print('Error removing from smart apply queue: $e');
+    return false;
+  }
+}
+
+Future<Map<String, dynamic>?> fetchSmartApplyStatus() async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/smart-apply/status'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    }
+    return null;
+  } catch (e) {
+    print('Error fetching smart apply status: $e');
+    return null;
+  }
+}
+
+Future<bool> startAutonomousApply(int dailyCap) async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/smart-apply/autonomous/start'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'daily_cap': dailyCap}),
+    );
+    return response.statusCode == 200;
+  } catch (e) {
+    print('Error starting autonomous apply: $e');
+    return false;
+  }
+}
+
+Future<bool> stopAutonomousApply() async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/smart-apply/autonomous/stop'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    return response.statusCode == 200;
+  } catch (e) {
+    print('Error stopping autonomous apply: $e');
+    return false;
+  }
+}
+
+Future<List<dynamic>> searchSmartApplyJobs(String queryText) async {
+  try {
+    final token = await AuthService.getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/smart-apply/search'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({'query': queryText}),
+    );
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['jobs'] ?? [];
+    }
+    return [];
+  } catch (e) {
+    print('Error searching smart apply jobs: $e');
+    return [];
   }
 }

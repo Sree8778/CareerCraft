@@ -10,6 +10,7 @@ import 'package:recruit_edge/pages/candidate_interview_page.dart';
 import 'package:recruit_edge/pages/candidate_messages_page.dart';
 import 'package:recruit_edge/pages/job_details_page.dart';
 import 'package:recruit_edge/pages/companies_page.dart';
+import 'package:recruit_edge/pages/candidate_smart_apply_page.dart';
 import 'dart:async';
 
 class CandidateDashboardPage extends StatefulWidget {
@@ -136,6 +137,19 @@ class _CandidateDashboardPageState extends State<CandidateDashboardPage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const CandidateApplicationsPage()),
+                  );
+                },
+              ),
+            ),
+            GlassCard(
+              child: ListTile(
+                leading: const Icon(Icons.bolt, color: Colors.indigoAccent),
+                title: Text('Smart Apply Autopilot', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+                subtitle: Text('Manage autopilot job application queues and logs.', style: Theme.of(context).textTheme.bodyMedium),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const CandidateSmartApplyPage()),
                   );
                 },
               ),
