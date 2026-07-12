@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:recruit_edge/api/api_service.dart';
+import 'package:recruit_edge/services/auth_service.dart';
 import 'package:recruit_edge/theme/app_theme.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:recruit_edge/pages/job_details_page.dart';
 
 class JobSearchPage extends StatefulWidget {
@@ -56,8 +56,7 @@ class _JobSearchPageState extends State<JobSearchPage> {
     });
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      final token = user != null ? 'mock_token' : 'demo_token';
+      final token = await AuthService.getToken() ?? '';
 
       final response = await http.post(
         Uri.parse('$baseUrl/jobs/search-semantic'),

@@ -11,7 +11,7 @@ import 'package:recruit_edge/services/auth_service.dart';
 // (10.0.2.2 reaches the host machine's localhost from the Android emulator.)
 const String baseUrl = String.fromEnvironment(
   'API_BASE',
-  defaultValue: 'https://careercraft-backend-brkwttcaqq-uc.a.run.app/api',
+  defaultValue: 'https://careercraft-backend-u7h4zjepfq-uc.a.run.app/api',
 );
 
 // --- Data Fetching Functions (Unauthenticated) ---
