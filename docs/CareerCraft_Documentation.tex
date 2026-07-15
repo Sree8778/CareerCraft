@@ -1,0 +1,1948 @@
+% ============================================================
+%  CareerCraft -- Complete Project Documentation
+%  Compile with: pdflatex CareerCraft_Documentation.tex
+%  (run twice for correct TOC and cross-references)
+% ============================================================
+
+\documentclass[12pt, a4paper]{report}
+
+% ── Encoding & fonts ─────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ── Page layout ──────────────────────────────────────────────
+\usepackage[
+  a4paper,
+  top=2.5cm, bottom=2.5cm,
+  left=2.5cm, right=2.5cm,
+  headheight=15pt
+]{geometry}
+
+% ── Colors ───────────────────────────────────────────────────
+\usepackage{xcolor}
+\definecolor{ccpurple}{RGB}{98,0,238}
+\definecolor{ccpurpledk}{RGB}{55,0,179}
+\definecolor{ccpurplelt}{RGB}{187,134,252}
+\definecolor{ccbg}{RGB}{248,245,255}
+\definecolor{codebg}{RGB}{30,30,46}
+\definecolor{codefg}{RGB}{205,214,244}
+\definecolor{tablerow}{RGB}{245,240,255}
+\definecolor{successgr}{RGB}{76,175,80}
+\definecolor{warnorange}{RGB}{255,152,0}
+\definecolor{infoblue}{RGB}{0,122,204}
+\definecolor{graytext}{RGB}{120,120,130}
+\definecolor{lightgray}{RGB}{240,240,245}
+
+% ── Hyperlinks ───────────────────────────────────────────────
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks  = true,
+  linkcolor   = ccpurple,
+  urlcolor    = ccpurpledk,
+  citecolor   = ccpurple,
+  pdfauthor   = {CareerCraft Development Team},
+  pdftitle    = {CareerCraft -- Complete Project Documentation},
+  pdfsubject  = {AI-Powered Job Portal},
+  bookmarksnumbered = true,
+  bookmarksopen     = true,
+}
+
+% ── Section headings ─────────────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{ccpurple}}
+  {\chaptertitlename\ \thechapter}{12pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{20pt}{20pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{ccpurpledk}}
+  {\thesection}{1em}{}
+
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{ccpurple!70!black}}
+  {\thesubsection}{1em}{}
+
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\color{graytext}}
+  {\thesubsubsection}{1em}{}
+
+% ── Headers & footers ────────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\color{graytext}\small\leftmark}
+\fancyhead[R]{\color{graytext}\small CareerCraft Documentation}
+\fancyfoot[C]{\color{graytext}\small\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+
+% ── Tables ───────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{colortbl}
+\renewcommand{\arraystretch}{1.45}
+
+% ── Code listings ────────────────────────────────────────────
+\usepackage{listings}
+
+\lstdefinestyle{codestyle}{
+  backgroundcolor  = \color{codebg},
+  basicstyle       = \ttfamily\small\color{codefg},
+  keywordstyle     = \color{ccpurplelt}\bfseries,
+  stringstyle      = \color{successgr},
+  commentstyle     = \color{graytext}\itshape,
+  breaklines       = true,
+  breakatwhitespace= true,
+  frame            = single,
+  framesep         = 5pt,
+  framerule        = 0pt,
+  showspaces       = false,
+  showstringspaces = false,
+  tabsize          = 2,
+  xleftmargin      = 6pt,
+  xrightmargin     = 6pt,
+}
+
+\lstdefinestyle{asciistyle}{
+  backgroundcolor  = \color{codebg},
+  basicstyle       = \ttfamily\footnotesize\color{codefg},
+  breaklines       = false,
+  frame            = single,
+  framesep         = 5pt,
+  framerule        = 0pt,
+  xleftmargin      = 6pt,
+  xrightmargin     = 6pt,
+}
+
+\lstdefinestyle{bashstyle}{
+  style            = codestyle,
+  language         = bash,
+  morekeywords     = {flutter,dart,python,npm,pip,git,gcloud,firebase,cd,mkdir},
+}
+
+\lstdefinestyle{envstyle}{
+  backgroundcolor  = \color{codebg},
+  basicstyle       = \ttfamily\small\color{successgr},
+  breaklines       = true,
+  frame            = single,
+  framesep         = 5pt,
+  framerule        = 0pt,
+  xleftmargin      = 6pt,
+  xrightmargin     = 6pt,
+}
+
+\lstset{style=codestyle}
+
+% ── Callout boxes ────────────────────────────────────────────
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{breakable,skins}
+
+\newtcolorbox{tipbox}[1][Tip]{
+  enhanced,
+  colback   = ccbg,
+  colframe  = ccpurple,
+  coltitle  = white,
+  fonttitle = \bfseries,
+  title     = {#1},
+  attach boxed title to top left = {yshift=-2.5mm, xshift=4mm},
+  boxed title style = {colback=ccpurple, sharp corners, colframe=ccpurpledk},
+  breakable,
+  before upper = {\parindent0pt},
+}
+
+\newtcolorbox{notebox}[1][Note]{
+  colback   = infoblue!8!white,
+  colframe  = infoblue,
+  fonttitle = \bfseries,
+  title     = {#1},
+  breakable,
+  before upper = {\parindent0pt},
+}
+
+\newtcolorbox{warningbox}[1][Warning]{
+  colback   = warnorange!10!white,
+  colframe  = warnorange,
+  fonttitle = \bfseries,
+  title     = {#1},
+  breakable,
+  before upper = {\parindent0pt},
+}
+
+% ── Lists ────────────────────────────────────────────────────
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=*, nosep, topsep=4pt, itemsep=2pt}
+\setlist[enumerate]{leftmargin=*, nosep, topsep=4pt, itemsep=2pt}
+
+% ── Spacing ──────────────────────────────────────────────────
+\usepackage{parskip}
+\setlength{\parskip}{7pt}
+\setlength{\parindent}{0pt}
+
+% ── Graphics ─────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+
+% ── Custom commands ──────────────────────────────────────────
+\newcommand{\cc}{\textit{CareerCraft}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\filepath}[1]{\texttt{\small\color{ccpurpledk}#1}}
+\newcommand{\method}[1]{\texttt{\textbf{\color{ccpurple}#1}}}
+\newcommand{\badge}[2]{%
+  \colorbox{#1}{\textcolor{white}{\tiny\bfseries\,#2\,}}%
+}
+\newcommand{\GET}{\badge{successgr}{GET}}
+\newcommand{\POST}{\badge{infoblue}{POST}}
+\newcommand{\PATCH}{\badge{warnorange}{PATCH}}
+\newcommand{\DELETE}{\badge{red}{DELETE}}
+
+% ── Convenience table column types ───────────────────────────
+\newcolumntype{M}[1]{>{\ttfamily\small}p{#1}}   % monospace col
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+% ─────────────────────────────────────────────────────────────
+%  DOCUMENT
+% ─────────────────────────────────────────────────────────────
+\begin{document}
+
+% ── Title page ───────────────────────────────────────────────
+\begin{titlepage}
+  \pagecolor{ccpurple}
+  \color{white}
+  \centering
+  \vspace*{3cm}
+
+  {\fontsize{58}{66}\selectfont\bfseries CareerCraft}
+
+  \vspace{0.8cm}
+  {\LARGE Complete Project Documentation}
+
+  \vspace{0.4cm}
+  \textcolor{ccpurplelt}{\large The AI-Powered Job Portal Platform}
+
+  \vspace{2.5cm}
+
+  \begin{tcolorbox}[
+    colback  = white!15!ccpurple,
+    colframe = white,
+    width    = 12cm,
+    arc      = 8pt,
+    boxrule  = 1pt,
+  ]
+    \centering\color{white}\small
+    Website (Next.js 15)\quad\textbullet\quad Mobile App (Flutter)\\[4pt]
+    Browser Extension (Chrome MV3)\quad\textbullet\quad AI Suite (Gemini / GPT-4o / Claude)\\[4pt]
+    Backend API (Flask + Python)\quad\textbullet\quad Database (Google Firestore)
+  \end{tcolorbox}
+
+  \vfill
+
+  \textcolor{ccpurplelt}{\small Version 1.0\quad\textbullet\quad July 2026}\\[4pt]
+  \textcolor{ccpurplelt}{\small\url{https://github.com/Sree8778/CareerCraft}}\\[4pt]
+  \textcolor{ccpurplelt}{\small Live demo: \url{https://careercraft-frontend-u7h4zjepfq-uc.a.run.app}}
+
+\end{titlepage}
+
+\nopagecolor
+\color{black}
+
+% ── Table of contents ────────────────────────────────────────
+\tableofcontents
+\clearpage
+
+% ─────────────────────────────────────────────────────────────
+\chapter{What is CareerCraft?}
+% ─────────────────────────────────────────────────────────────
+
+\cc{} is a \textbf{job portal} --- a website and mobile app that connects people
+looking for jobs with companies that want to hire them.
+
+Think of it like a \textbf{Swiss Army knife for job hunting}:
+\begin{itemize}
+  \item It reads your resume and understands every word of it
+  \item It finds matching jobs from many different job websites at once
+  \item It applies to those jobs \emph{automatically} on your behalf
+  \item It helps you practice for interviews by talking to an AI
+  \item It lets recruiters post jobs and manage all their applicants in one place
+\end{itemize}
+
+The most important thing that makes \cc{} special: \textbf{all AI features run on
+your own free API key} --- you never pay a subscription fee.  Just grab a free key
+from Google (takes two minutes) and every AI feature unlocks instantly.
+
+\begin{tipbox}[Free AI Tip]
+Google's Gemini AI gives you a generous free tier --- enough for hundreds of AI
+operations per month, at zero cost.  No credit card needed.
+\end{tipbox}
+
+\section{Real-World Analogy}
+
+Imagine you hired three separate helpers:
+
+\begin{enumerate}
+  \item A \textbf{career coach} who rewrites your resume and teaches you to interview
+  \item A \textbf{job agent} who searches hundreds of job websites and submits your
+        application for you
+  \item A \textbf{recruiter's assistant} who reads every application and tells the
+        hiring manager which candidates are best
+\end{enumerate}
+
+\cc{} is all three of those helpers, in one app, \emph{free}.
+
+\section{How Big Is This Project?}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Metric} & \textbf{Count} \\
+\midrule
+Backend API endpoints & 50+ \\
+Web pages (routes) & 35+ \\
+Mobile screens & 27 \\
+Database collections & 14 \\
+AI features & 18 \\
+Lines of code (approx.) & 25{,}000+ \\
+Supported AI providers & 5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────
+\chapter{The Big Picture --- How Everything Fits Together}
+% ─────────────────────────────────────────────────────────────
+
+\cc{} is actually \textbf{three products in one}: a website, a mobile app, and a
+browser extension.  All three talk to the same backend server and the same database.
+
+\section{Architecture Diagram}
+
+\begin{lstlisting}[style=asciistyle, caption={CareerCraft system architecture}]
++---------------------------------------------------------------+
+|                    CAREERCRAFT PLATFORM                       |
+|                                                               |
+|  +----------------+  +----------------+  +--------------+    |
+|  | Website (Web)  |  |  Mobile App    |  |   Browser    |    |
+|  | Next.js 15     |  |  Flutter       |  |  Extension   |    |
+|  | (React / TS)   |  |  (Android)     |  |  (Chrome)    |    |
+|  +-------+--------+  +-------+--------+  +------+-------+    |
+|          |                   |                  |            |
+|          +-------------------+------------------+            |
+|                              |                               |
+|               +--------------v--------------+               |
+|               |   Backend API  (Flask/Python)|               |
+|               |   50+ REST endpoints        |               |
+|               |   Cloud Run (Google Cloud)  |               |
+|               +--------------+--------------+               |
+|                              |                               |
+|        +---------------------+---------------------+        |
+|        |                     |                     |        |
+|  +-----v------+    +---------v------+    +---------v-----+ |
+|  |  Firestore  |    | Firebase Auth  |    |  AI Providers | |
+|  |  (Database) |    | (Login/Signup) |    |  Gemini/GPT/  | |
+|  |  14 colls.  |    |  Email+Google  |    |  Claude/Groq  | |
+|  +-------------+    +----------------+    +---------------+ |
++---------------------------------------------------------------+
+\end{lstlisting}
+
+\section{What Each Piece Does}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Piece} & \textbf{Technology} & \textbf{What It Does} \\
+\midrule
+Website        & Next.js 15 (React)  & The main web app you open in a browser \\
+Mobile App     & Flutter (Dart)      & The Android phone app \\
+Browser Ext.   & JavaScript (MV3)    & Auto-fills job applications on other sites \\
+Backend API    & Flask (Python)      & The ``brain'' --- processes requests, calls AI, talks to DB \\
+Database       & Google Firestore    & Stores all users, jobs, messages, applications \\
+Auth           & Firebase Auth       & Handles sign-in and sign-out securely \\
+AI             & Gemini / GPT / Claude & Powers all smart features using your own key \\
+Hosting        & Google Cloud Run    & Runs the app on the internet, auto-scales \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{How a Request Flows}
+
+Here is exactly what happens when you click ``Enhance this resume bullet point'':
+
+\begin{lstlisting}[style=asciistyle, caption={Request flow for an AI feature}]
+[1] You click "Enhance" button in the browser
+        |
+        v
+[2] Browser sends POST /api/enhance-section to Flask backend
+    (includes your Firebase ID token as proof you are logged in)
+        |
+        v
+[3] Backend verifies the ID token with Firebase
+    --> if invalid: returns 401 Unauthorized (stops here)
+        |
+        v
+[4] Backend reads your API key from Firestore (decrypts it)
+        |
+        v
+[5] Backend sends your text + instructions to Google Gemini
+        |
+        v
+[6] Gemini responds with improved text  (~1-2 seconds)
+        |
+        v
+[7] Backend sends the improved text back as JSON
+        |
+        v
+[8] Browser shows you the improved text on screen
+\end{lstlisting}
+
+This entire round trip takes about 1--3 seconds.
+
+% ─────────────────────────────────────────────────────────────
+\chapter{Who Uses It? --- The Three Roles}
+% ─────────────────────────────────────────────────────────────
+
+When you create an account on \cc{}, you choose one of three roles.
+Your role determines which features you see and what you can do.
+
+\section{Candidate (Job Seeker)}
+
+Someone looking for a job.  You upload your resume, \cc{} reads it,
+and you get access to all the job-hunting tools.
+
+\textbf{Example:} A college graduate looking for their first engineering job, or a
+professional switching careers.
+
+\section{Recruiter (Employer / Hiring Manager)}
+
+Someone posting jobs and reviewing applications.  You post jobs, review candidates,
+and manage your hiring pipeline.
+
+\textbf{Example:} An HR manager at a tech company who needs to hire five software
+engineers this quarter.
+
+\section{Admin (Super Admin)}
+
+The platform operator.  Admins can turn features on or off for all users, suspend
+accounts, and see platform-wide statistics.
+
+\begin{notebox}
+Admin access is restricted to specific email addresses set in the backend
+configuration.  A regular user cannot become an admin.
+\end{notebox}
+
+% ─────────────────────────────────────────────────────────────
+\chapter{Features for Job Seekers (Candidates)}
+% ─────────────────────────────────────────────────────────────
+
+\section{Dashboard}
+
+The dashboard is the first thing you see after logging in.
+It is your job-search command center.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Widget} & \textbf{What it shows} \\
+\midrule
+Application Count    & Total number of jobs you have applied to \\
+Response Rate        & What percentage of employers replied \\
+Interview Rate       & How many interviews you got from your applications \\
+Application Funnel   & A chart: Applications $\to$ Responses $\to$ Interviews $\to$ Offers \\
+Weekly Activity      & A small graph of your job-search effort over the week \\
+AI Insights          & Personalised tips (e.g.\ ``Your resume is missing Python keywords'') \\
+Pipeline Stepper     & Where each active application stands right now \\
+Profile Strength     & How complete your profile is (shown as a percentage) \\
+ATS Score            & How well your resume would pass automated screening (0--100) \\
+Recent Applications  & The last few jobs you applied to \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Resume Builder}
+
+This is the most powerful feature.  It turns your existing resume into a beautiful,
+AI-optimised version.
+
+\subsection{Step 1 --- Upload Your Resume}
+
+Upload a PDF or DOCX file.  The AI reads and extracts all the information
+(name, work history, education, skills).  All the fields fill in automatically.
+
+\subsection{Step 2 --- Edit Each Section}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Section} & \textbf{What goes here} \\
+\midrule
+Personal Info        & Name, email, phone, location, LinkedIn, GitHub \\
+Professional Summary & 2--4 sentences about who you are professionally \\
+Work Experience      & Every job: company, title, dates, bullet points \\
+Education            & Degrees, schools, graduation years \\
+Skills               & Technical and soft skills \\
+Certifications       & Licences and certificates you have earned \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Step 3 --- Use AI Tools}
+
+Every section has an ``Enhance with AI'' button.  The AI rewrites that section to
+be more impressive while staying truthful.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{AI Tool} & \textbf{What it does} \\
+\midrule
+Enhance Section      & Rewrites a bullet point to sound more impactful \\
+Generate Summary     & Creates 3 versions of your professional summary to choose from \\
+Elevator Pitch       & Writes a 30-second ``tell me about yourself'' speech \\
+Generate Cover Letter & Paste a job posting and get a custom cover letter in seconds \\
+Tailor to JD         & Rewrites your resume to include missing keywords from a job ad \\
+ATS Score            & Checks if your resume would pass automated screening \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Step 4 --- Export}
+
+\begin{itemize}
+  \item \textbf{Download as PDF} --- best for applying (cannot be easily edited)
+  \item \textbf{Download as DOCX} --- best if the employer wants a Word file
+\end{itemize}
+
+\subsection{Step 5 --- Save Multiple Versions}
+
+You can save multiple resume versions (e.g.\ ``Resume for Software Engineer'',
+``Resume for Product Manager'') and switch between them when applying to
+different types of jobs.
+
+\begin{tipbox}[Pro tip]
+Tailor your resume to every job you apply to.  The ``Tailor to JD'' feature does
+this automatically in about 10 seconds.  A tailored resume is 3$\times$ more
+likely to pass ATS screening.
+\end{tipbox}
+
+\section{Job Search}
+
+Find jobs using natural language --- like talking to a search engine that actually
+understands you.
+
+\textbf{How to use it:}
+\begin{enumerate}
+  \item Type what you are looking for in plain English:\\
+        \emph{``remote React developer job with good work-life balance''}\\
+        \emph{``entry level data science role in New York under \$80k''}
+  \item The AI reads all available jobs and ranks them by how well they match
+  \item Each result shows an \textbf{AI FIT \%} score and a reason why it matches
+\end{enumerate}
+
+\textbf{What the results show:}
+\begin{itemize}
+  \item Job title, company name, location, and job type (Full-time / Remote / Contract)
+  \item Salary range (if listed)
+  \item An ``AI Fit Reasoning'' box explaining why this job matches your search
+  \item An Apply button
+\end{itemize}
+
+\section{Smart Apply --- Automated Job Applications}
+
+Instead of applying to one job at a time, Smart Apply searches multiple job boards
+simultaneously and applies on your behalf.
+
+\subsection{Job Boards Searched}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Job Board} & \textbf{Website} \\
+\midrule
+Indeed     & indeed.com \\
+LinkedIn   & linkedin.com \\
+RemoteOK   & remoteok.com \\
+Jobicy     & jobicy.com \\
+Arbeitnow  & arbeitnow.com \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{How to Use It}
+
+\begin{enumerate}
+  \item Type a job title and location (e.g.\ ``Software Engineer, San Francisco'')
+  \item The system searches all job boards and shows you matching jobs
+  \item Click ``Add to Queue'' on jobs you want to apply to
+  \item Choose your mode:
+        \begin{itemize}
+          \item \textbf{Supervised Mode} --- you review each application before it is sent
+          \item \textbf{Autonomous Mode} --- set a daily cap and it applies automatically
+        \end{itemize}
+  \item Track progress: see which applications were sent, which are pending, and results
+\end{enumerate}
+
+\begin{warningbox}[Review your queue first!]
+Always review the jobs in your queue before starting autonomous mode.  Once
+autonomous apply is running, applications are submitted automatically.
+\end{warningbox}
+
+\section{Interview Preparation}
+
+Two ways to practice: AI practice sessions and real scheduled interviews.
+
+\subsection{AI Voice Practice Interview}
+
+Like having a real interviewer to talk to, 24 hours a day, for free.
+
+\textbf{Settings you choose:}
+\begin{itemize}
+  \item \textbf{Role:} Software Engineer, Product Manager, Marketing, Sales, etc.
+  \item \textbf{Interview type:} Behavioural, Technical, Case Study, Mixed
+  \item \textbf{Difficulty:} Junior, Mid-level, Senior
+\end{itemize}
+
+\textbf{How a session works:}
+\begin{enumerate}
+  \item The AI asks you a question (you read it or hear it as audio)
+  \item You respond by typing or speaking
+  \item The AI replies like a real interviewer --- follows up, probes deeper, or moves on
+  \item After the session, you get a full report with scores and specific feedback
+\end{enumerate}
+
+\subsection{Identity Verification (Proctored Interviews)}
+
+If a company requires proof that you are really you during an interview:
+\begin{enumerate}
+  \item Upload a photo of your government-issued ID
+  \item Take a selfie using your camera
+  \item The AI compares the two and gives a similarity score
+  \item The result is saved and shared with the recruiter
+\end{enumerate}
+
+\subsection{Scheduled Interviews}
+
+When a recruiter books a real interview with you, it appears here.
+You can see the date, time, and interviewer's name, get a calendar invite,
+and join the video call link when the time comes.
+
+\section{Applications Tracker}
+
+A Kanban board showing all your applications organised by status.
+
+\begin{lstlisting}[style=asciistyle, caption={Applications Kanban board}]
++-------------+  +-------------+  +-------------+  +-------------+
+|   APPLIED   |  |  REVIEWED   |  |  INTERVIEW  |  |    OFFER    |
++-------------+  +-------------+  +-------------+  +-------------+
+| Google SWE  |  | Meta PM     |  | Apple iOS   |  | Stripe Eng  |
+| Amazon SDE  |  | Stripe DS   |  |             |  |             |
+| Netflix Eng |  |             |  |             |  |             |
++-------------+  +-------------+  +-------------+  +-------------+
+\end{lstlisting}
+
+Click any card to see the full job description and your application materials.
+
+\section{Networking}
+
+Connect with recruiters and other professionals --- like LinkedIn,
+but built into \cc{}.
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Tab} & \textbf{What you see} \\
+\midrule
+Directory  & Everyone on the platform; send a connection request \\
+Pending    & Connection requests waiting for your response (accept / decline) \\
+Connected  & People you are already connected with \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Messages}
+
+Real-time chat with recruiters.  When a recruiter wants to discuss your application
+informally, they start a conversation here.  You can reply just like a text
+message conversation.
+
+\section{Social Feed}
+
+A social-media-style feed where candidates and recruiters share updates, job tips,
+and announcements.
+
+\textbf{What you can do:}
+\begin{itemize}
+  \item Write posts (text)
+  \item Like posts from other users
+  \item Comment on posts
+  \item Delete your own posts
+\end{itemize}
+
+\section{Profile}
+
+Your public profile card that recruiters can view.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Field} & \textbf{What to fill in} \\
+\midrule
+Full Name          & Your legal full name \\
+Professional Title & Your job title (e.g.\ ``Frontend Engineer'') \\
+Email \& Phone     & Contact details \\
+Location           & City and state \\
+LinkedIn           & Your LinkedIn profile URL \\
+GitHub             & Your GitHub profile URL (if applicable) \\
+Portfolio          & Link to your website or portfolio \\
+Profile Photo      & A professional headshot \\
+Elevator Pitch     & Auto-generated from your resume \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Settings}
+
+\subsection{API Keys --- Bring Your Own Key (BYOK)}
+
+This is how the AI features work at zero cost.  Add one of these free keys:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Provider} & \textbf{How to get a free key} & \textbf{Best for} \\
+\midrule
+Google Gemini  & aistudio.google.com     & Everything (recommended) \\
+OpenAI GPT-4o  & platform.openai.com     & Resume writing \\
+Anthropic Claude & console.anthropic.com & Analysis \& reasoning \\
+Groq (Llama 3) & console.groq.com        & Fast responses \\
+NVIDIA NIM     & build.nvidia.com        & High-performance tasks \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+You can add multiple keys.  If one runs out of credits, \cc{} automatically
+switches to the next one.
+
+\subsection{Other Settings}
+
+\begin{itemize}
+  \item Dark / Light theme toggle
+  \item Email notification preferences
+  \item Two-factor authentication (extra security)
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────
+\chapter{Features for Recruiters}
+% ─────────────────────────────────────────────────────────────
+
+\section{Dashboard}
+
+Shows hiring performance at a glance.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Metric} & \textbf{What it means} \\
+\midrule
+Open Jobs           & Number of active job postings you have live \\
+Total Applications  & Incoming applications across all your jobs \\
+Interview Rate      & Percentage of applicants who reached the interview stage \\
+Recent Applications & The latest applications that just came in \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Post a Job (Requisitions)}
+
+A four-step wizard that makes posting a job fast and easy.
+
+\subsection{Step 1 --- Role Details}
+\begin{itemize}
+  \item Job title, department, location (city / remote / hybrid)
+  \item Employment type: Full-time, Part-time, Contract, Internship
+  \item Salary range
+\end{itemize}
+
+\subsection{Step 2 --- AI-Generated Job Description}
+Click ``Generate with AI'' and get a complete, professional job description in
+seconds.  You can edit any part of it.
+
+\subsection{Step 3 --- Screening Questions}
+Add custom questions candidates must answer:
+\begin{itemize}
+  \item \textbf{Multiple choice} --- e.g.\ ``Are you authorised to work in the US?''
+  \item \textbf{Open text} --- e.g.\ ``Describe a challenging technical problem you solved''
+  \item \textbf{Knockout questions} --- if a candidate answers wrong, they are automatically
+        rejected\\
+        \textit{Example: ``Do you have 3+ years of Python? (Required)'' --- a ``No'' answer
+        instantly rejects the applicant}
+\end{itemize}
+
+\subsection{Step 4 --- Preview \& Publish}
+Review how the job posting looks, then click Publish.  It goes live immediately.
+
+\section{Application Pipeline}
+
+A Kanban board showing all applications for all your jobs, organised by status.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Action} & \textbf{How to do it} \\
+\midrule
+View resume         & Click any applicant card \\
+See AI Fit Score    & Shown on each card (0--100\%) \\
+See ATS Score       & Shown on the application detail page \\
+Move to next stage  & Drag the card or use the status dropdown \\
+Schedule interview  & Click ``Schedule Interview'' on the detail page \\
+Send rejection      & Click ``Reject'' --- uses a professional email template \\
+Make offer          & Click ``Make Offer'' --- opens an offer form \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{AI Fit Analysis}
+
+Click ``Analyse Fit'' on any application to get:
+\begin{itemize}
+  \item An overall match percentage
+  \item Which requirements the candidate meets and which they are missing
+  \item Keyword gaps --- important skills from your job description missing from their resume
+  \item A recommendation: \textbf{Strong Match}, \textbf{Possible Match}, or \textbf{Not a Match}
+\end{itemize}
+
+\section{Candidate Directory \& AI Copilot Search}
+
+A searchable database of all candidates on the platform.
+
+\begin{itemize}
+  \item \textbf{Standard search:} type a skill or job title
+  \item \textbf{AI Copilot Search:} type in plain English\\
+        \textit{``experienced backend developer who has worked at startups and knows Kubernetes''}
+\end{itemize}
+
+Click any candidate to see their full profile, resume, and skills.
+
+\section{Webhooks --- ATS Integration}
+
+If your company already uses a separate Applicant Tracking System (Greenhouse,
+Workday, Lever, etc.), you can connect it to \cc{} using webhooks.
+
+Every time something happens in \cc{} (new application, status change, interview
+booked), a notification is automatically sent to your ATS so everything stays in sync.
+
+\textbf{Setup:}
+\begin{enumerate}
+  \item Go to Settings $\to$ Webhooks
+  \item Paste your ATS webhook URL
+  \item Click ``Test Ping'' to verify the connection works
+  \item Save --- \cc{} will now notify your ATS automatically
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────
+\chapter{Features for Admins}
+% ─────────────────────────────────────────────────────────────
+
+Admins access the admin panel at \code{/admin}.
+This is only visible to email addresses pre-approved in the backend configuration.
+
+\section{Feature Flags}
+
+Turn platform features on or off with a single toggle.  Useful for rolling out
+new features gradually or disabling features during maintenance.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Flag name} & \textbf{What it controls} \\
+\midrule
+\code{feed}         & The social feed page \\
+\code{smartApply}   & Automated job applications \\
+\code{aiInterview}  & AI voice interview practice \\
+\code{practiceMode} & Interview practice sessions \\
+\code{resumeBuilder}& Resume builder tool \\
+\code{network}      & Connections and networking \\
+\code{messages}     & Direct messaging \\
+\code{sourcing}     & Passive talent sourcing \\
+\code{webhooks}     & ATS integrations \\
+\code{companies}    & Company directory and reviews \\
+\code{signups}      & New user registrations (turn off for private beta) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{User Management}
+
+\begin{itemize}
+  \item View all users: name, email, role, join date, suspension status
+  \item \textbf{Suspend account} --- the user is immediately signed out and cannot log in
+  \item \textbf{Reinstate account} --- restore access to a suspended user
+\end{itemize}
+
+\section{Job Moderation}
+
+View all job postings on the platform and remove inappropriate or spammy jobs.
+
+\section{Platform Statistics}
+
+\begin{itemize}
+  \item Total users (candidates vs.\ recruiters)
+  \item Total jobs posted
+  \item Total applications submitted
+  \item Platform growth over time
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────
+\chapter{The Chrome Browser Extension}
+% ─────────────────────────────────────────────────────────────
+
+The browser extension is a small tool you install in Chrome.  It lives in your
+toolbar and auto-fills job application forms on other websites --- so you do not
+have to type your name, email, and resume information a hundred times.
+
+\section{How to Install}
+
+\begin{enumerate}
+  \item Open Chrome and go to \code{chrome://extensions}
+  \item Turn on \textbf{Developer Mode} (toggle in the top-right corner)
+  \item Click \textbf{Load unpacked}
+  \item Navigate to the \filepath{web/browser-extension/} folder and select it
+  \item The CareerCraft icon appears in your Chrome toolbar
+\end{enumerate}
+
+\section{How to Use It}
+
+\begin{enumerate}
+  \item Go to any job application page (Indeed, Greenhouse, Lever, Workday, etc.)
+  \item Click the CareerCraft icon in your toolbar
+  \item The popup shows your profile, a resume selector dropdown, and an Autofill button
+  \item Click \textbf{``Autofill Application''}
+  \item Watch as every field fills in automatically
+\end{enumerate}
+
+\subsection{Fields Filled Automatically}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Field} & \textbf{Data source} \\
+\midrule
+First name, Last name & Your profile name (split correctly) \\
+Email address         & Your profile email \\
+Phone number          & Your profile phone \\
+LinkedIn URL          & Your profile LinkedIn link \\
+GitHub URL            & Your profile GitHub link \\
+Portfolio URL         & Your profile website \\
+Address, City, State, ZIP & Your profile location \\
+Work authorisation    & Answered from profile \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{How the Autofill Works (Simplified)}
+
+The extension is smart about reading forms.  It does not just look at field
+names --- it reads the \textbf{labels} near each field to understand what that
+field is asking for.
+
+For example, if a form has a label that says ``Legal First Name'' followed by a
+text box, the extension knows to put your first name in that box --- even though
+the field itself is not labelled \code{firstName}.  This is called
+\textbf{label-based haystack detection} and it works on virtually any job
+application form.
+
+\section{Handling Custom Screening Questions}
+
+For open-text questions like ``Tell us about a challenge you overcame'',
+the extension sends the question to your AI and fills in a relevant answer
+drawn from your resume.
+
+\begin{warningbox}[Always review before submitting]
+AI-generated answers to custom questions are a starting point, not a final
+answer.  Always read and edit them before clicking Submit on the job site.
+\end{warningbox}
+
+\section{Resume Selection}
+
+If you have saved multiple resume versions in the \cc{} resume builder, you can
+pick which one to use for this application using the dropdown in the extension
+popup.  The extension fetches the selected resume's data from the backend and
+uses it for the autofill.
+
+% ─────────────────────────────────────────────────────────────
+\chapter{The Mobile App}
+% ─────────────────────────────────────────────────────────────
+
+The mobile app (Android) gives you access to \cc{} from your phone.  It has
+nearly all the same features as the website and connects to the exact same
+backend and database.
+
+\section{How to Install}
+
+\subsection{Option A --- Direct APK (current method)}
+\begin{enumerate}
+  \item Enable ``Install from unknown sources'' on your phone
+        (Settings $\to$ Security $\to$ Install unknown apps)
+  \item Transfer the APK file to your phone
+  \item Open the APK file on your phone and follow the prompts
+\end{enumerate}
+
+\subsection{Option B --- Build from Source}
+\begin{lstlisting}[style=bashstyle]
+# In the mobile/ folder:
+flutter build apk --release
+
+# Install on a connected device:
+flutter install --device-id YOUR_DEVICE_ID
+\end{lstlisting}
+
+\section{How to Log In}
+
+\begin{itemize}
+  \item \textbf{Email \& Password:} same account you use on the website
+  \item \textbf{Google Sign-In:} tap ``Continue with Google'' to use your Google account
+\end{itemize}
+
+All your data (jobs, messages, applications) is shared in real-time between
+the website and the mobile app.
+
+\section{Mobile Screens}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Screen} & \textbf{What it does} \\
+\midrule
+Home                & Choose role (Candidate or Recruiter) \\
+Candidate Dashboard & Stats, quick actions, notifications \\
+Job Search          & Browse and search jobs, view details, apply \\
+Smart Apply         & Automated applications on mobile \\
+Resume Builder      & Edit resume, use AI tools on mobile \\
+Applications        & Track your application status \\
+Interview           & Practice interviews and schedule real ones \\
+Messages            & Chat with recruiters \\
+Network             & Connections directory \\
+Social Feed         & Post and interact with the community \\
+Companies           & Company directory and reviews \\
+Recruiter Dashboard & KPIs and hiring overview \\
+Post a Job          & Create a new job posting \\
+Application Pipeline& Review incoming applications \\
+Candidate Directory & Search all candidates \\
+Candidate Detail    & View a candidate's full resume \\
+Recruiter Messages  & Chat with applicants \\
+Webhooks            & ATS integration management \\
+Profile             & Edit your profile \\
+More / Settings     & Logout, theme, account settings \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────
+\chapter{How the AI Works}
+% ─────────────────────────────────────────────────────────────
+
+\section{The Bring Your Own Key (BYOK) System}
+
+\cc{} does not pay for AI on your behalf.  Instead, you add your own free API
+key from one of the supported AI providers, and \cc{} uses it to power all
+smart features.
+
+\begin{notebox}[Why BYOK is better for you]
+\begin{itemize}
+  \item Google Gemini gives you a generous free tier (hundreds of uses per month, no card required)
+  \item You pay no subscription fee to CareerCraft
+  \item Your data goes directly from CareerCraft to the AI provider --- it is never sold or used for training
+\end{itemize}
+\end{notebox}
+
+\subsection{How to Get a Free Gemini Key}
+\begin{enumerate}
+  \item Go to \url{https://aistudio.google.com}
+  \item Click ``Get API key'' $\to$ ``Create API key''
+  \item Copy the key
+  \item In \cc{}: Settings $\to$ API Keys $\to$ Add Key $\to$ paste $\to$ Save
+\end{enumerate}
+
+\section{The AI Key Router}
+
+If you add multiple API keys, the \textbf{AI Router} uses them intelligently:
+\begin{enumerate}
+  \item Tries keys in the order you added them
+  \item If a key hits its rate limit or returns an error, it silently switches to the next key
+  \item You never see an error because of an exhausted key
+\end{enumerate}
+
+\section{Key Encryption}
+
+Your API keys are stored in the database \textbf{encrypted} --- turned into
+scrambled text that can only be decoded by the backend server.  Even if someone
+gained access to the database, they could not read your keys.
+
+The method used is \textbf{Fernet} symmetric encryption.  The master decryption
+key exists only as a server-side environment variable, never in any code file.
+
+\section{AI Features Reference}
+
+\begin{center}
+{\small
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Feature} & \textbf{What the AI actually does} \\
+\midrule
+Parse Resume         & Reads a PDF and extracts structured data (name, jobs, education) \\
+Enhance Section      & Rewrites a resume bullet to be more impact-focused \\
+Generate Summary     & Writes 3 professional summary options from your career history \\
+Elevator Pitch       & Writes a conversational 30-second intro \\
+Cover Letter         & Matches your skills to a job description and writes a letter \\
+Tailor to JD         & Rewrites your resume using keywords from a specific job posting \\
+ATS Score            & Evaluates formatting, keywords, and length (0--100 score) \\
+Practice Interview   & Generates questions, evaluates your answers, gives feedback \\
+Semantic Job Search  & Understands what you want from a plain-English description \\
+Fit Analysis         & Compares a candidate's resume to a job description (recruiter tool) \\
+AI Copilot Search    & Finds matching candidates from a plain-English query (recruiter) \\
+Generate Job Desc.   & Writes a full job posting from a title and requirements \\
+Solve Custom Qs      & Answers application screening questions using your resume \\
+Voice Evaluation     & Grades a spoken interview answer on grammar, confidence, relevance \\
+\bottomrule
+\end{tabularx}
+}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────
+\chapter{The Database}
+% ─────────────────────────────────────────────────────────────
+
+\cc{} uses \textbf{Google Firestore} --- a cloud database that stores data as
+collections of documents (like folders of JSON files).
+
+\section{Database Collections}
+
+\begin{center}
+{\small
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Collection} & \textbf{Who can access} & \textbf{What is stored} \\
+\midrule
+\code{users}            & Owner only           & Name, email, role, avatar, profile info, suspension flag \\
+\code{resumes}          & Owner only           & Resume data, saved versions, file upload info \\
+\code{resumeDrafts}     & Owner only           & Auto-saved drafts from the resume builder \\
+\code{apiKeysWallet}    & Owner reads; backend writes & Encrypted API keys list \\
+\code{jobs}             & All logged-in users  & Job postings: title, company, description, requirements, salary \\
+\code{scraped\_jobs}    & All logged-in users  & Jobs crawled from external boards (Indeed, LinkedIn, etc.) \\
+\code{applications}     & Backend only         & Applications: candidateId, jobId, status, resume, answers \\
+\code{interviews}       & Authenticated users  & Interview sessions and AI feedback \\
+\code{chats}            & Backend only         & Chat thread metadata (participants, last message) \\
+\code{conversations}    & Participants only    & Individual messages within a chat \\
+\code{connections}      & Backend only         & Connection requests: senderId, receiverId, status \\
+\code{notifications}    & Recipient only       & Platform alerts: new application, message, etc. \\
+\code{apply\_sessions}  & Backend only         & Autonomous apply session state \\
+\bottomrule
+\end{tabularx}
+}
+\end{center}
+
+\section{Real-Time Updates}
+
+Firestore updates in real time.  When a recruiter sends you a message, it
+appears in your chat window within 1--2 seconds without you needing to refresh
+the page.  This is because the app ``listens'' to the database for changes and
+updates the screen automatically.
+
+% ─────────────────────────────────────────────────────────────
+\chapter{Security}
+% ─────────────────────────────────────────────────────────────
+
+\section{How Login Works}
+
+\begin{enumerate}
+  \item You enter your email and password
+  \item Firebase Authentication checks if they are correct
+  \item Firebase issues an \textbf{ID token} --- a long string that acts like a
+        temporary badge
+  \item Every request to the backend includes this token in the header:\\
+        \code{Authorization: Bearer \textless{}token\textgreater{}}
+  \item The backend verifies the token with Firebase before doing anything
+  \item Tokens expire after 1 hour but are silently refreshed so you stay logged in
+\end{enumerate}
+
+\section{Two-Factor Authentication (2FA)}
+
+An optional extra layer of security:
+\begin{enumerate}
+  \item Settings $\to$ Security $\to$ Enable 2FA
+  \item Enter your email or phone number
+  \item Every subsequent login requires both your password and a 6-digit code
+\end{enumerate}
+
+\section{What CareerCraft Can Never See}
+
+\begin{itemize}
+  \item Your plain-text API keys (they are encrypted before storage)
+  \item Your Firebase password (Firebase handles authentication --- \cc{} never touches it)
+\end{itemize}
+
+\section{Account Suspension}
+
+If an admin suspects an account is being misused:
+\begin{enumerate}
+  \item Admin clicks ``Suspend'' in the admin panel
+  \item The \code{suspended: true} flag is set on the user's Firestore document
+  \item The user is immediately signed out
+  \item On their next login attempt they receive an error message
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────
+\chapter{Setting Up the Project}
+% ─────────────────────────────────────────────────────────────
+
+This chapter is for developers who want to run \cc{} on their own computer.
+
+\section{Prerequisites}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Tool} & \textbf{Version} & \textbf{Where to install} \\
+\midrule
+Node.js  & 18 or higher & \url{https://nodejs.org} \\
+Python   & 3.11 or higher & \url{https://python.org} \\
+Flutter  & 3.24 or higher & \url{https://flutter.dev} \\
+Git      & any recent & \url{https://git-scm.com} \\
+gcloud CLI & any recent & cloud.google.com/sdk \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Step 1 --- Clone the Repository}
+
+\begin{lstlisting}[style=bashstyle]
+git clone https://github.com/Sree8778/CareerCraft.git
+cd CareerCraft
+\end{lstlisting}
+
+\section{Step 2 --- Set Up Firebase}
+
+\begin{enumerate}
+  \item Go to \url{https://console.firebase.google.com}
+  \item Create a new project (or use \code{recruit-edge-e0d1b})
+  \item Enable \textbf{Authentication} $\to$ sign-in methods: Email/Password and Google
+  \item Enable \textbf{Firestore Database} $\to$ start in test mode
+  \item Project Settings $\to$ Service Accounts $\to$ Generate new private key
+  \item Save the JSON file as \filepath{web/backend/credentials/firebase-adminsdk.json}
+  \item Project Settings $\to$ General $\to$ copy your web app config
+  \item Create \filepath{web/.env.local}:
+\end{enumerate}
+
+\begin{lstlisting}[style=envstyle]
+NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+\end{lstlisting}
+
+\section{Step 3 --- Set Up the Backend}
+
+\begin{lstlisting}[style=bashstyle]
+cd web/backend
+
+# Create an isolated Python environment
+python -m venv venv
+
+# Activate it (Windows)
+venv\Scripts\activate
+
+# Install all Python packages
+pip install -r requirements.txt
+\end{lstlisting}
+
+Create \filepath{web/backend/.env}:
+
+\begin{lstlisting}[style=envstyle]
+GEMINI_API_KEY=your_gemini_key
+# Generate vault key with:
+# python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+BACKEND_VAULT_MASTER_KEY=your_generated_fernet_key
+\end{lstlisting}
+
+Start the backend:
+
+\begin{lstlisting}[style=bashstyle]
+python app.py
+# Server starts at http://localhost:5000
+\end{lstlisting}
+
+\section{Step 4 --- Set Up the Frontend}
+
+\begin{lstlisting}[style=bashstyle]
+cd web
+npm install        # install dependencies
+npm run dev        # start development server at http://localhost:3000
+\end{lstlisting}
+
+\section{Step 5 --- Set Up the Mobile App (Optional)}
+
+\begin{lstlisting}[style=bashstyle]
+cd mobile
+flutter pub get    # download Flutter packages
+flutter run        # launch on connected device or emulator
+\end{lstlisting}
+
+\section{Step 6 --- Install the Browser Extension (Optional)}
+
+\begin{enumerate}
+  \item Open Chrome $\to$ \code{chrome://extensions}
+  \item Enable \textbf{Developer Mode} (top-right toggle)
+  \item Click \textbf{Load unpacked}
+  \item Select the \filepath{web/browser-extension/} folder
+  \item Extension is installed
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────
+\chapter{Deploying to the Internet}
+% ─────────────────────────────────────────────────────────────
+
+\cc{} runs on \textbf{Google Cloud Run} --- a service that automatically scales
+up when many people use it and scales down when they do not, so you only pay
+for actual usage.
+
+\section{The \texttt{.env.cloud} File}
+
+Create this file at the project root.  It is gitignored --- \textbf{never commit it}.
+
+\begin{lstlisting}[style=envstyle]
+GCP_PROJECT_ID=recruit-edge-e0d1b
+GCP_REGION=us-central1
+GEMINI_API_KEY=your_gemini_key
+BACKEND_VAULT_MASTER_KEY=your_fernet_key
+RESEND_API_KEY=your_resend_key
+EMAIL_FROM=noreply@careercraft.app
+PLATFORM_URL=https://careercraft-frontend-u7h4zjepfq-uc.a.run.app
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=recruit-edge-e0d1b.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=recruit-edge-e0d1b
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=recruit-edge-e0d1b.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=414523842687
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+\end{lstlisting}
+
+\section{Deploy Everything (Frontend + Backend)}
+
+\begin{lstlisting}[style=bashstyle]
+.\deploy.ps1
+\end{lstlisting}
+
+This script does the following automatically:
+\begin{enumerate}
+  \item Reads all secrets from \filepath{.env.cloud}
+  \item Enables required Google Cloud APIs
+  \item Builds the backend Docker image via Cloud Build
+  \item Deploys the backend to Cloud Run
+  \item Builds the frontend Docker image with the backend URL baked in
+  \item Deploys the frontend to Cloud Run
+  \item Prints the live URLs when done
+\end{enumerate}
+
+\section{Deploy Frontend Only (Faster)}
+
+\begin{lstlisting}[style=bashstyle]
+.\deploy.ps1 -FrontendOnly
+\end{lstlisting}
+
+Use this when you only changed frontend code.  Skips the backend build (saves $\approx$5 minutes).
+
+\section{After Deploying}
+
+\begin{enumerate}
+  \item Add the new frontend URL to Firebase Console $\to$ Authentication $\to$ Authorized domains
+  \item Deploy Firestore security rules: \code{firebase deploy --only firestore:rules}
+  \item Visit the frontend URL and verify everything works
+\end{enumerate}
+
+\section{Current Live URLs}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Service} & \textbf{URL} \\
+\midrule
+Frontend & \small\url{https://careercraft-frontend-u7h4zjepfq-uc.a.run.app} \\
+Backend API & \small\url{https://careercraft-backend-u7h4zjepfq-uc.a.run.app/api} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────
+\chapter{Full API Reference}
+% ─────────────────────────────────────────────────────────────
+
+Every endpoint the backend exposes.  All authenticated endpoints require the
+header:\\[4pt]
+\code{Authorization: Bearer \{firebase\_id\_token\}}
+
+\textbf{Key:} \GET\ = read data\quad \POST\ = create/action\quad
+\PATCH\ = update\quad \DELETE\ = remove
+
+{\small\setlength{\tabcolsep}{4pt}
+
+% ── Authentication ───────────────────────────────────────────
+\section{Authentication}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\POST & \code{/auth/send-email-otp} & Anyone & Send a one-time password to an email address \\
+\POST & \code{/auth/verify-email-otp} & Anyone & Verify the OTP code entered by user \\
+\POST & \code{/auth/2fa/setup} & Logged-in user & Set up two-factor authentication \\
+\POST & \code{/auth/2fa/verify} & Anyone & Verify 2FA code during login \\
+\POST & \code{/auth/2fa/disable} & Logged-in user & Turn off 2FA \\
+\bottomrule
+\end{longtable}
+
+% ── Users ────────────────────────────────────────────────────
+\section{Users}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\POST  & \code{/users/register}         & Anyone  & Create a new user account \\
+\GET   & \code{/users}                  & Admin   & Get all users on the platform \\
+\PATCH & \code{/users/\{uid\}/profile}  & Owner   & Update name, email, phone, location \\
+\GET   & \code{/users/\{uid\}/completion}& Owner  & Get profile completion \% and missing fields \\
+\GET   & \code{/stats/candidate/\{uid\}}& Owner   & Candidate dashboard statistics \\
+\GET   & \code{/stats/recruiter/\{uid\}}& Owner   & Recruiter dashboard statistics \\
+\bottomrule
+\end{longtable}
+
+% ── Jobs ─────────────────────────────────────────────────────
+\section{Jobs}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\GET   & \code{/jobs}                          & Logged in  & List all job postings \\
+\POST  & \code{/jobs/v1/post}                  & Recruiter  & Create a new job posting \\
+\GET   & \code{/jobs/\{job\_id\}}              & Logged in  & Get one job's full details \\
+\PATCH & \code{/jobs/\{job\_id\}}              & Job owner  & Edit a job posting \\
+\POST  & \code{/jobs/\{job\_id\}/apply}        & Candidate  & Submit a job application \\
+\GET   & \code{/jobs/\{job\_id\}/applications} & Recruiter  & List all applications for this job \\
+\POST  & \code{/jobs/search-semantic}           & Logged in  & Search jobs in natural language \\
+\POST  & \code{/jobs/generate-description}      & Recruiter  & AI-generate a job description \\
+\POST  & \code{/jobs/crawl}                    & Recruiter  & Scrape external job boards \\
+\bottomrule
+\end{longtable}
+
+% ── Applications ─────────────────────────────────────────────
+\section{Applications}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\GET  & \code{/applications}                      & Both       & List applications (filtered by role) \\
+\GET  & \code{/applications/\{app\_id\}}          & Participant& Get one application's full details \\
+\POST & \code{/applications/\{app\_id\}/status}   & Recruiter  & Update application status \\
+\POST & \code{/applications/\{app\_id\}/ai-screen}& Recruiter  & Run AI screening analysis \\
+\POST & \code{/applications/\{app\_id\}/ats-score}& Recruiter  & Calculate ATS score \\
+\bottomrule
+\end{longtable}
+
+% ── Resume Tools ─────────────────────────────────────────────
+\section{Resume Tools}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\POST & \code{/parse-resume}               & Candidate & Upload PDF/DOCX, get structured JSON \\
+\POST & \code{/generate-pdf}               & Candidate & Export resume JSON to a PDF file \\
+\POST & \code{/generate-docx}              & Candidate & Export resume JSON to a Word file \\
+\POST & \code{/resume/analyze}             & Candidate & Detailed ATS and format analysis \\
+\POST & \code{/generate-elevator-pitch}    & Candidate & Write a 30-second professional pitch \\
+\POST & \code{/enhance-section}            & Candidate & AI-rewrite a specific resume section \\
+\POST & \code{/generate-summary-suggestions}& Candidate& Get 3 professional summary options \\
+\POST & \code{/generate-cover-letter}      & Candidate & Write a custom cover letter \\
+\POST & \code{/grade-resume}               & Candidate & Score resume vs.\ a job description \\
+\POST & \code{/resume/tailor-to-jd}        & Candidate & Rewrite resume using a job's keywords \\
+\bottomrule
+\end{longtable}
+
+% ── Interviews ───────────────────────────────────────────────
+\section{Interviews}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\GET  & \code{/interviews}                       & Both      & List all interviews \\
+\POST & \code{/interviews/schedule}              & Recruiter & Book an interview with a candidate \\
+\POST & \code{/interviews/verify-identity}       & Candidate & Submit ID + selfie for identity check \\
+\POST & \code{/interviews/get-next-question}     & Candidate & Get next dynamic interview question \\
+\POST & \code{/interviews/evaluate-response}     & Candidate & Grade a spoken response \\
+\POST & \code{/practice-interview/question}      & Candidate & Get a practice question \\
+\POST & \code{/practice-interview/ai-turn}       & Candidate & Get AI interviewer's next message \\
+\POST & \code{/practice-interview/evaluate}      & Candidate & Score your answer to a question \\
+\POST & \code{/practice-interview/final-feedback}& Candidate & Get end-of-session full report \\
+\bottomrule
+\end{longtable}
+
+% ── Candidates (recruiter tools) ─────────────────────────────
+\section{Candidates (Recruiter Tools)}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\GET  & \code{/candidates}                & Recruiter & List all candidates \\
+\GET  & \code{/candidates/\{uid\}/resume} & Recruiter & Fetch a candidate's resume \\
+\POST & \code{/candidates/search-copilot} & Recruiter & Natural-language candidate search \\
+\POST & \code{/analyze-fit}               & Recruiter & Score a candidate vs.\ job description \\
+\bottomrule
+\end{longtable}
+
+% ── Smart Apply ──────────────────────────────────────────────
+\section{Smart Apply}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\POST & \code{/smart-apply/search}             & Candidate & Search multiple job boards at once \\
+\POST & \code{/smart-apply/queue/add}          & Candidate & Add a job to the apply queue \\
+\POST & \code{/smart-apply/queue/remove}       & Candidate & Remove a job from the queue \\
+\GET  & \code{/smart-apply/queue}              & Candidate & View the current apply queue \\
+\POST & \code{/smart-apply/apply-supervised}   & Candidate & Apply to one job (with review) \\
+\POST & \code{/smart-apply/autonomous/start}   & Candidate & Start bulk auto-apply \\
+\POST & \code{/smart-apply/autonomous/stop}    & Candidate & Stop auto-apply session \\
+\GET  & \code{/smart-apply/status}             & Candidate & Check current apply progress \\
+\bottomrule
+\end{longtable}
+
+% ── Messaging & Networking ───────────────────────────────────
+\section{Messaging \& Networking}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\GET    & \code{/chats}                          & Both        & List all your conversations \\
+\POST   & \code{/chats}                          & Both        & Start a new conversation \\
+\GET    & \code{/chats/\{chat\_id\}/messages}    & Participant & Get messages in a conversation \\
+\POST   & \code{/chats/\{chat\_id\}/messages}    & Participant & Send a message \\
+\GET    & \code{/connections}                    & Both        & List your connections \\
+\POST   & \code{/connections/request}            & Both        & Send a connection request \\
+\POST   & \code{/connections/\{id\}/respond}     & Recipient   & Accept or decline a request \\
+\GET    & \code{/feed}                           & Both        & Get social feed posts \\
+\POST   & \code{/posts}                          & Both        & Create a new post \\
+\POST   & \code{/posts/\{post\_id\}/like}        & Both        & Like a post \\
+\POST   & \code{/posts/\{post\_id\}/comments}    & Both        & Comment on a post \\
+\DELETE & \code{/posts/\{post\_id\}}             & Author      & Delete your own post \\
+\bottomrule
+\end{longtable}
+
+% ── API Keys / Vault ─────────────────────────────────────────
+\section{API Keys \& Vault}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\POST & \code{/vault/verify-key}     & Owner & Test whether an API key is valid \\
+\POST & \code{/vault/wallet/stack}   & Owner & Add a new key to your key wallet \\
+\GET  & \code{/vault/wallet/status}  & Owner & Check key status and remaining quota \\
+\POST & \code{/vault/wallet/remove}  & Owner & Remove a key from your wallet \\
+\bottomrule
+\end{longtable}
+
+% ── Browser Extension ────────────────────────────────────────
+\section{Browser Extension Endpoints}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.5cm}p{5.2cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Auth type} & \textbf{What it does} \\
+\midrule
+\endhead
+\POST & \code{/plugin/token}   & Firebase token  & Get a long-lived plugin token \\
+\GET  & \code{/plugin/profile} & Plugin token    & Get profile data for autofill \\
+\GET  & \code{/plugin/resumes} & Plugin token    & List saved resume versions \\
+\POST & \code{/plugin/applied} & Plugin token    & Log a completed application \\
+\bottomrule
+\end{longtable}
+
+% ── Notifications ────────────────────────────────────────────
+\section{Notifications}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\GET  & \code{/notifications}          & Both & Get your notifications \\
+\POST & \code{/notifications/read-all} & Both & Mark all notifications as read \\
+\bottomrule
+\end{longtable}
+
+% ── Webhooks ─────────────────────────────────────────────────
+\section{Webhooks}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\GET  & \code{/webhooks/subscriptions} & Recruiter & List all webhook subscriptions \\
+\POST & \code{/webhooks/subscribe}     & Recruiter & Add a new webhook endpoint \\
+\POST & \code{/webhooks/test-ping}     & Recruiter & Send a test payload to a URL \\
+\bottomrule
+\end{longtable}
+
+% ── Companies ────────────────────────────────────────────────
+\section{Companies}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\GET  & \code{/companies}                     & Anyone    & List companies (with optional search) \\
+\GET  & \code{/companies/\{id\}}              & Anyone    & Get one company's details \\
+\GET  & \code{/companies/\{id\}/reviews}      & Anyone    & Get employee reviews \\
+\POST & \code{/companies/\{id\}/reviews}      & Candidate & Submit an employee review \\
+\GET  & \code{/companies/\{id\}/qna}          & Anyone    & Get company Q\&A thread \\
+\POST & \code{/companies/\{id\}/qna}          & Both      & Post a question or answer \\
+\bottomrule
+\end{longtable}
+
+% ── Admin ────────────────────────────────────────────────────
+\section{Admin}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\GET  & \code{/admin/me}                     & Admin & Confirm you have admin access \\
+\GET  & \code{/admin/stats}                  & Admin & Platform-wide statistics \\
+\GET  & \code{/admin/users}                  & Admin & All users with their stats \\
+\POST & \code{/admin/users/\{uid\}/suspend}  & Admin & Suspend a user account \\
+\GET  & \code{/admin/jobs}                   & Admin & All jobs (for moderation) \\
+\PUT  & \code{/admin/features}               & Admin & Toggle feature flags on/off \\
+\bottomrule
+\end{longtable}
+
+% ── Platform ─────────────────────────────────────────────────
+\section{Platform \& Public}
+
+\begin{longtable}{p{1.5cm}p{5.5cm}p{2.2cm}p{5.5cm}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Who} & \textbf{What it does} \\
+\midrule
+\endhead
+\GET & \code{/platform/config}    & Anyone & Get feature flags and public config \\
+\GET & \code{/benefits}           & Anyone & Public employee benefits directory \\
+\GET & \code{/testimonials}       & Anyone & User success stories \\
+\GET & \code{/employers/featured} & Anyone & Featured employer showcase \\
+\GET & \code{/stats/salaries}     & Anyone & Crowdsourced salary data \\
+\bottomrule
+\end{longtable}
+
+} % end \small
+
+% ─────────────────────────────────────────────────────────────
+\chapter{Folder Structure}
+% ─────────────────────────────────────────────────────────────
+
+Every important file and folder in the project, with a description.
+
+\begin{lstlisting}[style=asciistyle, caption={Complete project folder structure}]
+CareerCraft/
+|
++-- web/                              <- The website
+|   +-- src/
+|   |   +-- app/                      <- Every page of the website
+|   |   |   +-- page.tsx              <- Home / landing page
+|   |   |   +-- feed/page.tsx         <- Social feed
+|   |   |   +-- signup/page.tsx       <- Sign-up page
+|   |   |   +-- onboarding/page.tsx   <- New user setup wizard
+|   |   |   +-- profile/[uid]/        <- Public profile pages
+|   |   |   +-- companies/            <- Company directory
+|   |   |   +-- admin/page.tsx        <- Super admin panel
+|   |   |   +-- candidate/            <- All candidate pages
+|   |   |   |   +-- dashboard/        <- Candidate home
+|   |   |   |   +-- jobs/             <- Job search & details
+|   |   |   |   +-- smart-apply/      <- Automated applications
+|   |   |   |   +-- resume-builder/   <- AI resume editor
+|   |   |   |   +-- applications/     <- Application tracker
+|   |   |   |   +-- interview/        <- Interview tools
+|   |   |   |   +-- messages/         <- Chat
+|   |   |   |   +-- network/          <- Connections
+|   |   |   |   +-- profile/          <- Edit profile
+|   |   |   |   +-- settings/         <- API keys, 2FA, theme
+|   |   |   +-- recruiter/            <- All recruiter pages
+|   |   |       +-- dashboard/        <- Recruiter home
+|   |   |       +-- requisitions/     <- Job postings
+|   |   |       +-- applications/     <- Application pipeline
+|   |   |       +-- candidates/       <- Candidate directory
+|   |   |       +-- sourcing/         <- Passive sourcing
+|   |   |       +-- messages/         <- Chat
+|   |   |       +-- network/          <- Connections
+|   |   |       +-- webhooks/         <- ATS integration
+|   |   +-- components/               <- Reusable UI pieces
+|   |   |   +-- LoginModal.tsx        <- Login / signup popup
+|   |   |   +-- Navbar.tsx            <- Top navigation bar
+|   |   |   +-- layout/               <- Sidebar & layout wrappers
+|   |   +-- contexts/                 <- Global app state
+|   |   |   +-- AuthContext.tsx       <- Who is logged in?
+|   |   |   +-- FeatureFlagsContext.tsx <- Which features are on?
+|   |   |   +-- LoginModalContext.tsx <- Is the login popup open?
+|   |   |   +-- ThemeContext.tsx      <- Dark or light mode?
+|   |   +-- lib/
+|   |       +-- api.ts                <- Frontend API helper functions
+|   |       +-- firebase.ts           <- Firebase setup
+|   |
+|   +-- backend/                      <- The Python server
+|   |   +-- app.py                    <- Server entry point
+|   |   +-- routes.py                 <- ALL 50+ endpoints (~4000 lines)
+|   |   +-- gemini_utils.py           <- AI / Gemini helper functions
+|   |   +-- firebase_utils.py         <- Firebase Admin helpers
+|   |   +-- vault_utils.py            <- API key encryption/decryption
+|   |   +-- file_parser.py            <- PDF/DOCX text extraction
+|   |   +-- document_generator.py     <- PDF/DOCX file generation
+|   |   +-- job_crawler.py            <- External job board scraping
+|   |   +-- email_utils.py            <- Email sending (via Resend API)
+|   |   +-- requirements.txt          <- Python packages list
+|   |   +-- credentials/              <- [GITIGNORED] Firebase service account
+|   |
+|   +-- browser-extension/            <- The Chrome plugin
+|   |   +-- manifest.json             <- Extension configuration
+|   |   +-- popup.html / popup.js     <- Extension UI and its logic
+|   |   +-- popup.css                 <- Extension styles
+|   |   +-- content.js                <- Form-filling code (injected into pages)
+|   |   +-- background.js             <- Background worker (API calls)
+|   |   +-- mock_apply_page.html      <- Test page for development
+|   |
+|   +-- package.json                  <- Node.js dependencies
+|
++-- mobile/                           <- The Android / iOS app
+|   +-- lib/
+|   |   +-- main.dart                 <- App entry point
+|   |   +-- api/api_service.dart      <- All API calls (mirrors backend)
+|   |   +-- services/auth_service.dart <- Login, logout, Google Sign-In
+|   |   +-- auth/login_page.dart      <- Login screen
+|   |   +-- auth/signup_page.dart     <- Sign-up screen
+|   |   +-- pages/                    <- Every screen in the app (27 screens)
+|   |   +-- widgets/                  <- Reusable Flutter components
+|   +-- android/app/google-services.json <- Firebase Android config
+|   +-- pubspec.yaml                  <- Flutter/Dart dependencies
+|
++-- tests/                            <- Automated test suite
+|   +-- test_api_health.py            <- Checks backend endpoints respond
+|   +-- test_ui_candidate.py          <- Simulates a candidate using the site
+|   +-- test_ui_recruiter.py          <- Simulates a recruiter using the site
+|   +-- test_ui_public.py             <- Tests public pages
+|   +-- test_ai_explorer.py           <- Tests AI features
+|   +-- config.py                     <- Test settings (URLs from env vars)
+|   +-- conftest.py                   <- Shared test setup
+|   +-- create_test_accounts.py       <- Creates Firebase test users
+|   +-- requirements.txt              <- Python test packages
+|
++-- docs/
+|   +-- DOCUMENTATION.md              <- Full documentation (Markdown)
+|   +-- CareerCraft_Documentation.tex <- This file (LaTeX)
+|   +-- TECHNICAL.md                  <- Deep technical architecture guide
+|
++-- firestore.rules                   <- Database security rules
++-- storage.rules                     <- File storage security rules
++-- deploy.ps1                        <- One-command deployment script
++-- .gitignore                        <- Files NOT uploaded to GitHub
++-- README.md                         <- Quick start guide
+\end{lstlisting}
+
+% ─────────────────────────────────────────────────────────────
+\chapter{Glossary}
+% ─────────────────────────────────────────────────────────────
+
+Definitions for every technical term used in this documentation.
+Written so that anyone can understand them.
+
+\begin{description}[style=nextline, leftmargin=3cm, labelwidth=2.8cm, font=\bfseries\color{ccpurple}]
+
+\item[API]
+A way for two programs to talk to each other.
+Like a waiter who takes your order (request) to the kitchen (server) and brings back your food (response).
+
+\item[API Key]
+A secret password that lets you use an AI or cloud service.
+Like a membership card for a gym --- you show it every time you want to use the facilities.
+
+\item[ATS]
+Applicant Tracking System.  Software companies use to automatically filter job applications before a human reads them.
+Think of it as a robot that reads your resume first.
+
+\item[ATS Score]
+A number (0--100) measuring how likely your resume is to get past the ATS robot filter.
+Anything above 70 is generally good.
+
+\item[Authentication]
+Proving you are who you say you are.  Logging in is authentication.
+The system checks your password to confirm your identity.
+
+\item[Authorization]
+Checking whether you are \emph{allowed} to do something after you have already proved who you are.
+``You can read this file, but not delete it.''
+
+\item[Backend]
+The server --- the part of the app that stores data, runs AI, and enforces rules.
+You cannot see it directly, but every action you take in the app triggers a backend request.
+
+\item[BYOK]
+Bring Your Own Key.
+Instead of paying a subscription, you provide your own free AI API key and \cc{} uses it.
+
+\item[Chrome Extension]
+A small program that installs inside the Chrome browser and adds new functionality.
+The \cc{} extension adds an autofill button to job application pages.
+
+\item[Cloud Run]
+Google's service for running programs on the internet.
+It automatically provides more computing power when many people use the app at once (scaling).
+
+\item[Context (React)]
+A way to share data between different parts of a website without passing it through every layer.
+Like a shared whiteboard that any component can read and write to.
+
+\item[Docker]
+Technology that packages a program and everything it needs into a single portable ``container''.
+That container runs the same way on any computer or cloud service.
+
+\item[Endpoint]
+A specific URL the backend listens to.
+Like a specific phone extension for a specific department in a company.
+
+\item[Encryption]
+Scrambling data so only the intended recipient can read it.
+Like a secret code: \code{HELLO} might become \code{KHOOR} and only someone with the key can decode it.
+
+\item[Fernet]
+A specific, industry-standard encryption method used to scramble API keys in the database.
+
+\item[Firebase]
+Google's platform for building apps quickly.
+It provides a database (Firestore), login system (Auth), and file storage, all managed by Google.
+
+\item[Firestore]
+Google's cloud database used by \cc{}.
+Data is stored as collections of documents, similar to folders of text files.
+
+\item[Flutter]
+Google's framework for building phone apps from a single codebase.
+The same code works on both Android and iOS phones.
+
+\item[Frontend]
+The part of the app you see and interact with --- the website UI or the phone app screen.
+
+\item[Git]
+Software that tracks every change made to code over time.
+It lets multiple developers work on the same project without overwriting each other's work.
+
+\item[Gitignore]
+A configuration file listing paths that Git should never upload to GitHub.
+Used to keep passwords and credentials out of the public code repository.
+
+\item[Google Cloud]
+Google's cloud computing platform where this app is hosted.
+Think of it as renting space on Google's powerful computers instead of running your own.
+
+\item[Gunicorn]
+A Python program that runs Flask in production.
+It handles many incoming requests at the same time, unlike the development server which handles only one.
+
+\item[ID Token]
+A short-lived digital pass Firebase gives you after you log in.
+Your browser sends it with every request to prove you are logged in.
+Expires after one hour but is silently refreshed.
+
+\item[Kanban Board]
+A visual task management tool using columns (``To Do'' $\to$ ``In Progress'' $\to$ ``Done'').
+\cc{} uses it for the applications pipeline.
+
+\item[LLM]
+Large Language Model.
+The AI technology behind ChatGPT, Gemini, Claude, etc.
+Trained on billions of words; can write, explain, reason, and answer questions.
+
+\item[Manifest.json]
+A configuration file for Chrome extensions.
+Tells Chrome what permissions the extension needs and which scripts to run.
+
+\item[Microservice / API]
+A small, self-contained program that does one specific job.
+The \cc{} backend is an API that the website, mobile app, and extension all call.
+
+\item[Next.js]
+A framework for building fast, modern websites using React.
+Handles routing, server-side rendering, and performance automatically.
+
+\item[Node.js]
+A program that lets JavaScript code run on a server (not just inside a browser).
+The \cc{} website is built and started using Node.js.
+
+\item[OAuth]
+A standard way to log in using another service (e.g.\ ``Log in with Google'')
+without giving the app your Google password.
+The third-party service confirms your identity; the app never sees your password.
+
+\item[Python]
+A popular programming language known for being easy to read.
+The \cc{} backend is written in Python using the Flask framework.
+
+\item[React]
+A JavaScript library for building user interfaces.
+The \cc{} web frontend is built with React (via Next.js).
+
+\item[REST API]
+A standard style for building APIs.
+Different URLs correspond to different actions:
+GET = read, POST = create, PATCH = update, DELETE = remove.
+
+\item[Semantic Search]
+Search that understands meaning, not just keywords.
+``I want a chill remote role'' finds ``Work-from-home positions with flexible hours''.
+
+\item[Vault Master Key]
+The server-side secret that locks and unlocks your encrypted API keys.
+It is stored only as an environment variable on the Cloud Run server --- never in any code file.
+
+\item[Webhook]
+A way for one app to automatically notify another app when something happens.
+Like a push notification from one system to another: ``Hey, a new application just arrived!''
+
+\end{description}
+
+% ─────────────────────────────────────────────────────────────
+\vfill
+\begin{center}
+  \textcolor{graytext}{\small
+    CareerCraft Documentation $\cdot$ Version 1.0 $\cdot$ July 2026 \\
+    Built with Next.js 15 $\cdot$ Flutter $\cdot$ Flask $\cdot$ Firebase $\cdot$ Google Cloud Run\\[4pt]
+    \url{https://github.com/Sree8778/CareerCraft}
+  }
+\end{center}
+
+\end{document}
