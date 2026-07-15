@@ -6,7 +6,7 @@
 
 **Job search · AI resume builder · Voice interviews · Social feed · Recruiter tools — all in one app, running on *your own* AI keys.**
 
-[Live Demo](https://careercraft-frontend-brkwttcaqq-uc.a.run.app) · [Technical Deep-Dive](docs/TECHNICAL.md)
+[Live Demo](https://careercraft-frontend-u7h4zjepfq-uc.a.run.app) · [Full Documentation](docs/DOCUMENTATION.md) · [Technical Deep-Dive](docs/TECHNICAL.md)
 
 </div>
 
