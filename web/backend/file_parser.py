@@ -109,7 +109,8 @@ def _merge(base: dict, ai: dict) -> dict:
     result["summary"] = ai.get("summary") or base.get("summary") or ""
 
     # Lists: prefer base if populated, fall back to AI
-    for key in ("experience", "education", "skills", "projects", "certifications", "publications"):
+    for key in ("experience", "education", "skills", "projects", "certifications", "publications",
+                "languages", "volunteer", "awards"):
         base_list = base.get(key, [])
         ai_list   = ai.get(key, [])
         result[key] = base_list if base_list else ai_list

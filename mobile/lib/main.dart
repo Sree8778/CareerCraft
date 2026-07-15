@@ -1,207 +1,273 @@
 import 'package:flutter/material.dart';
-import 'package:recruit_edge/pages/home_page.dart';
-import 'package:recruit_edge/pages/benefits_page.dart';
-import 'package:recruit_edge/pages/testimonials_page.dart';
-import 'package:recruit_edge/pages/featured_employers_page.dart';
-import 'package:recruit_edge/pages/candidate_dashboard_page.dart';
-import 'package:recruit_edge/pages/recruiter_dashboard_page.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'package:recruit_edge/auth/login_page.dart';
+import 'package:recruit_edge/auth/signup_page.dart';
 import 'package:recruit_edge/theme/app_theme.dart';
 import 'package:recruit_edge/widgets/animated_background.dart';
 import 'package:recruit_edge/widgets/theme_toggle.dart';
 
-void main() {
-  runApp(const MyApp());
+// Candidate pages
+import 'package:recruit_edge/pages/candidate_dashboard_page.dart';
+import 'package:recruit_edge/pages/job_search_page.dart';
+import 'package:recruit_edge/pages/candidate_applications_page.dart';
+import 'package:recruit_edge/pages/candidate_messages_page.dart';
+import 'package:recruit_edge/pages/candidate_profile_page.dart';
+import 'package:recruit_edge/pages/feed_page.dart';
+import 'package:recruit_edge/pages/network_page.dart';
+import 'package:recruit_edge/pages/more_page.dart';
+
+// Recruiter pages
+import 'package:recruit_edge/pages/recruiter_dashboard_page.dart';
+import 'package:recruit_edge/pages/recruiter_candidates_page.dart';
+import 'package:recruit_edge/pages/recruiter_requisitions_page.dart';
+import 'package:recruit_edge/pages/recruiter_messages_page.dart';
+import 'package:recruit_edge/pages/recruiter_job_post_page.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(const RecruitEdgeApp());
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+class RecruitEdgeApp extends StatefulWidget {
+  const RecruitEdgeApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  State<RecruitEdgeApp> createState() => _RecruitEdgeAppState();
 }
 
-class _MyAppState extends State<MyApp> {
-  ThemeMode _themeMode = ThemeMode.system;
-
-  void _handleThemeToggle(ThemeMode newThemeMode) {
-    setState(() {
-      _themeMode = newThemeMode;
-    });
-  }
+class _RecruitEdgeAppState extends State<RecruitEdgeApp> {
+  ThemeMode _themeMode = ThemeMode.dark;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Recruit Edge',
+      debugShowCheckedModeBanner: false,
+      themeMode: _themeMode,
       theme: ThemeData(
         brightness: Brightness.light,
         scaffoldBackgroundColor: Colors.white,
         fontFamily: 'Inter',
-        textTheme: const TextTheme(
-          titleLarge: TextStyle(color: primaryTextColor, fontSize: 24, fontWeight: FontWeight.bold),
-          bodyLarge: TextStyle(color: primaryTextColor),
-          bodyMedium: TextStyle(color: mutedTextColor),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white.withOpacity(0.1),
-          labelStyle: const TextStyle(color: primaryTextColor),
-          hintStyle: const TextStyle(color: mutedTextColor),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: mutedTextColor.withOpacity(0.5)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.deepPurple,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
       darkTheme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: darkBackgroundFrom,
         fontFamily: 'Inter',
-        textTheme: const TextTheme(
-          titleLarge: TextStyle(color: darkPrimaryTextColor, fontSize: 24, fontWeight: FontWeight.bold),
-          bodyLarge: TextStyle(color: darkPrimaryTextColor),
-          bodyMedium: TextStyle(color: darkMutedTextColor),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.black.withOpacity(0.3),
-          labelStyle: const TextStyle(color: darkPrimaryTextColor),
-          hintStyle: const TextStyle(color: darkMutedTextColor),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: darkMutedTextColor.withOpacity(0.5)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.deepPurpleAccent,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
         ),
         useMaterial3: true,
       ),
-      themeMode: _themeMode,
-      home: MainScreen(
-        currentThemeMode: _themeMode,
-        onThemeToggle: _handleThemeToggle,
+      home: AuthGate(
+        themeMode: _themeMode,
+        onThemeToggle: (mode) => setState(() => _themeMode = mode),
       ),
     );
   }
 }
 
-class MainScreen extends StatefulWidget {
-  final ThemeMode currentThemeMode;
-  final ValueChanged<ThemeMode> onThemeToggle; // This property was missing
+// Watches Firebase auth state and routes to login or role-based shell
+class AuthGate extends StatelessWidget {
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeToggle;
 
-  const MainScreen({
-    super.key,
-    required this.currentThemeMode,
-    required this.onThemeToggle, // Added to constructor
-  });
+  const AuthGate({super.key, required this.themeMode, required this.onThemeToggle});
 
   @override
-  State<MainScreen> createState() => _MainScreenState();
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.data == null) {
+          return LoginPage(
+            onLoginSuccess: () {},
+            onGoToSignup: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => SignupPage(onSignupSuccess: () {})),
+            ),
+          );
+        }
+        // User is logged in — fetch role and show the right shell
+        return RoleRouter(
+          user: snapshot.data!,
+          themeMode: themeMode,
+          onThemeToggle: onThemeToggle,
+        );
+      },
+    );
+  }
 }
 
-class _MainScreenState extends State<MainScreen> {
-  int _selectedIndex = 0;
+// Fetches the user's role from Firestore then shows candidate or recruiter shell
+class RoleRouter extends StatelessWidget {
+  final User user;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeToggle;
 
-  final List<Widget> _widgetOptions = <Widget>[
-    const HomePage(),
-    const BenefitsPage(),
-    const TestimonialsPage(),
-    const FeaturedEmployersPage(),
-    const CandidateDashboardPage(),
-    const RecruiterDashboardPage(),
-  ];
+  const RoleRouter({
+    super.key,
+    required this.user,
+    required this.themeMode,
+    required this.onThemeToggle,
+  });
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+  Future<String> _getRole() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      return doc.data()?['role'] ?? 'candidate';
+    } catch (_) {
+      return 'candidate';
+    }
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _getRole(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final role = snapshot.data!;
+        if (role == 'recruiter') {
+          return RecruiterShell(themeMode: themeMode, onThemeToggle: onThemeToggle);
+        }
+        return CandidateShell(themeMode: themeMode, onThemeToggle: onThemeToggle);
+      },
+    );
+  }
+}
+
+// Candidate bottom-nav shell
+class CandidateShell extends StatefulWidget {
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeToggle;
+
+  const CandidateShell({super.key, required this.themeMode, required this.onThemeToggle});
+
+  @override
+  State<CandidateShell> createState() => _CandidateShellState();
+}
+
+class _CandidateShellState extends State<CandidateShell> {
+  int _index = 0;
+
+  final _pages = const [
+    CandidateDashboardPage(),
+    JobSearchPage(),
+    FeedPage(),
+    CandidateMessagesPage(),
+    MorePage(),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBackground(
       child: Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: Text('Recruit Edge', style: Theme.of(context).textTheme.titleLarge),
+          title: const Text('Recruit Edge'),
           backgroundColor: Colors.transparent,
           elevation: 0,
           actions: [
             ThemeToggle(
-              currentThemeMode: widget.currentThemeMode,
-              onToggle: widget.onThemeToggle, // Now correctly accessing the property
+              currentThemeMode: widget.themeMode,
+              onToggle: widget.onThemeToggle,
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'Sign out',
+              onPressed: () => FirebaseAuth.instance.signOut(),
             ),
           ],
         ),
-        body: Center(
-          child: _widgetOptions.elementAt(_selectedIndex),
+        body: _pages[_index],
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (i) => setState(() => _index = i),
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Home'),
+            NavigationDestination(icon: Icon(Icons.search_outlined), selectedIcon: Icon(Icons.search), label: 'Jobs'),
+            NavigationDestination(icon: Icon(Icons.feed_outlined), selectedIcon: Icon(Icons.feed), label: 'Feed'),
+            NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'Messages'),
+            NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: 'More'),
+          ],
         ),
-        bottomNavigationBar: BottomNavigationBar(
-          type: BottomNavigationBarType.fixed,
-          items: const <BottomNavigationBarItem>[
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'Home',
+      ),
+    );
+  }
+}
+
+// Recruiter bottom-nav shell
+class RecruiterShell extends StatefulWidget {
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeToggle;
+
+  const RecruiterShell({super.key, required this.themeMode, required this.onThemeToggle});
+
+  @override
+  State<RecruiterShell> createState() => _RecruiterShellState();
+}
+
+class _RecruiterShellState extends State<RecruiterShell> {
+  int _index = 0;
+
+  final _pages = const [
+    RecruiterDashboardPage(),
+    RecruiterRequisitionsPage(),
+    RecruiterCandidatesPage(),
+    RecruiterJobPostPage(),
+    RecruiterMessagesPage(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text('Recruit Edge — Recruiter'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          actions: [
+            ThemeToggle(
+              currentThemeMode: widget.themeMode,
+              onToggle: widget.onThemeToggle,
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.people),
-              label: 'Benefits',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.star),
-              label: 'Testimonials',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.business),
-              label: 'Employers',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard),
-              label: 'Candidate',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.work),
-              label: 'Recruiter',
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'Sign out',
+              onPressed: () => FirebaseAuth.instance.signOut(),
             ),
           ],
-          currentIndex: _selectedIndex,
-          onTap: _onItemTapped,
+        ),
+        body: _pages[_index],
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (i) => setState(() => _index = i),
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
+            NavigationDestination(icon: Icon(Icons.list_alt_outlined), selectedIcon: Icon(Icons.list_alt), label: 'Requisitions'),
+            NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Candidates'),
+            NavigationDestination(icon: Icon(Icons.post_add_outlined), selectedIcon: Icon(Icons.post_add), label: 'Post Job'),
+            NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'Messages'),
+          ],
         ),
       ),
     );

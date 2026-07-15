@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { FileText, Download, Eye, Sparkles, User, Briefcase, GraduationCap, Award, Upload, X, Mic, BookOpen, FolderGit2, Palette, StopCircle, UploadCloud, Copy, Trash2, Bold, Italic, List, ListOrdered, Link as LinkIcon, Unlink, FilePlus2, LayoutTemplate, Save, CheckCircle2, Star, FolderOpen, ChevronDown, ChevronUp, Loader2, Globe, Heart, Trophy, Target, ChevronUp as ArrowUp, ChevronDown as ArrowDown, EyeOff, Languages, Mail, AlignLeft, GripVertical } from 'lucide-react';
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -1278,6 +1278,7 @@ const PitchModal = ({ isOpen, onClose, pitchText, setPitchText, startRecording, 
 // --- Main App Component ---
 export default function ResumeBuilder() {
     const [activeSection, setActiveSection] = useState<string>('personal');
+    const [atsExpanded, setAtsExpanded] = useState(false);
     const [resumeData, setResumeDataState] = useState<ResumeData>({
         personal: { name: '', email: '', phone: '', location: '', legalStatus: 'Prefer not to say', website: '', linkedin: '' },
         summary: '<p></p>',
@@ -2105,32 +2106,45 @@ export default function ResumeBuilder() {
         );
     };
     
-    const sections = [
-        { id: 'personal',       name: 'Personal',       icon: <User size={16} /> },
-        { id: 'summary',        name: 'Summary',        icon: <FileText size={16} /> },
-        { id: 'experience',     name: 'Experience',     icon: <Briefcase size={16} /> },
-        { id: 'education',      name: 'Education',      icon: <GraduationCap size={16} /> },
-        { id: 'skills',         name: 'Skills',         icon: <Award size={16} /> },
-        { id: 'projects',       name: 'Projects',       icon: <FolderGit2 size={16} /> },
-        { id: 'languages',      name: 'Languages',      icon: <Globe size={16} /> },
-        { id: 'volunteer',      name: 'Volunteer',      icon: <Heart size={16} /> },
-        { id: 'awards',         name: 'Awards',         icon: <Trophy size={16} /> },
-        { id: 'certifications', name: 'Certifications', icon: <Award size={16} /> },
-        { id: 'publications',   name: 'Publications',   icon: <BookOpen size={16} /> },
-        { id: 'jd-match',       name: 'JD Match',       icon: <Target size={16} /> },
-        { id: 'cover-letter',   name: 'Cover Letter',   icon: <Mail size={16} /> },
-        { id: 'section-order',  name: 'Order & Visibility', icon: <GripVertical size={16} /> },
-        { id: 'templates',      name: 'Templates',      icon: <LayoutTemplate size={16}/> },
-        { id: 'design',         name: 'Design',         icon: <Palette size={16}/> },
+    // Grouped by what the user is doing: writing content, using AI tools,
+    // or adjusting layout. Order inside "Content" mirrors the resume itself.
+    const sectionGroups = [
+        { label: 'Content', items: [
+            { id: 'personal',       name: 'Personal',       icon: <User size={16} /> },
+            { id: 'summary',        name: 'Summary',        icon: <FileText size={16} /> },
+            { id: 'experience',     name: 'Experience',     icon: <Briefcase size={16} /> },
+            { id: 'education',      name: 'Education',      icon: <GraduationCap size={16} /> },
+            { id: 'skills',         name: 'Skills',         icon: <Award size={16} /> },
+            { id: 'projects',       name: 'Projects',       icon: <FolderGit2 size={16} /> },
+            { id: 'certifications', name: 'Certifications', icon: <Award size={16} /> },
+            { id: 'publications',   name: 'Publications',   icon: <BookOpen size={16} /> },
+            { id: 'languages',      name: 'Languages',      icon: <Globe size={16} /> },
+            { id: 'volunteer',      name: 'Volunteer',      icon: <Heart size={16} /> },
+            { id: 'awards',         name: 'Awards',         icon: <Trophy size={16} /> },
+        ]},
+        { label: 'AI Tools', items: [
+            { id: 'jd-match',      name: 'JD Match',     icon: <Target size={16} /> },
+            { id: 'cover-letter',  name: 'Cover Letter', icon: <Mail size={16} /> },
+        ]},
+        { label: 'Layout & Design', items: [
+            { id: 'section-order', name: 'Order & Visibility', icon: <GripVertical size={16} /> },
+            { id: 'templates',     name: 'Templates',          icon: <LayoutTemplate size={16}/> },
+            { id: 'design',        name: 'Design',             icon: <Palette size={16}/> },
+        ]},
     ];
+    // Count filled entries so tabs show what the parser actually placed
+    const sectionCount = (id: string): number | null => {
+        const d: any = resumeData;
+        if (Array.isArray(d[id])) return d[id].length;
+        return null;
+    };
 
     return (
         <CandidateLayout>
-            <Toaster richColors position="top-right" />
             <EnhancementModal isOpen={showEnhancementModal} versions={enhancementVersions} selected={selectedEnhancement} onSelect={setSelectedEnhancement} onApply={handleApplyEnhancement} onClose={() => setShowEnhancementModal(false)} originalText={originalText} />
             <PitchModal isOpen={showPitchModal} onClose={() => setShowPitchModal(false)} pitchText={pitchText} setPitchText={setPitchText} startRecording={startRecording} stopRecording={stopRecording} isRecording={isRecording} recordedVideoUrl={recordedVideoUrl} videoRef={videoRef} onVideoFileChange={handleVideoFileUpload} onUpload={handleUploadPitchVideo} loading={loading} videoBlob={videoBlob} />
             
-            <div className="flex flex-col h-full bg-transparent font-sans">
+            <div className="flex flex-col bg-transparent font-sans -m-4 md:-m-6 h-[calc(100vh-4rem)]">
                 <header className="flex-shrink-0 bg-white/5 dark:bg-zinc-900/40 backdrop-blur-md border-b border-white/10 p-4">
                   <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
                       <div className="flex items-center gap-2">
@@ -2142,8 +2156,8 @@ export default function ResumeBuilder() {
                   </div>
                 </header>
 
-                <main className="flex flex-1 min-h-0">
-                    <div className="flex flex-col overflow-y-auto p-6" style={{ width: `${panelWidth}%` }}>
+                <main className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-y-auto lg:overflow-y-hidden">
+                    <div className="flex flex-col lg:overflow-y-auto p-4 md:p-6 max-lg:!w-full" style={{ width: `${panelWidth}%` }}>
                         <div className="space-y-6">
                             <Card>
                                 <CardHeader><CardTitle className="flex items-center gap-2"><Upload size={20} />Upload Resume</CardTitle></CardHeader>
@@ -2175,7 +2189,9 @@ export default function ResumeBuilder() {
                             {showAnalysis && resumeAnalysis && (
                                 <div className="rounded-2xl border border-indigo-500/30 bg-indigo-950/20 overflow-hidden">
                                     {/* Header with large gauge */}
-                                    <div className="flex items-center justify-between px-5 py-4 border-b border-indigo-500/20 bg-indigo-950/40">
+                                    <div className="flex items-center justify-between px-5 py-4 border-b border-indigo-500/20 bg-indigo-950/40 cursor-pointer select-none hover:bg-indigo-950/60 transition-colors"
+                                        onClick={() => setAtsExpanded(v => !v)}
+                                        title={atsExpanded ? 'Collapse details' : 'Expand details'}>
                                         <div className="flex items-center gap-4">
                                             <div className="relative w-20 h-20 shrink-0">
                                                 <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
@@ -2209,9 +2225,15 @@ export default function ResumeBuilder() {
                                                 )}
                                             </div>
                                         </div>
-                                        <button type="button" onClick={() => setShowAnalysis(false)} className="text-zinc-500 hover:text-zinc-300 p-1 self-start"><X size={16} /></button>
+                                        <div className="flex items-center gap-1 self-start">
+                                            <span className="text-[10px] font-semibold text-indigo-300 flex items-center gap-1 px-2 py-1 rounded-lg border border-indigo-500/30">
+                                                {atsExpanded ? <>Hide details <ArrowUp size={11} /></> : <>Path to 100% <ArrowDown size={11} /></>}
+                                            </span>
+                                            <button type="button" onClick={(e) => { e.stopPropagation(); setShowAnalysis(false); }} className="text-zinc-500 hover:text-zinc-300 p-1"><X size={16} /></button>
+                                        </div>
                                     </div>
 
+                                    {atsExpanded && (
                                     <div className="p-4 space-y-3">
                                         <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">Path to 100%</p>
 
@@ -2279,10 +2301,30 @@ export default function ResumeBuilder() {
                                             </div>
                                         )}
                                     </div>
+                                    )}
                                 </div>
                             )}
                             <Card>
-                                <CardContent className="p-4"><div className="flex flex-wrap gap-2">{sections.map(section => (<Button key={section.id} variant={activeSection === section.id ? "default" : "outline"} onClick={() => setActiveSection(section.id)} size="sm" className="flex items-center gap-2">{section.icon} {section.name}</Button>))}</div></CardContent>
+                                <CardContent className="p-4 space-y-3">
+                                    {sectionGroups.map(group => (
+                                        <div key={group.label}>
+                                            <p className="text-[9px] font-bold font-mono uppercase tracking-[0.18em] text-zinc-500 mb-1.5">{group.label}</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {group.items.map(section => {
+                                                    const count = sectionCount(section.id);
+                                                    return (
+                                                        <Button key={section.id} variant={activeSection === section.id ? "default" : "outline"} onClick={() => setActiveSection(section.id)} size="sm" className="flex items-center gap-2">
+                                                            {section.icon} {section.name}
+                                                            {count !== null && count > 0 && (
+                                                                <span className="ml-0.5 px-1.5 py-0 rounded-full text-[9px] font-bold bg-white/15">{count}</span>
+                                                            )}
+                                                        </Button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </CardContent>
                                 <CardContent>
                                     {activeSection === 'personal' && <PersonalForm data={resumeData.personal} onChange={handlePersonalChange} onPicChange={handleProfilePicChange} onPicRemove={handleProfilePicRemove} picPreview={profilePic.preview} />}
                                     {activeSection === 'summary' && <SummaryForm value={resumeData.summary} onChange={(v: string) => { handleSummaryChange(v); if (summarySuggestions.length > 0) setSummarySuggestions([]); }} onEnhance={() => handleEnhance({ section: 'summary'})} loading={loading} suggestions={summarySuggestions} newBatchFrom={newBatchFrom} suggestionsLoading={suggestionsLoading} onGenerateMore={() => fetchSummarySuggestions(undefined, summarySuggestions.length > 0)} onApplySuggestion={(s: string) => { handleSummaryChange(s); setSummarySuggestions([]); setNewBatchFrom(0); toast.success("Summary applied!"); }} onDismissSuggestions={() => { setSummarySuggestions([]); setNewBatchFrom(0); }} />}
@@ -2301,7 +2343,7 @@ export default function ResumeBuilder() {
                                         <div className="space-y-2">
                                             <p className="text-xs text-zinc-400 mb-3">Drag to reorder sections. Click the eye to hide from preview (data is preserved).</p>
                                             {sectionOrder.map((secId, idx) => {
-                                                const secMeta = sections.find(s => s.id === secId);
+                                                const secMeta = sectionGroups.flatMap(g => g.items).find(s => s.id === secId);
                                                 const hidden = hiddenSections.has(secId);
                                                 return (
                                                     <div key={secId} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all ${hidden ? 'border-white/5 bg-white/[0.02] opacity-50' : 'border-white/10 bg-white/[0.04]'}`}>
@@ -2322,9 +2364,9 @@ export default function ResumeBuilder() {
                         </div>
                     </div>
                     
-                    <div className="flex-shrink-0 w-2.5 cursor-col-resize bg-gray-200 hover:bg-indigo-200 transition-colors" onMouseDown={handleMouseDown}></div>
+                    <div className="hidden lg:block flex-shrink-0 w-1.5 cursor-col-resize bg-white/10 hover:bg-[var(--cc-accent)]/60 transition-colors rounded-full my-4" onMouseDown={handleMouseDown}></div>
 
-                    <div className="flex-1 flex flex-col overflow-y-auto p-6 min-w-0">
+                    <div className="flex-1 flex flex-col lg:overflow-y-auto p-4 md:p-6 min-w-0">
                        <Card className="flex-1 flex flex-col">
                            <CardHeader><CardTitle className="flex items-center gap-2"><Eye size={20} />Resume Preview</CardTitle></CardHeader>
                            <CardContent className="flex-1 overflow-y-auto">
@@ -2355,12 +2397,12 @@ export default function ResumeBuilder() {
                                >
                                    {uploadingFile
                                        ? <><Loader2 size={14} className="mr-2 animate-spin" />Uploading & Parsing…</>
-                                       : <><UploadCloud size={14} className="mr-2" />Upload Resume (PDF / DOCX)</>
+                                       : <><UploadCloud size={14} className="mr-2" />Attach a resume file for applications</>
                                    }
                                </Button>
                                {uploadedFiles.length > 0 && (
                                    <div className="mt-2 space-y-1">
-                                       <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Uploaded Files</p>
+                                       <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Files used when applying to jobs</p>
                                        {uploadedFiles.map((f, i) => (
                                            <div key={i} className="flex items-center gap-2 text-[11px] text-zinc-400 bg-white/5 rounded-lg px-2 py-1.5">
                                                <FileText size={10} className="text-zinc-500 flex-shrink-0" />

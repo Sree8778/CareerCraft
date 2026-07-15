@@ -440,7 +440,7 @@ export default function OnboardingPage() {
     } catch { /* non-fatal */ }
 
     localStorage.setItem(`onboarding_done_${user.id}`, '1');
-    toast.success('Profile ready! Welcome to RecruitEdge.');
+    toast.success('Profile ready! Welcome to CareerCraft.');
     router.push(user.role === 'recruiter' ? '/recruiter/dashboard' : '/candidate/dashboard');
     setSaving(false);
   };
@@ -480,7 +480,7 @@ export default function OnboardingPage() {
               <div className="text-center space-y-6">
                 <GradIcon><Sparkles className="w-8 h-8 text-white" /></GradIcon>
                 <div className="space-y-2">
-                  <h1 className="text-2xl font-black text-white">Welcome to RecruitEdge, {user.name}!</h1>
+                  <h1 className="text-2xl font-black text-white">Welcome to CareerCraft, {user.name}!</h1>
                   <p className="text-zinc-400 text-sm leading-relaxed max-w-sm mx-auto">
                     {isCandidate
                       ? "Let's set up your profile, connect your AI tools, and build your professional story."

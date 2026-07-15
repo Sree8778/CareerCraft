@@ -10,8 +10,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { RefreshCw, Plus, Briefcase } from 'lucide-react';
 import { API_BASE } from '@/lib/api';
+import { toast } from 'sonner';
 
-type StatusFilter = 'All' | 'Open' | 'Archived' | 'Closed' | 'In Review';
+type StatusFilter = 'All' | 'Open' | 'Draft' | 'Paused' | 'Archived' | 'Closed' | 'In Review';
 
 export default function RequisitionListPage() {
   const [filter, setFilter] = useState<StatusFilter>('All');
@@ -59,6 +60,28 @@ export default function RequisitionListPage() {
     fetchJobs();
   }, [isAuthenticated, user, router, authLoading]);
 
+  const handleStatusChange = async (jobId: string, newStatus: string) => {
+    const prev = jobs;
+    setJobs(jobs.map(j => j.id === jobId ? { ...j, status: newStatus } : j));
+    try {
+      const res = await fetch(`${API_BASE}/jobs/${jobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${await getToken()}` },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(
+        newStatus === 'Open' ? 'Job is live — candidates can apply.'
+        : newStatus === 'Paused' ? 'Job paused — hidden from candidates, applications kept.'
+        : newStatus === 'Closed' ? 'Job closed.'
+        : `Status changed to ${newStatus}.`
+      );
+    } catch {
+      setJobs(prev); // roll back optimistic update
+      toast.error('Failed to update status.');
+    }
+  };
+
   if (!isAuthenticated || user?.role !== 'recruiter') return null;
 
   const filtered = filter === 'All' ? jobs : jobs.filter(j => (j.status || 'Open') === filter);
@@ -85,7 +108,7 @@ export default function RequisitionListPage() {
 
         {/* Filters */}
         <div className="flex flex-wrap gap-2">
-          {(['All', 'Open', 'In Review', 'Closed', 'Archived'] as StatusFilter[]).map(s => (
+          {(['All', 'Open', 'Draft', 'Paused', 'In Review', 'Closed', 'Archived'] as StatusFilter[]).map(s => (
             <button key={s} onClick={() => setFilter(s)}
               className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${
                 filter === s ? 'bg-purple-600 border-purple-500 text-white' : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white'
@@ -132,6 +155,9 @@ export default function RequisitionListPage() {
                 applicants={job.applicants || 0}
                 department={job.department}
                 jobType={job.jobType}
+                salaryMin={job.salaryMin}
+                salaryMax={job.salaryMax}
+                onStatusChange={handleStatusChange}
               />
             ))}
           </div>

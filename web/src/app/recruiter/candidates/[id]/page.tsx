@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE } from "@/lib/api";
 
@@ -159,7 +159,6 @@ export default function CandidateDetailPage() {
 
   return (
     <RecruiterLayout>
-      <Toaster position="top-right" richColors />
       <div className="min-h-screen pb-12 text-white space-y-6">
 
         <Link href="/recruiter/candidates" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white text-sm transition font-semibold">

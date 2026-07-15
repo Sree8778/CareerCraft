@@ -1,10 +1,10 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import CandidateLayout from '@/components/layout/CandidateLayout';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { encryptApiKey } from '@/lib/crypto';
 import { API_BASE, jsonHeaders } from '@/lib/api';
 import {
@@ -36,10 +36,15 @@ const NAV: { id: Section; label: string; icon: React.ReactNode }[] = [
 const FIELD = 'w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500/50 transition disabled:opacity-50 disabled:cursor-not-allowed';
 const LABEL = 'block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1.5';
 
-export default function CandidateSettingsPage() {
+function CandidateSettingsInner() {
   const { user, isAuthenticated, getToken, loading } = useAuth();
   const router = useRouter();
-  const [active, setActive] = useState<Section>('profile');
+  const searchParams = useSearchParams();
+  const validSections: Section[] = ['profile', 'account', 'api-keys', 'security', 'preferences', 'plugin'];
+  const initialSection = searchParams.get('section') as Section | null;
+  const [active, setActive] = useState<Section>(
+    initialSection && validSections.includes(initialSection) ? initialSection : 'profile'
+  );
 
   // Profile
   const [profileName, setProfileName] = useState('');
@@ -311,7 +316,6 @@ export default function CandidateSettingsPage() {
 
   return (
     <CandidateLayout>
-      <Toaster position="top-right" richColors />
       <div className="max-w-4xl mx-auto">
         <h1 className="text-xl font-black text-white mb-6">Settings</h1>
 
@@ -856,5 +860,14 @@ export default function CandidateSettingsPage() {
         </div>
       </div>
     </CandidateLayout>
+  );
+}
+
+// useSearchParams requires a Suspense boundary for static prerendering (Next 15).
+export default function CandidateSettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <CandidateSettingsInner />
+    </Suspense>
   );
 }

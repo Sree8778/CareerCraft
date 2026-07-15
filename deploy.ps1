@@ -31,6 +31,8 @@ $VAULT_KEY    = [System.Environment]::GetEnvironmentVariable('BACKEND_VAULT_MAST
 $RESEND       = [System.Environment]::GetEnvironmentVariable('RESEND_API_KEY',            'Process')
 $EMAIL_FROM   = [System.Environment]::GetEnvironmentVariable('EMAIL_FROM',                'Process')
 $PLATFORM_URL = [System.Environment]::GetEnvironmentVariable('PLATFORM_URL',             'Process')
+$ADMIN_EMAILS = [System.Environment]::GetEnvironmentVariable('SUPER_ADMIN_EMAILS',        'Process')
+if (-not $ADMIN_EMAILS) { $ADMIN_EMAILS = "sreeramvarma8778@gmail.com,sreeramvarma8888@gmail.com" }
 
 # Base64-encode the Firebase service account JSON so it can be passed as a Cloud Run env var
 # (credentials files are gitignored and excluded from Docker images)
@@ -113,6 +115,7 @@ FIREBASE_CREDENTIALS_B64: "$FB_CREDS_B64"
 RESEND_API_KEY: "$RESEND"
 EMAIL_FROM: "$EMAIL_FROM"
 PLATFORM_URL: "$PLATFORM_URL"
+SUPER_ADMIN_EMAILS: "$ADMIN_EMAILS"
 "@ | Out-File -FilePath $envYamlPath -Encoding utf8 -NoNewline
 
     & gcloud run deploy $BACKEND_SVC `
@@ -141,6 +144,7 @@ FIREBASE_CREDENTIALS_B64: "$FB_CREDS_B64"
 RESEND_API_KEY: "$RESEND"
 EMAIL_FROM: "$EMAIL_FROM"
 PLATFORM_URL: "$PLATFORM_URL"
+SUPER_ADMIN_EMAILS: "$ADMIN_EMAILS"
 "@ | Out-File -FilePath $envYamlPath -Encoding utf8 -NoNewline
     & gcloud run services update $BACKEND_SVC `
         --region $REGION `

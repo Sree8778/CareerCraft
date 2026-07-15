@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { API_BASE } from '@/lib/api';
 
 const SILENCE_MS = 2500; // auto-submit after 2.5s silence
@@ -364,7 +364,6 @@ export default function PracticeInterviewPage() {
   // ── SETUP SCREEN ───────────────────────────────────────────────────────────
   if (appPhase === 'setup') return (
     <div className="min-h-screen bg-[#050810] text-white p-4 md:p-10">
-      <Toaster richColors position="top-right" />
       <div className="max-w-xl mx-auto space-y-8">
 
         <div className="flex items-center gap-3">
@@ -506,7 +505,6 @@ export default function PracticeInterviewPage() {
     const aiTurns   = conversation.filter(t => t.role === 'ai');
     return (
       <div className="min-h-screen bg-[#050810] text-white p-4 md:p-8">
-        <Toaster richColors position="top-right" />
         <div className="max-w-2xl mx-auto space-y-6">
 
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
@@ -600,7 +598,6 @@ export default function PracticeInterviewPage() {
 
   return (
     <div className="fixed inset-0 bg-[#050810] text-white flex flex-col overflow-hidden">
-      <Toaster richColors position="top-right" />
 
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-white/8 bg-black/30 backdrop-blur">

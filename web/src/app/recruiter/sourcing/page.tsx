@@ -9,7 +9,7 @@ import {
   Search, Sparkles, RefreshCw, Globe,
   Mail, MapPin, Copy, CheckCircle, ExternalLink
 } from 'lucide-react';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { useEffect } from 'react';
 import { API_BASE as API } from '@/lib/api';
 
@@ -82,7 +82,6 @@ export default function RecruiterSourcingPage() {
 
   return (
     <RecruiterLayout>
-      <Toaster position="top-right" richColors />
       <div className="max-w-4xl mx-auto space-y-8 text-white">
 
         {/* Header */}

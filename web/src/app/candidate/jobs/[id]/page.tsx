@@ -13,7 +13,7 @@ import { Job } from '@/lib/mockJobApi';
 import Link from 'next/link';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import CandidateLayout from '@/components/layout/CandidateLayout';
 import { API_BASE as API } from '@/lib/api';
 
@@ -439,7 +439,6 @@ export default function JobDetailPage() {
 
   return (
     <CandidateLayout>
-      <Toaster position="top-right" richColors />
 
       {/* Back */}
       <Link href="/candidate/jobs" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-300 mb-5 transition">

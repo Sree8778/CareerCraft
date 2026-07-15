@@ -92,3 +92,28 @@ def require_auth(f):
 
         return f(*args, **kwargs)
     return decorated
+
+
+# ── Super Admin ───────────────────────────────────────────────────────────────
+# Admins are designated by an email allowlist (env SUPER_ADMIN_EMAILS,
+# comma-separated). An allowlist can't be self-granted through the database,
+# unlike a role field. Falls back to the platform owner.
+import os as _os
+
+def get_admin_emails():
+    raw = _os.environ.get('SUPER_ADMIN_EMAILS', 'sreeramvarma8778@gmail.com,sreeramvarma8888@gmail.com')
+    return {e.strip().lower() for e in raw.split(',') if e.strip()}
+
+def is_admin_user(user_claims) -> bool:
+    email = (user_claims or {}).get('email', '') or ''
+    return email.lower() in get_admin_emails()
+
+def require_admin(f):
+    """require_auth + email allowlist. 403 for authenticated non-admins."""
+    @wraps(f)
+    @require_auth
+    def decorated(*args, **kwargs):
+        if not is_admin_user(getattr(request, 'user', None)):
+            return jsonify({"error": "Admin access required"}), 403
+        return f(*args, **kwargs)
+    return decorated

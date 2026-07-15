@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:recruit_edge/api/api_service.dart';
+import 'package:recruit_edge/services/auth_service.dart';
 import 'package:http/http.dart' as http;
 
 class CandidateInterviewPage extends StatefulWidget {
@@ -179,8 +180,7 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
     try {
       // Identity verification REST call
       final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/interviews/verify-identity'));
-      final user = FirebaseAuth.instance.currentUser;
-      final token = user != null ? 'mock_token' : 'demo_token';
+      final token = await AuthService.getToken() ?? '';
       request.headers['Authorization'] = 'Bearer $token';
 
       request.files.add(await http.MultipartFile.fromPath('stateId', _stateIdFile!.path));
@@ -263,6 +263,7 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
 
     final uid = FirebaseAuth.instance.currentUser?.uid ?? 'mock_uid_123';
     _interviewId = '${uid}_ai_voice_round';
+    final token = await AuthService.getToken() ?? '';
 
     try {
       // Get resume details from Firebase Firestore
@@ -273,7 +274,7 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
       // Get first question
       final response = await http.post(
         Uri.parse('$baseUrl/interviews/get-next-question'),
-        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer mock_token'},
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode({
           'resumeData': resumeData,
           'conversationHistory': [],
@@ -403,11 +404,13 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
       _conversationHistory = updatedHistory;
     });
 
+    final token = await AuthService.getToken() ?? '';
+
     try {
       // 1. Evaluate voice answer
       final evalResp = await http.post(
         Uri.parse('$baseUrl/interviews/evaluate-response'),
-        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer mock_token'},
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode({
           'question': _currentQuestion,
           'transcript': _speechTranscript
@@ -431,7 +434,7 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
 
       final nextResp = await http.post(
         Uri.parse('$baseUrl/interviews/get-next-question'),
-        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer mock_token'},
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode({
           'resumeData': resumeData,
           'conversationHistory': updatedHistory,

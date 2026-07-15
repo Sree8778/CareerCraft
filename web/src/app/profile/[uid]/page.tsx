@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import CandidateLayout from '@/components/layout/CandidateLayout';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import {
   MapPin, Mail, Phone, Briefcase, GraduationCap, FolderOpen,
   Award, ExternalLink, Building2, UserPlus, MessageSquare,
@@ -468,7 +468,6 @@ export default function PublicProfilePage() {
 
   const content = (
     <>
-      <Toaster position="top-right" richColors />
       <div className="mb-4">
         <Link href={backHref} className="inline-flex items-center gap-1 text-sm text-[#566075] hover:text-[#94A3B8] transition">
           <ChevronLeft className="w-4 h-4" />

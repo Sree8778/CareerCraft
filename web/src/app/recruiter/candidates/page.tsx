@@ -6,7 +6,7 @@ import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import CandidateCard from '@/components/recruiter/CandidateCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, SlidersHorizontal, X, RefreshCw } from 'lucide-react';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -103,14 +103,13 @@ export default function CandidateListPage() {
 
   return (
     <RecruiterLayout>
-      <Toaster position="top-right" richColors />
       <div className="flex flex-col gap-6 relative min-h-[80vh]">
         
         {/* Banner with Copilot Trigger */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-6 glass flex justify-between items-center max-sm:flex-col max-sm:gap-4 max-sm:text-center">
           <div>
             <h1 className="text-3xl font-extrabold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-              RecruitEdge Candidates
+              CareerCraft Candidates
             </h1>
             <p className="text-sm text-zinc-400 mt-1">
               Review applicant submissions, track proctoring security metrics, and leverage AI matching.

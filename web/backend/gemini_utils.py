@@ -58,6 +58,15 @@ def structure_text_with_ai(raw_resume_text: str) -> dict:
       ],
       "certifications": [
         {"id": "string", "name": "", "issuer": "", "date": ""}
+      ],
+      "languages": [
+        {"id": "string", "language": "", "proficiency": ""}
+      ],
+      "volunteer": [
+        {"id": "string", "role": "", "organization": "", "dates": "", "description": ""}
+      ],
+      "awards": [
+        {"id": "string", "title": "", "organization": "", "date": "", "description": ""}
       ]
     }
     """
@@ -85,6 +94,10 @@ def structure_text_with_ai(raw_resume_text: str) -> dict:
     - If skills are listed without explicit categories, group them under a general category like "Technical Skills" or "Key Skills".
 
     If a section (like 'projects' or 'publications') is not present in the text, provide an empty list for that key.
+
+    For 'languages': proficiency should be one of Native, Fluent, Professional, Conversational, Basic (infer the closest match).
+    For 'volunteer': treat volunteering/community service entries like experience entries (role, organization, dates, description).
+    For 'awards': the year or date goes in 'date'; the granting body in 'organization'.
 
     **JSON Schema to follow:**
     ```json

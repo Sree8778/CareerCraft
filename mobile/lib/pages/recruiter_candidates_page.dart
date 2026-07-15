@@ -24,20 +24,20 @@ class _RecruiterCandidatesPageState extends State<RecruiterCandidatesPage> {
   }
 
   Future<void> _loadCandidates() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
     try {
       final list = await fetchCandidates();
+      if (!mounted) return;
       setState(() {
         _candidates = list;
       });
     } catch (e) {
       print('Failed to load candidates: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() { _isLoading = false; });
     }
   }
 
@@ -52,6 +52,7 @@ class _RecruiterCandidatesPageState extends State<RecruiterCandidatesPage> {
       return;
     }
 
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _searchedQuery = query;
@@ -59,19 +60,19 @@ class _RecruiterCandidatesPageState extends State<RecruiterCandidatesPage> {
 
     try {
       final matchedList = await searchCandidatesCopilot(query);
+      if (!mounted) return;
       setState(() {
         _candidates = matchedList;
       });
     } catch (e) {
       print('Recruiter Copilot search failed: $e. Proceeding with dynamic simulated matching.');
+      if (!mounted) return;
       // Simulating semantic match sorting dynamically against the current active candidate list
       setState(() {
         _candidates = _getSimulatedMatchedCandidates(query);
       });
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() { _isLoading = false; });
     }
   }
 

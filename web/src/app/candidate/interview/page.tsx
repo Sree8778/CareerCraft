@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, Timestamp } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -507,14 +507,13 @@ export default function CandidateInterviewPage() {
 
   return (
     <section className="min-h-screen p-6 bg-gradient-to-b from-black to-neutral-900 text-white flex flex-col items-center">
-      <Toaster position="top-right" richColors />
       
       <div className="w-full max-w-4xl max-md:max-w-full">
         {/* Sleek Header */}
         <div className="flex justify-between items-center mb-8 bg-white/5 border border-white/10 rounded-2xl p-6 glass">
           <div>
             <h1 className="text-3xl font-extrabold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent max-sm:text-xl">
-              RecruitEdge AI Voice Interview
+              CareerCraft AI Voice Interview
             </h1>
             <p className="text-sm text-zinc-400 mt-1 max-sm:text-xs">
               Secure Turn-Based Technical Recruiter Assessor

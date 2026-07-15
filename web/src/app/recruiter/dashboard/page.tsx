@@ -25,6 +25,8 @@ export default function RecruiterDashboardPage() {
   const [totalInterviews, setTotalInterviews] = useState(0);
   const [completion, setCompletion] = useState<{ score: number; missing: string[] }>({ score: 0, missing: [] });
   const [recentApps, setRecentApps] = useState<any[]>([]);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState(false);
 
   useEffect(() => {
     if (loading) return;
@@ -51,8 +53,10 @@ export default function RecruiterDashboardPage() {
             ? Math.min(100, Math.round((data.totalInterviews / data.totalApplications) * 100))
             : 0;
           setHiringVelocity(velocity);
+        } else {
+          setStatsError(true);
         }
-      } catch { /* keep defaults */ }
+      } catch { setStatsError(true); }
     };
     const fetchCompletion = async () => {
       try {
@@ -77,9 +81,10 @@ export default function RecruiterDashboardPage() {
       } catch { /* keep defaults */ }
     };
 
-    fetchStats();
-    fetchCompletion();
-    fetchRecentApps();
+    setStatsLoading(true);
+    setStatsError(false);
+    Promise.allSettled([fetchStats(), fetchCompletion(), fetchRecentApps()])
+      .then(() => setStatsLoading(false));
   }, [user?.id]);
 
   if (!isAuthenticated || user?.role !== 'recruiter') {
@@ -136,9 +141,11 @@ export default function RecruiterDashboardPage() {
             {/* KPI Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               {[
-                { title: 'Pipeline Candidates', count: String(totalApplications), desc: 'Total applicants', trend: totalApplications > 0 ? 'Active pipeline' : 'None yet', icon: <Users className="w-5 h-5 text-cyan-400" /> },
-                { title: 'Open Requisitions', count: String(openJobs), desc: 'Live job postings', trend: openJobs > 0 ? 'Active slots' : 'Post a job', icon: <ClipboardList className="w-5 h-5 text-purple-400" /> },
-                { title: 'Interviews', count: String(totalInterviews), desc: 'Scheduled or completed', trend: totalInterviews > 0 ? 'In progress' : 'None yet', icon: <UserCheck className="w-5 h-5 text-[#6366F1]" /> }
+                // While stats load, show a placeholder — a fake "0" reads as "you have
+                // nothing" on slow connections. On fetch failure, say so instead of lying.
+                { title: 'Pipeline Candidates', count: statsLoading ? '…' : statsError ? '—' : String(totalApplications), desc: 'Total applicants', trend: statsLoading ? 'Loading' : statsError ? 'Failed to load' : totalApplications > 0 ? 'Active pipeline' : 'None yet', icon: <Users className="w-5 h-5 text-cyan-400" /> },
+                { title: 'Open Requisitions', count: statsLoading ? '…' : statsError ? '—' : String(openJobs), desc: 'Live job postings', trend: statsLoading ? 'Loading' : statsError ? 'Failed to load' : openJobs > 0 ? 'Active slots' : 'Post a job', icon: <ClipboardList className="w-5 h-5 text-purple-400" /> },
+                { title: 'Interviews', count: statsLoading ? '…' : statsError ? '—' : String(totalInterviews), desc: 'Scheduled or completed', trend: statsLoading ? 'Loading' : statsError ? 'Failed to load' : totalInterviews > 0 ? 'In progress' : 'None yet', icon: <UserCheck className="w-5 h-5 text-[#6366F1]" /> }
               ].map((kpi, idx) => (
                 <motion.div
                   key={kpi.title}

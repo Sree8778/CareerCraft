@@ -1,17 +1,18 @@
 'use client';
 
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { encryptApiKey } from '@/lib/crypto';
 import { API_BASE, jsonHeaders } from '@/lib/api';
 import {
   User, Phone, Mail, MapPin, Briefcase, Shield, KeyRound,
   CheckCircle, Trash2, ExternalLink, PlusCircle,
   RefreshCw, ShieldAlert, ShieldCheck, QrCode, Lock,
-  Globe, Save, Eye, EyeOff, Building2
+  Globe, Save, Eye, EyeOff, Building2, Webhook,
 } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -214,7 +215,6 @@ export default function RecruiterSettingsPage() {
 
   return (
     <RecruiterLayout>
-      <Toaster position="top-right" richColors />
       <div className="max-w-4xl mx-auto">
         <h1 className="text-xl font-black text-white mb-6">Settings</h1>
 
@@ -234,6 +234,15 @@ export default function RecruiterSettingsPage() {
                   {n.label}
                 </button>
               ))}
+              {/* Integrations live here now, not in the main sidebar —
+                  configuration belongs in Settings. */}
+              <div className="pt-1 mt-1 border-t border-white/10">
+                <Link href="/recruiter/webhooks"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left text-zinc-400 hover:text-zinc-200 hover:bg-white/5">
+                  <span className="text-zinc-500"><Webhook className="w-4 h-4" /></span>
+                  Integrations
+                </Link>
+              </div>
             </nav>
           </aside>
 

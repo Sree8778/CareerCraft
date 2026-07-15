@@ -22,7 +22,7 @@ import {
   ConfirmationResult,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { encryptApiKey } from '@/lib/crypto';
 import Link from 'next/link';
@@ -111,6 +111,7 @@ export default function SignupWizard() {
   const [awaitingEmailVerification, setAwaitingEmailVerification] = useState(false);
   const [resendingVerification, setResendingVerification]         = useState(false);
   const createdUserRef = useRef<FirebaseUser | null>(null);
+  const createdEmailRef = useRef<string>('');
 
   // Phone
   const [phoneCountryCode, setPhoneCountryCode] = useState('US');
@@ -171,6 +172,66 @@ export default function SignupWizard() {
 
   const popularSkills = ['React', 'Next.js', 'TypeScript', 'Node.js', 'Python', 'Machine Learning', 'Product Management', 'SQL', 'Figma', 'System Design'];
   const fullName = [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(' ');
+
+  // ── Wizard draft persistence ──────────────────────────────────────────────
+  // Survives refresh/crash. Passwords and raw API keys are intentionally
+  // NOT persisted. Step is only restored if the Firebase session survived,
+  // otherwise the user re-does step 1 (account) but keeps all typed data.
+  const DRAFT_KEY = 'cc_signup_draft_v1';
+  const draftReady = useRef(false);
+  const clearSignupDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch {} };
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d.firstName) setFirstName(d.firstName);
+        if (d.middleName) setMiddleName(d.middleName);
+        if (d.lastName) setLastName(d.lastName);
+        if (d.email) setEmail(d.email);
+        if (typeof d.isRecruiter === 'boolean') setIsRecruiter(d.isRecruiter);
+        if (d.phoneCountryCode) setPhoneCountryCode(d.phoneCountryCode);
+        if (d.phoneDialCode) setPhoneDialCode(d.phoneDialCode);
+        if (d.phoneNumber) setPhoneNumber(d.phoneNumber);
+        if (Array.isArray(d.educations)) setEducations(d.educations);
+        if (Array.isArray(d.experiences)) setExperiences(d.experiences);
+        if (Array.isArray(d.skills)) setSkills(d.skills);
+        if (d.bio) setBio(d.bio);
+        if (Array.isArray(d.projects)) setProjects(d.projects);
+        if (Array.isArray(d.certifications)) setCertifications(d.certifications);
+        if (d.contactForm) setContactForm(d.contactForm);
+        if (d.locationPref) setLocationPref(d.locationPref);
+        if (Array.isArray(d.preferredLocations)) setPreferredLocations(d.preferredLocations);
+        if (d.jobType) setJobType(d.jobType);
+        if (d.salaryMin) setSalaryMin(d.salaryMin);
+        if (d.salaryMax) setSalaryMax(d.salaryMax);
+        if (d.workAuth) setWorkAuth(d.workAuth);
+        if (d.availability) setAvailability(d.availability);
+        if (d.parsedData) setParsedData(d.parsedData);
+        // Only jump past step 1 if the created account's session survived
+        if (d.step && d.step !== 'credentials' && auth.currentUser) setStep(d.step);
+      }
+    } catch { /* corrupt draft — start fresh */ }
+    draftReady.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady.current) return;
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        step, isRecruiter, firstName, middleName, lastName, email,
+        phoneCountryCode, phoneDialCode, phoneNumber,
+        educations, experiences, skills, bio, projects, certifications,
+        contactForm, locationPref, preferredLocations,
+        jobType, salaryMin, salaryMax, workAuth, availability, parsedData,
+      }));
+    } catch { /* storage full — non-fatal */ }
+  }, [step, isRecruiter, firstName, middleName, lastName, email,
+      phoneCountryCode, phoneDialCode, phoneNumber,
+      educations, experiences, skills, bio, projects, certifications,
+      contactForm, locationPref, preferredLocations,
+      jobType, salaryMin, salaryMax, workAuth, availability, parsedData]);
 
   // Reset phone verification if number changes
   useEffect(() => { setPhoneVerified(false); setPhoneOtpSent(false); setPhoneOtpInput(''); setConfirmResult(null); }, [phoneNumber, phoneDialCode]);
@@ -392,15 +453,53 @@ export default function SignupWizard() {
   };
 
   // ── step navigation ──
+  // Create the Firebase account at the END of step 1 so problems like a
+  // duplicate email surface immediately — not after ten steps of data entry.
+  const handleCredentialsNext = async () => {
+    if (!firstName.trim() || !lastName.trim()) { toast.error('First and last name are required.'); return; }
+    if (!email.trim()) { toast.error('Email is required.'); return; }
+    const isMockFirebase = !auth.app.options.apiKey || auth.app.options.apiKey.startsWith('mock');
+    const existingUser = createdUserRef.current ?? (!isMockFirebase ? auth.currentUser : null);
+
+    // Account already exists from an earlier pass through this step
+    if (existingUser) {
+      if (existingUser.email && existingUser.email.toLowerCase() !== email.trim().toLowerCase()) {
+        toast.error(`Your account was created with ${existingUser.email}. You can change your email later in Settings.`);
+        setEmail(existingUser.email);
+        return;
+      }
+      setStep('api-wallet');
+      return;
+    }
+
+    if (!password) { toast.error('Password is required.'); return; }
+    if (password !== confirmPassword) { toast.error('Passwords do not match.'); return; }
+    if (password.length < 8) { toast.error('Password must be at least 8 characters.'); return; }
+
+    if (isMockFirebase) { setStep('api-wallet'); return; }
+
+    setIsLoading(true);
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      createdUserRef.current = cred.user;
+      createdEmailRef.current = email.trim();
+      setStep('api-wallet');
+    } catch (err: any) {
+      if (err?.code === 'auth/email-already-in-use') {
+        toast.error('This email is already registered. Log in instead, or use a different email.');
+      } else if (err?.code === 'auth/invalid-email') {
+        toast.error('That email address looks invalid.');
+      } else if (err?.code === 'auth/weak-password') {
+        toast.error('Password is too weak — use at least 8 characters.');
+      } else {
+        toast.error(err?.message || 'Could not create your account. Please try again.');
+      }
+    } finally { setIsLoading(false); }
+  };
+
   const nextStep = () => {
     if (step === 'credentials') {
-      if (!firstName.trim() || !lastName.trim()) { toast.error('First and last name are required.'); return; }
-      if (!email.trim()) { toast.error('Email is required.'); return; }
-      if (!password) { toast.error('Password is required.'); return; }
-      if (password !== confirmPassword) { toast.error('Passwords do not match.'); return; }
-      if (password.length < 6) { toast.error('Password must be at least 6 characters.'); return; }
-      // Phone verification is optional — don't block if SMS isn't available
-      setStep('api-wallet');
+      handleCredentialsNext();
     } else if (step === 'api-wallet') {
       setStep(isRecruiter ? 'consent' : 'resume');
     } else if (step === 'resume') {
@@ -447,9 +546,15 @@ export default function SignupWizard() {
       let uid = 'mock_uid_' + Math.floor(Math.random() * 900000 + 100000);
       let firebaseUser: FirebaseUser | null = null;
       if (!isMockFirebase) {
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        uid = cred.user.uid;
-        firebaseUser = cred.user;
+        // Account was created at the end of step 1; fall back to the persisted
+        // Firebase session (page refresh) or, as a last resort, create it now.
+        firebaseUser = createdUserRef.current ?? auth.currentUser;
+        if (!firebaseUser) {
+          const cred = await createUserWithEmailAndPassword(auth, email, password);
+          firebaseUser = cred.user;
+          createdUserRef.current = cred.user;
+        }
+        uid = firebaseUser.uid;
       }
 
       const fullLocation = [contactForm.city, contactForm.state, contactForm.country].filter(Boolean).join(', ');
@@ -464,7 +569,7 @@ export default function SignupWizard() {
         preferences: { locationPref, preferredLocations, jobType, salaryMin, salaryMax, workAuth, availability },
       };
 
-      await fetch(`${API}/users/register`, {
+      const regRes = await fetch(`${API}/users/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await getToken()}` },
         body: JSON.stringify({
@@ -474,6 +579,14 @@ export default function SignupWizard() {
           resumeProfile, emailVerified: false, phoneVerified,
         }),
       });
+      if (!regRes.ok) {
+        const errBody = await regRes.json().catch(() => ({} as any));
+        throw new Error(
+          errBody?.error ||
+          `Profile save failed (${regRes.status}). Your account exists — click Complete again to retry.`
+        );
+      }
+      clearSignupDraft();
 
 
       const geminiKey = apiKeys.find(k => k.provider === 'Gemini')?.key;
@@ -494,6 +607,7 @@ export default function SignupWizard() {
       }
 
       // Mock / non-Firebase path — skip verification
+      clearSignupDraft();
       login({ id: uid, email, name: fullName, role: isRecruiter ? 'recruiter' : 'candidate', avatar: '' });
       toast.success('Account created! Setting up your dashboard…');
       router.push('/onboarding');
@@ -505,7 +619,6 @@ export default function SignupWizard() {
   // ─── Email verification waiting screen ───────────────────────────────────────
   if (awaitingEmailVerification) return (
     <section className="min-h-screen bg-black text-white flex flex-col items-center justify-center px-4">
-      <Toaster position="top-right" richColors />
       <div className="max-w-md w-full bg-[#0B0F19]/80 backdrop-blur-xl border border-white/10 rounded-3xl p-10 shadow-2xl text-center space-y-6">
         <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto">
           <Mail className="w-8 h-8 text-indigo-400" />
@@ -520,7 +633,7 @@ export default function SignupWizard() {
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-zinc-400 text-left space-y-2">
           <p className="font-semibold text-zinc-300">What to do next:</p>
           <ol className="list-decimal list-inside space-y-1">
-            <li>Open the email from <span className="text-indigo-400">noreply@recruitedge.com</span></li>
+            <li>Open the verification email from Google / Firebase (check spam too)</li>
             <li>Click the <strong className="text-white">"Verify email address"</strong> button</li>
             <li>Come back here and click Continue</li>
           </ol>
@@ -543,7 +656,6 @@ export default function SignupWizard() {
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <section className="min-h-screen bg-black text-white relative overflow-hidden flex flex-col justify-center items-center py-12 px-4">
-      <Toaster position="top-right" richColors />
       {/* Invisible reCAPTCHA for Firebase Phone Auth */}
       <div id="recaptcha-signup" />
 
@@ -1025,7 +1137,7 @@ export default function SignupWizard() {
               <StepSlide key="projects">
                 <StepTitle icon={<Code2 className="w-5 h-5 text-indigo-400" />} title="Projects" sub="Personal, open-source, or side projects. Recruiters love these." />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-zinc-950/40 p-4 border border-white/5 rounded-2xl">
-                  <SmallInput label="Project Name *" value={projForm.name} onChange={v => setProjForm(p => ({ ...p, name: v }))} placeholder="RecruitEdge AI" />
+                  <SmallInput label="Project Name *" value={projForm.name} onChange={v => setProjForm(p => ({ ...p, name: v }))} placeholder="CareerCraft AI" />
                   <SmallInput label="Dates" value={projForm.dates} onChange={v => setProjForm(p => ({ ...p, dates: v }))} placeholder="Jan 2024 – Present" />
                   <SmallInput label="Technologies Used" value={projForm.technologies} onChange={v => setProjForm(p => ({ ...p, technologies: v }))} placeholder="React, Python, Firebase, GPT-4" />
                   <SmallInput label="Link (GitHub / Live)" value={projForm.link} onChange={v => setProjForm(p => ({ ...p, link: v }))} placeholder="https://github.com/…" />
@@ -1113,7 +1225,7 @@ export default function SignupWizard() {
                   <p className="text-xs text-zinc-400 max-w-sm mx-auto leading-relaxed">Required for secure, proctored interview sessions.</p>
                 </div>
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-5 text-xs space-y-2 text-zinc-400 leading-relaxed">
-                  <p>By creating an account, you acknowledge RecruitEdge may use:</p>
+                  <p>By creating an account, you acknowledge CareerCraft may use:</p>
                   <ul className="list-disc list-inside space-y-1 text-zinc-300">
                     <li>Face biometric matching against government ID during interviews</li>
                     <li>Tab focus & fullscreen monitoring for anti-cheat enforcement</li>

@@ -62,20 +62,22 @@
             padding: 0;
         }
 
-        /* Ensure UL/LI have minimal default margins/paddings as well */
+        /* List styling — single bullet via native list-style-type */
         ul {
-            margin: 0;
-            padding: 0;
-            list-style-position: inside; /* Ensures bullets are inside text flow */
+            margin: 2px 0 4px 0;
+            padding-left: 1.4em;
+            list-style-type: disc;
+            list-style-position: outside;
+        }
+        ol {
+            margin: 2px 0 4px 0;
+            padding-left: 1.4em;
+            list-style-type: decimal;
+            list-style-position: outside;
         }
         li {
-            margin: 0; /* Changed from 0 0 3px 0; for tighter list */
+            margin: 0 0 2px 0;
             padding: 0;
-            text-indent: -1em; /* For basic bullet appearance if list-style-type is outside */
-            padding-left: 1em; /* To align text after bullet */
-        }
-        li:before {
-            content: '• '; /* Fallback bullet for some PDF engines */
         }
 
 

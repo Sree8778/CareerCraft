@@ -81,6 +81,20 @@ def _normalise(text: str) -> str:
     text = re.sub(r"[ \t]{2,}", " ", text)
     text = re.sub(r"\r\n|\r", "\n", text)
     text = re.sub(r"\n{4,}", "\n\n\n", text)
+
+    # ── Rejoin PDF line wraps ────────────────────────────────────────────
+    # PDF extraction breaks sentences mid-line. Without rejoining, wrapped
+    # continuations get misread as new entry headers (e.g. one project
+    # becoming several). Two cases:
+    # 1. Hyphenated wrap:  "distri-\nbutions"  → "distributions"
+    text = re.sub(r"(\w)-\n(?=[a-z])", r"\1", text)
+    # 2. Sentence wrap: a line ending mid-sentence followed by a line that
+    #    starts lowercase (and isn't a bullet) is a continuation.
+    text = re.sub(
+        r"(?<=[a-zA-Z,;])\n(?=[a-z](?![ \t]*[•\-\*▸▪‣◦]))",
+        " ",
+        text,
+    )
     return text
 
 
@@ -1117,6 +1131,108 @@ def _heuristic_parse(text: str, lines: list) -> dict:
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
+
+
+# ── Languages / Volunteer / Awards extractors ────────────────────────────────
+# These sections were detected by _split_into_sections but previously had no
+# extractors — their content was silently discarded.
+
+_RE_LANG_PROF = re.compile(
+    r"^(?P<lang>[A-Za-z][A-Za-z\s]{1,30}?)\s*(?:[-–—:(]|\s{2,})\s*"
+    r"(?P<prof>native|fluent|professional(?:\s+working)?(?:\s+proficiency)?|"
+    r"conversational|intermediate|basic|beginner|advanced|bilingual|elementary)"
+    r"\)?\s*$", re.IGNORECASE)
+
+_PROF_MAP = {
+    'native': 'Native', 'bilingual': 'Native', 'fluent': 'Fluent',
+    'advanced': 'Fluent', 'professional': 'Professional',
+    'professional working': 'Professional', 'professional working proficiency': 'Professional',
+    'intermediate': 'Conversational', 'conversational': 'Conversational',
+    'basic': 'Basic', 'beginner': 'Basic', 'elementary': 'Basic',
+}
+
+def _extract_languages(sections: dict) -> list:
+    lines = sections.get("languages", [])
+    out = []
+    for line in lines:
+        line = re.sub(r"^[•\-\*▸▪‣◦✓→]\s*", "", line.strip())
+        if not line:
+            continue
+        m = _RE_LANG_PROF.match(line)
+        if m:
+            prof_raw = m.group('prof').lower().strip()
+            out.append({"language": m.group('lang').strip().title(),
+                        "proficiency": _PROF_MAP.get(prof_raw, prof_raw.title())})
+            continue
+        # Comma/pipe separated list without proficiencies: "English, Hindi, Telugu"
+        for tok in re.split(r"[,|;/]", line):
+            tok = tok.strip()
+            if tok and len(tok) <= 30 and re.match(r"^[A-Za-z][A-Za-z\s]+$", tok):
+                out.append({"language": tok.title(), "proficiency": "Conversational"})
+    return out
+
+
+def _extract_awards(sections: dict) -> list:
+    lines = sections.get("awards", [])
+    out = []
+    for line in lines:
+        line = re.sub(r"^[•\-\*▸▪‣◦✓→]\s*", "", line.strip())
+        if not line:
+            continue
+        # Trailing year/date → date field
+        date = ""
+        dm = re.search(r"[\(,\s–—-]\s*((?:19|20)\d{2})\s*\)?\s*$", line)
+        if dm:
+            date = dm.group(1)
+            line = line[:dm.start()].strip().rstrip(',–—-(').strip()
+        # "Title — Organization" or "Title, Organization"
+        title, org = line, ""
+        sm = re.split(r"\s+[–—-]\s+|,\s+(?=[A-Z])", line, maxsplit=1)
+        if len(sm) == 2:
+            title, org = sm[0].strip(), sm[1].strip()
+        out.append({"title": title, "organization": org, "date": date, "description": ""})
+    return out
+
+
+def _extract_volunteer(sections: dict) -> list:
+    lines = [l for l in sections.get("volunteer", []) if l.strip()]
+    if not lines:
+        return []
+    entries = []
+    current = None
+    for line in lines:
+        stripped = line.strip()
+        is_bullet = bool(re.match(r"^[•\-\*▸▪‣◦✓→]", stripped))
+        clean = re.sub(r"^[•\-\*▸▪‣◦✓→]\s*", "", stripped)
+        has_date = bool(_RE_DATE_RANGE.search(clean))
+        if not is_bullet and (current is None or has_date or
+                              (current and current["_desc"])):
+            # Header line → start a new entry
+            role, org, dates = clean, "", ""
+            dmatch = _RE_DATE_RANGE.search(clean)
+            if dmatch:
+                dates = dmatch.group(0)
+                role = clean[:dmatch.start()].strip().rstrip(',|–—-').strip()
+            parts = re.split(r"\s+[–—-]\s+|,\s+|\s+at\s+|\s+@\s+", role, maxsplit=1)
+            if len(parts) == 2:
+                role, org = parts[0].strip(), parts[1].strip()
+            current = {"role": role, "organization": org, "dates": dates, "_desc": []}
+            entries.append(current)
+        elif current is not None:
+            current["_desc"].append(clean)
+        else:
+            current = {"role": clean, "organization": "", "dates": "", "_desc": []}
+            entries.append(current)
+    out = []
+    for e in entries:
+        desc = ""
+        if e["_desc"]:
+            desc = "<ul>" + "".join(f"<li>{d}</li>" for d in e["_desc"]) + "</ul>"
+        out.append({"role": e["role"], "organization": e["organization"],
+                    "dates": e["dates"], "description": desc})
+    return out
+
+
 def parse_resume_text(text: str) -> dict:
     """
     Parse structured data from extracted resume text.
@@ -1143,6 +1259,9 @@ def parse_resume_text(text: str) -> dict:
         "projects":       _extract_projects(sections),
         "certifications": _extract_certifications(sections),
         "publications":   _extract_publications(sections),
+        "languages":      _extract_languages(sections),
+        "volunteer":      _extract_volunteer(sections),
+        "awards":         _extract_awards(sections),
     }
 
 

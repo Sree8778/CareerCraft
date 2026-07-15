@@ -36,10 +36,10 @@ export function showNoApiKeysToast(
   router?: { push: (path: string) => void }
 ) {
   toastFn('🔑 AI features require your API keys.', {
-    description: 'Add your keys in Profile → Settings to unlock all AI-powered features.',
+    description: 'Add your keys in Settings → API Keys to unlock all AI-powered features.',
     duration: 6000,
     action: router
-      ? { label: 'Add Keys', onClick: () => router.push('/candidate/profile') }
+      ? { label: 'Add Keys', onClick: () => router.push('/candidate/settings?section=api-keys') }
       : undefined,
   });
 }

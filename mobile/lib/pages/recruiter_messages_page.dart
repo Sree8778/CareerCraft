@@ -545,12 +545,13 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
                       selectedTime.minute,
                     );
                     
+                    final messenger = ScaffoldMessenger.of(context);
                     Navigator.pop(context);
-                    
-                    ScaffoldMessenger.of(context).showSnackBar(
+
+                    messenger.showSnackBar(
                       const SnackBar(content: Text('Contacting Google Calendar API services...')),
                     );
-                    
+
                     final result = await scheduleInterview(
                       title: titleController.text,
                       description: descController.text,
@@ -558,12 +559,11 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
                       durationMinutes: durationMinutes,
                       attendees: [candidateEmailController.text, recruiterEmailController.text],
                     );
-                    
+
                     if (result != null) {
                       final meetLink = result['meetLink'] ?? 'https://meet.google.com/mock-link';
                       final formattedDate = "${scheduledDateTime.year}-${scheduledDateTime.month.toString().padLeft(2, '0')}-${scheduledDateTime.day.toString().padLeft(2, '0')} at ${scheduledDateTime.hour.toString().padLeft(2, '0')}:${scheduledDateTime.minute.toString().padLeft(2, '0')}";
-                      
-                      // Notify candidate inline
+
                       await _sendSystemMessage(
                         "📅 AUTOMATED MEETING SCHEDULED!\n\n"
                         "An interview invitation has been synchronised on Google Calendar.\n"
@@ -572,12 +572,12 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
                         "🔗 Meet Link: $meetLink\n\n"
                         "Check your email inbox for standard invitations!"
                       );
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
+
+                      messenger.showSnackBar(
                         const SnackBar(backgroundColor: Colors.green, content: Text('Google Calendar invitation generated and shared successfully!')),
                       );
                     } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      messenger.showSnackBar(
                         const SnackBar(backgroundColor: Colors.red, content: Text('Scheduling failed. Verify network backend.')),
                       );
                     }

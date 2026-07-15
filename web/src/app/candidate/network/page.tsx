@@ -8,8 +8,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Network, Search, UserPlus, CheckCircle, RefreshCw, Mail, Phone, Users, Shield, ArrowRight, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
-import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { API_BASE as API } from '@/lib/api';
 
 
@@ -30,22 +28,19 @@ export default function CandidateNetworkPage() {
     if (!isAuthenticated || user?.role !== 'candidate') { router.push('/'); return; }
   }, [authLoading, isAuthenticated, user, router]);
 
-  // ── Real-time connections via Firestore ─────────────────────────────────
-  useEffect(() => {
-    if (!user?.id) return;
-    const uid = user.id;
-    const seen = new Map<string, any>();
-
-    const merge = () => setConnectionsList([...seen.values()]);
-
-    const q1 = query(collection(db, 'connections'), where('senderId',   '==', uid));
-    const q2 = query(collection(db, 'connections'), where('receiverId', '==', uid));
-
-    const u1 = onSnapshot(q1, snap => { snap.docs.forEach(d => seen.set(d.id, { id: d.id, ...d.data() })); merge(); }, () => {});
-    const u2 = onSnapshot(q2, snap => { snap.docs.forEach(d => seen.set(d.id, { id: d.id, ...d.data() })); merge(); }, () => {});
-
-    return () => { u1(); u2(); };
-  }, [user?.id]);
+  // ── Connections via backend API ──────────────────────────────────────────
+  // Direct Firestore listeners require deployed security rules; the API uses
+  // the Admin SDK, so it works regardless and is the reliable path.
+  const fetchConnections = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API}/connections`, {
+        headers: { 'Authorization': `Bearer ${await getToken()}` },
+      });
+      const data = await res.json();
+      if (res.ok) setConnectionsList(data.connections || []);
+    } catch { /* non-fatal — tabs simply stay empty */ }
+  }, [user, getToken]);
 
   const fetchDirectory = useCallback(async () => {
     if (!user) return;
@@ -61,11 +56,10 @@ export default function CandidateNetworkPage() {
   }, [user, searchQuery, roleFilter, getToken]);
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated && user?.role === 'candidate') fetchDirectory();
+    if (!authLoading && isAuthenticated && user?.role === 'candidate') { fetchDirectory(); fetchConnections(); }
   }, [authLoading, isAuthenticated, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep fetchData alias for backwards compat with existing JSX
-  const fetchData = fetchDirectory;
+  const fetchData = () => { fetchDirectory(); fetchConnections(); };
 
   const handleSendRequest = async (targetUid: string) => {
     if (!user) return;
@@ -83,6 +77,7 @@ export default function CandidateNetworkPage() {
       const result = await res.json();
       if (res.ok) {
         toast.success('Connection invitation sent!');
+        fetchConnections();
       } else {
         toast.error(result.error || 'Failed to send request.');
       }
@@ -109,6 +104,7 @@ export default function CandidateNetworkPage() {
       const result = await res.json();
       if (res.ok) {
         toast.success(status === 'accepted' ? 'Request accepted!' : 'Request declined.');
+        fetchConnections();
       } else {
         toast.error(result.error || 'Failed to respond.');
       }
@@ -262,12 +258,10 @@ export default function CandidateNetworkPage() {
                           </div>
 
                           <div className="text-xs text-zinc-400 space-y-1 pt-2">
-                            <p className="flex items-center gap-1.5">
-                              <Mail className="w-3.5 h-3.5 text-zinc-500" /> {item.email}
-                            </p>
-                            {item.phone && (
+                            {/* Server sends a masked email; full contact info is shared only after connecting */}
+                            {item.email && (
                               <p className="flex items-center gap-1.5">
-                                <Phone className="w-3.5 h-3.5 text-zinc-500" /> {item.phone}
+                                <Mail className="w-3.5 h-3.5 text-zinc-500" /> {item.email}
                               </p>
                             )}
                           </div>

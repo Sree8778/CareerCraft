@@ -162,7 +162,7 @@ function NotificationBell({ userId, role }: { userId: string; role: string }) {
 
 export default function Navbar() {
   const { openModal } = useContext(ModalContext);
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, loading } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -197,11 +197,22 @@ export default function Navbar() {
   };
 
   const isOnDashboard = pathname.includes('/recruiter/') || pathname.includes('/candidate/');
+  // The landing page is a dark-branded marketing surface — keep the navbar dark
+  // there regardless of the selected theme so it never clashes with the hero.
+  const forceDark = pathname === '/';
 
   return (
-    <nav className="fixed top-0 left-0 right-0 w-full px-6 py-4 flex justify-between items-center bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-gray-200/50 dark:border-white/10 z-[9999]">
+    <nav
+      className={`fixed top-0 left-0 right-0 w-full px-6 py-4 flex justify-between items-center backdrop-blur-md border-b z-[9999] ${
+        forceDark
+          ? 'bg-zinc-950/70 border-white/10'
+          : 'bg-white/80 dark:bg-zinc-900/80 border-gray-200/50 dark:border-white/10'
+      }`}
+    >
       <div
-        className="flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-white cursor-pointer hover:opacity-80 transition-opacity"
+        className={`flex items-center gap-2 text-2xl font-bold cursor-pointer hover:opacity-80 transition-opacity ${
+          forceDark ? 'text-white' : 'text-gray-900 dark:text-white'
+        }`}
         onClick={handleLogoClick}
       >
         <AppLogo width={80} height={40} className="h-8 w-auto" />
@@ -227,7 +238,9 @@ export default function Navbar() {
           <NotificationBell userId={user.id} role={user.role ?? 'candidate'} />
         )}
 
-        {isAuthenticated ? (
+        {loading ? (
+          <div className="w-24 h-9 rounded-lg animate-pulse" style={{ background: 'var(--cc-border)' }} aria-hidden />
+        ) : isAuthenticated ? (
           <div className="relative" ref={profileMenuRef}>
             <button
               onClick={() => setShowProfileMenu(!showProfileMenu)}
@@ -240,9 +253,13 @@ export default function Navbar() {
                   user?.name?.charAt(0).toUpperCase() || 'U'
                 )}
               </div>
-              <span className="hidden md:block text-sm font-medium text-gray-700 dark:text-gray-300">
-                {user?.name}
-              </span>
+              {/* On sidebar pages the name already appears bottom-left —
+                  show avatar only there to avoid duplicate identity. */}
+              {!isOnDashboard && (
+                <span className="hidden md:block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {user?.name}
+                </span>
+              )}
               <svg
                 className={`w-4 h-4 text-gray-500 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`}
                 fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -293,7 +310,11 @@ export default function Navbar() {
             </Link>
             <button
               onClick={() => openModal('login')}
-              className="px-4 py-2 bg-transparent border border-gray-300 dark:border-white rounded text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-white hover:text-black dark:hover:text-black transition"
+              className={`px-4 py-2 bg-transparent border rounded transition ${
+                forceDark
+                  ? 'border-white/40 text-white hover:bg-white hover:text-black'
+                  : 'border-gray-300 dark:border-white text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-white hover:text-black dark:hover:text-black'
+              }`}
             >
               Login
             </button>

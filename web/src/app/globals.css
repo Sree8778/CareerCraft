@@ -2,81 +2,211 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ────────────────────────────────────────────────────────────────
+   CareerCraft Design Tokens — dark-first premium
+   Dark is the default theme; light is secondary.
+   ──────────────────────────────────────────────────────────────── */
+:root {
+  /* Light theme (secondary) */
+  --cc-bg: #f7f7fb;
+  --cc-surface: rgba(255, 255, 255, 0.72);
+  --cc-surface-solid: #ffffff;
+  --cc-border: rgba(15, 15, 20, 0.08);
+  --cc-text: #16161d;
+  --cc-text-muted: #5b5b6b;
+  --cc-accent: #6d5cff;
+  --cc-accent-2: #b845ed;
+  --cc-accent-3: #ff5ca8;
+  --cc-glow: rgba(109, 92, 255, 0.25);
+  --cc-radius: 1rem;
+}
+
+.dark {
+  /* Dark theme (default) */
+  --cc-bg: #08080d;
+  --cc-surface: rgba(20, 20, 30, 0.55);
+  --cc-surface-solid: #14141e;
+  --cc-border: rgba(255, 255, 255, 0.09);
+  --cc-text: #f2f2f7;
+  --cc-text-muted: #9b9bad;
+  --cc-accent: #8b7bff;
+  --cc-accent-2: #c96bff;
+  --cc-accent-3: #ff6cb5;
+  --cc-glow: rgba(139, 123, 255, 0.35);
+}
+
 /* Global body styles */
 body {
-  @apply bg-white dark:bg-gradient-to-br dark:from-black dark:to-zinc-900 text-gray-900 dark:text-white;
-  font-family: 'Inter', sans-serif;
+  background: var(--cc-bg);
+  color: var(--cc-text);
+  font-family: var(--font-geist-sans, 'Inter'), sans-serif;
+  font-feature-settings: 'ss01' on, 'cv11' on;
 }
 
-/* Glassmorphism styling - theme aware */
+/* ── Aurora ambient background ─────────────────────────────── */
+.cc-aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(110px);
+  opacity: 0.16;
+  will-change: transform;
+}
+.dark .cc-aurora-blob { opacity: 0.22; }
+.cc-aurora-1 {
+  top: -8rem; left: -8rem; width: 34rem; height: 34rem;
+  background: radial-gradient(circle at 30% 30%, var(--cc-accent), transparent 70%);
+  animation: cc-drift-1 26s ease-in-out infinite;
+}
+.cc-aurora-2 {
+  bottom: -6rem; right: -6rem; width: 30rem; height: 30rem;
+  background: radial-gradient(circle at 70% 70%, var(--cc-accent-3), transparent 70%);
+  animation: cc-drift-2 32s ease-in-out infinite;
+}
+.cc-aurora-3 {
+  top: 40%; left: 55%; width: 24rem; height: 24rem;
+  background: radial-gradient(circle at 50% 50%, var(--cc-accent-2), transparent 70%);
+  animation: cc-drift-3 40s ease-in-out infinite;
+}
+.cc-noise {
+  position: absolute; inset: 0;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.02 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+@keyframes cc-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(3rem, -3rem) scale(1.12); }
+}
+@keyframes cc-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-4rem, 3rem) scale(1.08); }
+}
+@keyframes cc-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-2rem, -4rem) scale(1.15); }
+}
+
+/* ── Glassmorphism (theme aware, token driven) ─────────────── */
 .glass {
-  @apply backdrop-blur-lg rounded-xl transition-all duration-300;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  @apply backdrop-blur-xl transition-all duration-300;
+  background: var(--cc-surface);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 .dark .glass {
-  background: rgba(24, 24, 27, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .glass:hover {
-  @apply transition-all duration-300;
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3);
-}
-.dark .glass:hover {
-  background: rgba(24, 24, 27, 0.8);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+  border-color: color-mix(in srgb, var(--cc-accent) 35%, var(--cc-border));
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25), 0 0 24px var(--cc-glow);
 }
 
-/* Muted text for contrast */
-.text-muted {
-  @apply text-gray-600 dark:text-gray-400;
+/* Elevated solid card */
+.cc-card {
+  background: var(--cc-surface-solid);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.cc-card:hover {
+  border-color: color-mix(in srgb, var(--cc-accent) 30%, var(--cc-border));
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18), 0 0 20px var(--cc-glow);
 }
 
-/* Primary text color */
-.text-primary {
-  @apply text-gray-900 dark:text-zinc-300;
+/* ── Buttons ───────────────────────────────────────────────── */
+.cc-btn-primary {
+  @apply inline-flex items-center justify-center gap-2 font-semibold text-white transition-all duration-200;
+  background: linear-gradient(135deg, var(--cc-accent) 0%, var(--cc-accent-2) 55%, var(--cc-accent-3) 120%);
+  border-radius: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  box-shadow: 0 4px 20px var(--cc-glow);
+}
+.cc-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 32px var(--cc-glow);
+  filter: brightness(1.08);
+}
+.cc-btn-primary:active { transform: translateY(0); }
+.cc-btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 font-medium transition-all duration-200;
+  color: var(--cc-text);
+  border: 1px solid var(--cc-border);
+  border-radius: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  background: transparent;
+}
+.cc-btn-ghost:hover {
+  background: var(--cc-surface);
+  border-color: color-mix(in srgb, var(--cc-accent) 40%, var(--cc-border));
 }
 
-/* Tooltip styling */
+/* ── Text helpers ──────────────────────────────────────────── */
+.text-muted { color: var(--cc-text-muted); }
+.text-primary { color: var(--cc-text); }
+.cc-gradient-text {
+  background: linear-gradient(120deg, var(--cc-accent), var(--cc-accent-2), var(--cc-accent-3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Tooltip ───────────────────────────────────────────────── */
 .tooltip {
-  @apply absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-800 dark:bg-zinc-800 text-white text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300;
+  @apply absolute bottom-6 left-1/2 transform -translate-x-1/2 text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-300;
+  background: var(--cc-surface-solid);
+  color: var(--cc-text);
+  border: 1px solid var(--cc-border);
   white-space: nowrap;
   pointer-events: none;
 }
 
-/* Blobs animation */
+/* ── Legacy blob animations (kept for older components) ────── */
 @keyframes blob1 {
   0% { transform: translate(0, 0) scale(1); }
   50% { transform: translate(30px, -50px) scale(1.1); }
   100% { transform: translate(0, 0) scale(1); }
 }
-
 @keyframes blob2 {
   0% { transform: translate(0, 0) scale(1); }
   50% { transform: translate(-40px, 40px) scale(1.1); }
   100% { transform: translate(0, 0) scale(1); }
 }
+.animate-blob1 { animation: blob1 20s infinite ease-in-out; }
+.animate-blob2 { animation: blob2 30s infinite ease-in-out; }
 
-.animate-blob1 {
-  animation: blob1 20s infinite ease-in-out;
+/* ── Scrollbars ────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--cc-text-muted) 40%, transparent) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--cc-text-muted) 35%, transparent);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--cc-text-muted) 60%, transparent);
 }
 
-.animate-blob2 {
-  animation: blob2 30s infinite ease-in-out;
+/* ── Focus visibility (a11y) ───────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--cc-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-/* Accessibility */
+/* ── Reduced motion ────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .animate-blob1, .animate-blob2 {
+  .animate-blob1, .animate-blob2,
+  .cc-aurora-1, .cc-aurora-2, .cc-aurora-3 {
     animation: none;
   }
 }
 
-/* Resume preview HTML content — restore list styles stripped by Tailwind preflight.
-   Targets the shared preview container so no per-element className changes are needed. */
+/* Resume preview HTML content — restore list styles stripped by Tailwind preflight. */
 #resume-preview-content ul,
 .resume-html ul {
   list-style-type: disc;

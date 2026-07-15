@@ -7,8 +7,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Network, Search, UserPlus, CheckCircle, RefreshCw, Mail, Phone, Users, Shield, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { API_BASE as API } from '@/lib/api';
 
 
@@ -29,22 +27,19 @@ export default function RecruiterNetworkPage() {
     if (!isAuthenticated || user?.role !== 'recruiter') { router.push('/'); return; }
   }, [authLoading, isAuthenticated, user, router]);
 
-  // ── Real-time connections via Firestore ─────────────────────────────────
-  useEffect(() => {
-    if (!user?.id) return;
-    const uid = user.id;
-    const seen = new Map<string, any>();
-
-    const merge = () => setConnectionsList([...seen.values()]);
-
-    const q1 = query(collection(db, 'connections'), where('senderId',   '==', uid));
-    const q2 = query(collection(db, 'connections'), where('receiverId', '==', uid));
-
-    const u1 = onSnapshot(q1, snap => { snap.docs.forEach(d => seen.set(d.id, { id: d.id, ...d.data() })); merge(); }, () => {});
-    const u2 = onSnapshot(q2, snap => { snap.docs.forEach(d => seen.set(d.id, { id: d.id, ...d.data() })); merge(); }, () => {});
-
-    return () => { u1(); u2(); };
-  }, [user?.id]);
+  // ── Connections via backend API ──────────────────────────────────────────
+  // Direct Firestore listeners require deployed security rules; the API uses
+  // the Admin SDK, so it works regardless and is the reliable path.
+  const fetchConnections = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch(`${API}/connections`, {
+        headers: { 'Authorization': `Bearer ${await getToken()}` },
+      });
+      const data = await res.json();
+      if (res.ok) setConnectionsList(data.connections || []);
+    } catch { /* non-fatal — tabs simply stay empty */ }
+  }, [user, getToken]);
 
   const fetchDirectory = useCallback(async () => {
     if (!user) return;
@@ -60,10 +55,10 @@ export default function RecruiterNetworkPage() {
   }, [user, searchQuery, roleFilter, getToken]);
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated && user?.role === 'recruiter') fetchDirectory();
+    if (!authLoading && isAuthenticated && user?.role === 'recruiter') { fetchDirectory(); fetchConnections(); }
   }, [authLoading, isAuthenticated, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchData = fetchDirectory;
+  const fetchData = () => { fetchDirectory(); fetchConnections(); };
 
   const handleSendRequest = async (targetUid: string) => {
     if (!user) return;
@@ -77,6 +72,7 @@ export default function RecruiterNetworkPage() {
       const result = await res.json();
       if (res.ok) {
         toast.success('Connection invitation sent!');
+        fetchConnections();
       } else {
         toast.error(result.error || 'Failed to send request.');
       }
@@ -96,6 +92,7 @@ export default function RecruiterNetworkPage() {
       const result = await res.json();
       if (res.ok) {
         toast.success(status === 'accepted' ? 'Request accepted!' : 'Request declined.');
+        fetchConnections();
       } else {
         toast.error(result.error || 'Failed to respond.');
       }
@@ -174,7 +171,7 @@ export default function RecruiterNetworkPage() {
                 activeTab === t.id ? 'border-purple-500 text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'
               }`}>
               {t.label}
-              {t.badge && t.badge > 0 && (
+              {(t.badge ?? 0) > 0 && (
                 <span className="bg-red-500 text-white text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full">{t.badge}</span>
               )}
             </button>
@@ -218,8 +215,8 @@ export default function RecruiterNetworkPage() {
                             </div>
                           </div>
                           <div className="text-xs text-zinc-400 space-y-1 pt-2">
-                            <p className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-zinc-500" /> {item.email}</p>
-                            {item.phone && <p className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-zinc-500" /> {item.phone}</p>}
+                            {/* Server sends a masked email; full contact info is shared only after connecting */}
+                            {item.email && <p className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-zinc-500" /> {item.email}</p>}
                           </div>
                         </div>
                         <div className="pt-2">

@@ -340,7 +340,7 @@ export default function LoginModal() {
                 <h2 className="text-2xl font-black bg-gradient-to-r from-white to-zinc-300 bg-clip-text text-transparent">
                   {isLogin ? 'Welcome Back' : 'Get Started Free'}
                 </h2>
-                <p className="text-xs text-zinc-500 mt-1">RecruitEdge — AI-Powered Hiring Platform</p>
+                <p className="text-xs text-zinc-500 mt-1">CareerCraft — AI-Powered Hiring Platform</p>
               </div>
 
               {/* Role toggle */}
@@ -545,7 +545,7 @@ export default function LoginModal() {
                 <p className="text-xs text-zinc-500 mt-1">Required for secure interview sessions</p>
               </div>
               <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-xs space-y-2 text-zinc-400 leading-relaxed">
-                <p>To protect hiring integrity, RecruitEdge uses:</p>
+                <p>To protect hiring integrity, CareerCraft uses:</p>
                 <ul className="list-disc list-inside space-y-1 text-[11px] text-zinc-300">
                   <li><strong>Biometric check</strong> — face matching against government ID</li>
                   <li><strong>Audio scanner</strong> — detects virtual audio routing</li>

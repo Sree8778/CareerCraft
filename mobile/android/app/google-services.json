@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "414523842687",
+    "project_id": "recruit-edge-e0d1b",
+    "storage_bucket": "recruit-edge-e0d1b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:414523842687:android:c584733ec0075113fadf4a",
+        "android_client_info": {
+          "package_name": "com.example.recruit_edge"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "414523842687-pkbucr62iua4mm31ffn3ksq44u0g6dap.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.recruit_edge",
+            "certificate_hash": "beefa8570139309ea90901761c85224a30e074fa"
+          }
+        },
+        {
+          "client_id": "414523842687-h7f058ds4fkpqspqgkpjtdc73ruj5j1f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5hcrN050v6n8qogKw6hiKLqLx8gKbvLM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "414523842687-h7f058ds4fkpqspqgkpjtdc73ruj5j1f.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

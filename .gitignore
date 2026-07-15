@@ -48,6 +48,11 @@ android application/**/*.py[cod]
 # Test artifacts
 test_out.docx
 test_out.pdf
+tests/__pycache__/
+tests/*.pyc
+tests/test_credentials.json
+tests/session/
+web/firebase-debug.log
 
 # Cloud deployment secrets
 .env.cloud

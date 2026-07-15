@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { API_BASE } from '@/lib/api';
 
 interface ResumeData {
   personal?: { name?: string; email?: string; phone?: string; location?: string; headline?: string };
@@ -105,10 +106,28 @@ function EntryItem({ logoIcon, title, sub, sub2, meta, body, link, children }: {
 
 /* ─── Page ────────────────────────────────────────────── */
 export default function CandidateProfilePage() {
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, getToken, loading: authLoading } = useAuth();
   const router = useRouter();
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [connectionCount, setConnectionCount] = useState<number | null>(null);
+
+  // Real accepted-connections count via the backend API (Admin SDK), so it
+  // works without depending on deployed client-side Firestore rules.
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/connections`, {
+          headers: { 'Authorization': `Bearer ${await getToken()}` },
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setConnectionCount((data.connections || []).filter((c: any) => c.status === 'accepted').length);
+        }
+      } catch { setConnectionCount(null); }
+    })();
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (authLoading) return;
@@ -245,7 +264,7 @@ export default function CandidateProfilePage() {
 
                   <div className="flex items-center gap-3 pt-1">
                     <Link href="/candidate/network" className="text-sm font-semibold text-[#0A66C2] hover:text-[#0a5ab2] hover:underline">
-                      {experience.length * 12 + education.length * 6 + allSkills.length * 2} connections
+                      {connectionCount === null ? '' : `${connectionCount} connection${connectionCount === 1 ? '' : 's'}`}
                     </Link>
                     <Link href="/candidate/network" className="text-sm text-[#566075] hover:text-[#94A3B8]">
                       · Contact info
