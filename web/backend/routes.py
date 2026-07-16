@@ -1409,7 +1409,7 @@ def verify_key_route():
             try:
                 import requests as _req
                 resp = _req.post(
-                    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+                    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-latest:generateContent',
                     params={'key': key},
                     json={'contents': [{'parts': [{'text': 'Say OK'}]}]},
                     timeout=15
