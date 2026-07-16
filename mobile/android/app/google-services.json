@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "414523842687-pkbucr62iua4mm31ffn3ksq44u0g6dap.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.recruit_edge",
+            "certificate_hash": "87691c8a16a9436c3901f4a4a2f3ea0e828abe3f242412ef04be451c0be32fbf"
+          }
+        },
+        {
           "client_id": "414523842687-h7f058ds4fkpqspqgkpjtdc73ruj5j1f.apps.googleusercontent.com",
           "client_type": 3
         }
