@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:414523842687:android:c584733ec0075113fadf4a",
         "android_client_info": {
-          "package_name": "com.example.recruit_edge"
+          "package_name": "Recruit_Edge.android"
         }
       },
       "oauth_client": [
@@ -17,16 +17,45 @@
           "client_id": "414523842687-pkbucr62iua4mm31ffn3ksq44u0g6dap.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.recruit_edge",
+            "package_name": "Recruit_Edge.android",
             "certificate_hash": "beefa8570139309ea90901761c85224a30e074fa"
           }
         },
         {
-          "client_id": "414523842687-pkbucr62iua4mm31ffn3ksq44u0g6dap.apps.googleusercontent.com",
+          "client_id": "414523842687-h7f058ds4fkpqspqgkpjtdc73ruj5j1f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5hcrN050v6n8qogKw6hiKLqLx8gKbvLM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "414523842687-h7f058ds4fkpqspqgkpjtdc73ruj5j1f.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:414523842687:android:0e35e08ffe19586afadf4a",
+        "android_client_info": {
+          "package_name": "com.example.recruit_edge"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "414523842687-rv63qdggsk9it00lvlooefqdkpm81asl.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.recruit_edge",
-            "certificate_hash": "87691c8a16a9436c3901f4a4a2f3ea0e828abe3f242412ef04be451c0be32fbf"
+            "certificate_hash": "beefa8570139309ea90901761c85224a30e074fa"
           }
         },
         {
