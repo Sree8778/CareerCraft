@@ -78,10 +78,20 @@ class AuthService {
   static Future<User?> signInWithGoogle() async {
     await ensureInitialized();
     try {
-      final googleUser = await GoogleSignIn().signIn();
+      // serverClientId (web OAuth client) is required on Android so that
+      // googleAuth.idToken is populated — without it idToken is null and
+      // Firebase rejects the credential.
+      final googleUser = await GoogleSignIn(
+        serverClientId: '414523842687-h7f058ds4fkpqspqgkpjtdc73ruj5j1f.apps.googleusercontent.com',
+      ).signIn();
       if (googleUser == null) return null; // user cancelled
 
       final googleAuth = await googleUser.authentication;
+
+      if (googleAuth.idToken == null) {
+        throw Exception('Google idToken is null — check SHA-1 fingerprint is registered in Firebase Console.');
+      }
+
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
