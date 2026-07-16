@@ -8,7 +8,7 @@ dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 
 # Lightweight model — gemini-2.0-flash is fast, low-cost, and not deprecated
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-latest")
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-flash-lite-latest")
 
 # Module-level client cache — recreated only when the API key changes
 _current_api_key = None

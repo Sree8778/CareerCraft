@@ -35,7 +35,7 @@ _ENDPOINTS: dict[str, str] = {
 
 # Lightweight models (JSON extraction, scoring, search)
 _MODELS_LIGHT: dict[str, str] = {
-    "Gemini":     os.getenv("GEMINI_MODEL",  "gemini-2.5-flash-latest"),
+    "Gemini":     os.getenv("GEMINI_MODEL",  "gemini-flash-lite-latest"),
     "Groq":       os.getenv("GROQ_MODEL",    "llama3-8b-8192"),
     "OpenAI":     os.getenv("OPENAI_MODEL",  "gpt-4o-mini"),
     "Anthropic":  os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest"),
@@ -44,7 +44,7 @@ _MODELS_LIGHT: dict[str, str] = {
 
 # Heavy models (cover letters, interview questions, complex reasoning)
 _MODELS_HEAVY: dict[str, str] = {
-    "Gemini":     os.getenv("GEMINI_MODEL_HEAVY",     "gemini-2.5-flash-latest"),
+    "Gemini":     os.getenv("GEMINI_MODEL_HEAVY",     "gemini-flash-latest"),
     "Groq":       os.getenv("GROQ_MODEL_HEAVY",       "llama-3.3-70b-versatile"),
     "OpenAI":     os.getenv("OPENAI_MODEL_HEAVY",     "gpt-4o"),
     "Anthropic":  os.getenv("ANTHROPIC_MODEL_HEAVY",  "claude-3-5-sonnet-latest"),
