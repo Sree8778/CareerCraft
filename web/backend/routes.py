@@ -1408,16 +1408,15 @@ def verify_key_route():
         if provider == 'Gemini':
             try:
                 import requests as _req
-                resp = _req.post(
-                    f'https://generativelanguage.googleapis.com/v1beta/models/{os.getenv("GEMINI_MODEL", "gemini-2.5-flash-latest")}:generateContent',
-                    params={'key': key},
-                    json={'contents': [{'parts': [{'text': 'Say OK'}]}]},
+                # Use ListModels — doesn't depend on any specific model name being available
+                resp = _req.get(
+                    'https://generativelanguage.googleapis.com/v1beta/models',
+                    params={'key': key, 'pageSize': 1},
                     timeout=15
                 )
                 data_r = resp.json()
-                if resp.status_code == 200 and 'candidates' in data_r:
+                if resp.status_code == 200 and 'models' in data_r:
                     return jsonify({"valid": True, "message": "Gemini API Key verified successfully!"}), 200
-                # Surface the real error from Google
                 error_msg = data_r.get('error', {}).get('message', str(data_r))
                 error_status = data_r.get('error', {}).get('status', '')
                 safe_msg = error_msg.encode('ascii', errors='replace').decode('ascii')
@@ -1425,7 +1424,7 @@ def verify_key_route():
                 if 'API_KEY_INVALID' in error_status or 'invalid' in error_msg.lower():
                     return jsonify({"valid": False, "error": "API key is invalid. Check that you copied the full key correctly."}), 200
                 if 'PERMISSION_DENIED' in error_status or 'SERVICE_DISABLED' in error_status or 'blocked' in error_msg.lower():
-                    return jsonify({"valid": False, "error": "This key is blocked for content generation. Please get a key from aistudio.google.com/apikey"}), 200
+                    return jsonify({"valid": False, "error": "This key is blocked. Please get a key from aistudio.google.com/apikey"}), 200
                 if resp.status_code == 429 or 'RESOURCE_EXHAUSTED' in error_status or 'quota' in error_msg.lower():
                     return jsonify({"valid": False, "error": "Key quota exhausted. Create a new free key at aistudio.google.com/apikey"}), 200
                 return jsonify({"valid": False, "error": f"Gemini error: {safe_msg[:150]}"}), 200
