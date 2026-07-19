@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:recruit_edge/services/auth_service.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:recruit_edge/pages/candidate_applications_page.dart';
 import 'package:recruit_edge/pages/candidate_profile_page.dart';
@@ -7,6 +8,7 @@ import 'package:recruit_edge/pages/candidate_resume_builder_page.dart';
 import 'package:recruit_edge/pages/candidate_interview_page.dart';
 import 'package:recruit_edge/pages/network_page.dart';
 import 'package:recruit_edge/pages/companies_page.dart';
+import 'package:recruit_edge/pages/setup_password_page.dart';
 
 /// "More" hub — everything that doesn't fit the bottom nav.
 /// Mirrors the web sidebar's grouped structure.
@@ -40,6 +42,15 @@ class MorePage extends StatelessWidget {
       ],
       'Account': [
         {'icon': Icons.person_outline, 'label': 'My Profile', 'page': const CandidateProfilePage()},
+        {
+          'icon': AuthService.hasPasswordProvider()
+              ? Icons.lock_reset_outlined
+              : Icons.lock_open_outlined,
+          'label': AuthService.hasPasswordProvider()
+              ? 'Change Password'
+              : 'Set Up Password',
+          'page': const SetupPasswordPage(),
+        },
       ],
     };
 

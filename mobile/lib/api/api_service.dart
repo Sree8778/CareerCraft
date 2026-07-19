@@ -111,6 +111,24 @@ Future<List<Map<String, dynamic>>> fetchJobs() async {
   }
 }
 
+// Fetch jobs posted by a specific recruiter
+Future<List<Map<String, dynamic>>> fetchRecruiterJobs(String recruiterId) async {
+  try {
+    final token = await AuthService.getToken();
+    final uri = Uri.parse('$baseUrl/jobs').replace(queryParameters: {'recruiterId': recruiterId});
+    final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final List<dynamic> jobsJson = data['jobs'];
+      return List<Map<String, dynamic>>.from(jobsJson);
+    }
+    return [];
+  } catch (e) {
+    print('Error fetching recruiter jobs: $e');
+    return [];
+  }
+}
+
 // New function to fetch all candidates from the backend
 Future<List<Map<String, dynamic>>> fetchCandidates() async {
   try {

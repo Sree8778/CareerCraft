@@ -12,6 +12,7 @@ import {
   RecaptchaVerifier,
   ConfirmationResult,
   sendEmailVerification,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
@@ -22,7 +23,7 @@ import {
 } from 'lucide-react';
 import SocialLoginButtons from './SocialLoginButtons';
 
-type Step = 'form' | 'emailOtp' | 'phoneOtp' | 'consent';
+type Step = 'form' | 'emailOtp' | 'phoneOtp' | 'consent' | 'forgotPassword' | 'resetSent';
 type LoginMethod = 'email' | 'phone';
 
 const INPUT =
@@ -50,6 +51,31 @@ export default function LoginModal() {
   const fullName = [form.firstName, form.middleName, form.lastName].filter(Boolean).join(' ');
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
+
+  // ── Forgot password state ─────────────────────────────────────────────────────
+  const [forgotEmail, setForgotEmail] = useState('');
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!forgotEmail.trim()) { toast.error('Please enter your email address.'); return; }
+    setLoading(true);
+    try {
+      if (isMock()) {
+        toast.info('Mock mode: reset email would be sent to ' + forgotEmail);
+        setStep('resetSent');
+        return;
+      }
+      await sendPasswordResetEmail(auth, forgotEmail.trim());
+      setStep('resetSent');
+    } catch (err: any) {
+      const msg: Record<string, string> = {
+        'auth/user-not-found':  'No account found with this email.',
+        'auth/invalid-email':   'Please enter a valid email address.',
+        'auth/too-many-requests': 'Too many requests. Try again later.',
+      };
+      toast.error(msg[err.code] ?? err.message ?? 'Could not send reset email.');
+    } finally { setLoading(false); }
+  }
 
   // ── OTP state ────────────────────────────────────────────────────────────────
   const [emailOtp, setEmailOtp] = useState(['', '', '', '', '', '']);
@@ -385,6 +411,15 @@ export default function LoginModal() {
                       {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  <div className="text-right -mt-1">
+                    <button
+                      type="button"
+                      onClick={() => { setForgotEmail(form.loginEmail); setStep('forgotPassword'); }}
+                      className="text-xs text-indigo-400 hover:text-indigo-300 hover:underline transition"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
                   <button type="submit" disabled={loading} className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold rounded-xl text-sm flex items-center justify-center gap-1.5 transition disabled:opacity-50">
                     {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <><span>Log In</span><ChevronRight className="w-4 h-4" /></>}
                   </button>
@@ -559,6 +594,81 @@ export default function LoginModal() {
                 </button>
                 <button onClick={reset} className="w-full text-xs text-zinc-500 hover:text-zinc-300 transition underline">Cancel</button>
               </div>
+            </motion.div>
+          )}
+
+          {/* ── FORGOT PASSWORD ── */}
+          {step === 'forgotPassword' && (
+            <motion.div key="forgotPassword" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
+              <div className="text-center">
+                <div className="inline-flex p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl mb-3 text-indigo-400">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-white">Reset your password</h3>
+                <p className="text-xs text-zinc-400 mt-2 max-w-xs mx-auto">
+                  Enter your email and we'll send you a link to reset your password.
+                </p>
+              </div>
+              <form onSubmit={handleForgotPassword} className="space-y-3">
+                <div className="relative">
+                  <Mail className={INPUT_ICON} />
+                  <input
+                    type="email"
+                    placeholder="Email Address"
+                    className={INPUT}
+                    value={forgotEmail}
+                    onChange={e => setForgotEmail(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold rounded-xl text-sm flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                >
+                  {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <><span>Send Reset Link</span><ChevronRight className="w-4 h-4" /></>}
+                </button>
+              </form>
+              <button
+                onClick={() => setStep('form')}
+                className="w-full flex items-center justify-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to login
+              </button>
+            </motion.div>
+          )}
+
+          {/* ── RESET SENT ── */}
+          {step === 'resetSent' && (
+            <motion.div key="resetSent" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="space-y-6 text-center py-4">
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <Mail className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Check your email</h3>
+                  <p className="text-xs text-zinc-400 mt-2 max-w-xs mx-auto leading-relaxed">
+                    We sent a password reset link to{' '}
+                    <strong className="text-zinc-200">{forgotEmail}</strong>.
+                    Check your inbox and click the link to set a new password.
+                  </p>
+                </div>
+                <p className="text-[11px] text-zinc-600">Didn't receive it? Check your spam folder or{' '}
+                  <button
+                    onClick={() => setStep('forgotPassword')}
+                    className="text-indigo-400 hover:underline"
+                  >
+                    try again
+                  </button>.
+                </p>
+              </div>
+              <button
+                onClick={() => { setStep('form'); setForgotEmail(''); }}
+                className="w-full py-3 bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-300 font-bold rounded-xl text-sm transition"
+              >
+                Back to login
+              </button>
             </motion.div>
           )}
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:recruit_edge/api/api_service.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 
 class RecruiterMessagesPage extends StatefulWidget {
@@ -253,6 +254,8 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
 
   // Quick action: Show candidate details inside a premium bottom sheet
   Future<void> _showCandidatePreview() async {
+    final candidateId = widget.chat['candidateId'] ?? '';
+
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF0F0C20),
@@ -267,126 +270,215 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
           maxChildSize: 0.95,
           expand: false,
           builder: (context, scrollController) {
-            return SingleChildScrollView(
-              controller: scrollController,
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 50,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
+            return FutureBuilder<DocumentSnapshot>(
+              future: candidateId.isNotEmpty
+                  ? FirebaseFirestore.instance.collection('users').doc(candidateId).get()
+                  : Future.value(null),
+              builder: (context, snapshot) {
+                Map<String, dynamic> cd = {};
+                if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+                  cd = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+                }
+
+                final name = cd['name'] ?? widget.chat['candidateName'] ?? 'Candidate';
+                final headline = cd['headline'] ?? widget.chat['jobTitle'] ?? '';
+                final email = cd['email'] ?? '';
+                final phone = cd['phone'] ?? '';
+                final location = cd['location'] ?? '';
+                final skills = cd['skills'] ?? '';
+                final bio = cd['bio'] ?? '';
+
+                // Pull from resume object if top-level fields not set
+                final resume = cd['resume'] as Map<String, dynamic>? ?? {};
+                final experience = resume['experience'] as List<dynamic>? ?? [];
+                final education = resume['education'] as List<dynamic>? ?? [];
+
+                return SingleChildScrollView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor: Colors.tealAccent.withOpacity(0.2),
-                        child: Text(
-                          widget.chat['candidateName'].toString().substring(0,1).toUpperCase(),
-                          style: const TextStyle(fontSize: 24, color: Colors.teal, fontWeight: FontWeight.bold),
+                      Center(
+                        child: Container(
+                          width: 50, height: 5,
+                          decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.chat['candidateName'] ?? 'Candidate Profile',
-                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 30,
+                            backgroundColor: Colors.tealAccent.withOpacity(0.2),
+                            child: Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : 'C',
+                              style: const TextStyle(fontSize: 24, color: Colors.teal, fontWeight: FontWeight.bold),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              widget.chat['jobTitle'] ?? 'Software Professional',
-                              style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(name, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                                if (headline.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(headline, style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.bold)),
+                                ],
+                                if (location.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(location, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                                ],
+                              ],
                             ),
-                          ],
+                          ),
+                          if (snapshot.connectionState == ConnectionState.waiting)
+                            const SizedBox(
+                              width: 20, height: 20,
+                              child: CircularProgressIndicator(color: Colors.deepPurpleAccent, strokeWidth: 2),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      const Divider(color: Colors.white12),
+                      const SizedBox(height: 12),
+                      const Text('CANDIDATE SNAPSHOT', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+
+                      GlassCard(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Contact
+                              if (email.isNotEmpty) ...[
+                                _previewRow(Icons.email_outlined, email),
+                                const SizedBox(height: 8),
+                              ],
+                              if (phone.isNotEmpty) ...[
+                                _previewRow(Icons.phone_outlined, phone),
+                                const SizedBox(height: 8),
+                              ],
+                              // Bio
+                              if (bio.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(bio, style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 12, height: 1.4)),
+                                const SizedBox(height: 12),
+                              ],
+                              // Education
+                              if (education.isNotEmpty) ...[
+                                _sectionHeader(Icons.school, 'Education'),
+                                const SizedBox(height: 6),
+                                ...education.take(2).map((e) {
+                                  final edu = e as Map<String, dynamic>? ?? {};
+                                  final deg = edu['degree'] ?? '';
+                                  final school = edu['institution'] ?? edu['school'] ?? '';
+                                  final year = edu['endYear'] ?? edu['year'] ?? '';
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Text(
+                                      [deg, school, year.toString()].where((s) => s.isNotEmpty).join(' · '),
+                                      style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
+                                    ),
+                                  );
+                                }),
+                                const SizedBox(height: 12),
+                              ],
+                              // Experience
+                              if (experience.isNotEmpty) ...[
+                                _sectionHeader(Icons.work, 'Experience'),
+                                const SizedBox(height: 6),
+                                ...experience.take(2).map((e) {
+                                  final exp = e as Map<String, dynamic>? ?? {};
+                                  final title = exp['title'] ?? exp['role'] ?? '';
+                                  final company = exp['company'] ?? '';
+                                  final end = exp['endYear'] ?? exp['endDate'] ?? 'Present';
+                                  final start = exp['startYear'] ?? exp['startDate'] ?? '';
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Text(
+                                      [title, company, [start, end].where((s) => s.toString().isNotEmpty).join(' - ')].where((s) => s.toString().isNotEmpty).join(' · '),
+                                      style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
+                                    ),
+                                  );
+                                }),
+                                const SizedBox(height: 12),
+                              ],
+                              // Skills
+                              if (skills.isNotEmpty) ...[
+                                _sectionHeader(Icons.psychology, 'Skills'),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: (skills as String)
+                                      .split(',')
+                                      .map((s) => s.trim())
+                                      .where((s) => s.isNotEmpty)
+                                      .take(8)
+                                      .map((s) => Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: Colors.deepPurpleAccent.withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.3)),
+                                            ),
+                                            child: Text(s, style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 11)),
+                                          ))
+                                      .toList(),
+                                ),
+                              ],
+                              // Fallback if no extra data yet
+                              if (email.isEmpty && skills.isEmpty && experience.isEmpty && education.isEmpty)
+                                Text(
+                                  'Candidate profile details not yet available. Ask them to complete their profile.',
+                                  style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12, fontStyle: FontStyle.italic),
+                                ),
+                            ],
+                          ),
                         ),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Visit Candidates Directory for full biometrics & proctor logs.')),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurpleAccent),
+                        child: const Text('View Full Assessments & Proctor Logs', style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  const Divider(color: Colors.white12),
-                  const SizedBox(height: 12),
-                  
-                  // Interactive profile card sections
-                  const Text('PREVIEW STATS', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  
-                  GlassCard(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.school, color: Colors.deepPurpleAccent, size: 18),
-                              SizedBox(width: 8),
-                              Text('Education', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'B.S. Computer Science, Stanford University (2022)',
-                            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13),
-                          ),
-                          const SizedBox(height: 16),
-                          const Row(
-                            children: [
-                              Icon(Icons.work, color: Colors.deepPurpleAccent, size: 18),
-                              SizedBox(width: 8),
-                              Text('Experience', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Senior Software Engineer at TechCorp (2023 - Present)',
-                            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13),
-                          ),
-                          const SizedBox(height: 16),
-                          const Row(
-                            children: [
-                              Icon(Icons.psychology, color: Colors.deepPurpleAccent, size: 18),
-                              SizedBox(width: 8),
-                              Text('Core Skills', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Flutter, Dart, Firebase, Python, Next.js, Flask, SQLite',
-                            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      // Custom dialog could route directly to candidate full profile
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('To review complete biometrics & anti-cheat audits, visit Candidates Directory.')),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurpleAccent),
-                    child: const Text('View Full Assessments & Proctor Logs', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
+                );
+              },
             );
           },
         );
       },
+    );
+  }
+
+  Widget _previewRow(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: Colors.grey),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12))),
+      ],
+    );
+  }
+
+  Widget _sectionHeader(IconData icon, String label) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.deepPurpleAccent, size: 16),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+      ],
     );
   }
 

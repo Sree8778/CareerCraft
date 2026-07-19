@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:recruit_edge/services/auth_service.dart';
 import 'package:recruit_edge/widgets/animated_background.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
+import 'package:recruit_edge/auth/forgot_password_page.dart';
 
 class LoginPage extends StatefulWidget {
   final VoidCallback onLoginSuccess;
@@ -132,8 +133,27 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
 
+                    // Forgot password link
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ForgotPasswordPage(
+                              initialEmail: _emailController.text.trim(),
+                            ),
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          foregroundColor: Colors.deepPurpleAccent,
+                        ),
+                        child: const Text('Forgot password?', style: TextStyle(fontSize: 13)),
+                      ),
+                    ),
+
                     if (_errorMessage != null) ...[
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       Text(
                         _errorMessage!,
                         style: const TextStyle(color: Colors.redAccent, fontSize: 13),
@@ -141,7 +161,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ],
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
 
                     // Sign in button
                     SizedBox(

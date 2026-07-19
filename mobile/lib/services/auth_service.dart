@@ -122,6 +122,50 @@ class AuthService {
     }
   }
 
+  /// Sends a Firebase password-reset email to [email].
+  static Future<void> sendPasswordReset(String email) async {
+    await ensureInitialized();
+    await FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
+  }
+
+  /// Returns true if the current user has an email/password provider linked.
+  static bool hasPasswordProvider() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+    return user.providerData.any((p) => p.providerId == 'password');
+  }
+
+  /// Links an email/password credential to a Google-only account.
+  /// Call this when [hasPasswordProvider] returns false.
+  static Future<void> setupPassword(String password) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('No signed-in user.');
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      throw Exception('Account has no email address.');
+    }
+    final credential = EmailAuthProvider.credential(email: email, password: password);
+    await user.linkWithCredential(credential);
+  }
+
+  /// Re-authenticates with [currentPassword] then updates to [newPassword].
+  /// Call this when [hasPasswordProvider] returns true.
+  static Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('No signed-in user.');
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      throw Exception('Account has no email address.');
+    }
+    // Firebase requires recent auth before password change.
+    final credential = EmailAuthProvider.credential(email: email, password: currentPassword);
+    await user.reauthenticateWithCredential(credential);
+    await user.updatePassword(newPassword);
+  }
+
   static Future<void> logout() async {
     await ensureInitialized();
     if (_firebaseInitialized) {

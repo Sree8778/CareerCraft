@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -631,7 +632,7 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
                     child: _stateIdFile != null
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(16),
-                            child: Image.network(_stateIdFile!.path, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) {
+                            child: Image.file(File(_stateIdFile!.path), fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) {
                               return const Center(child: Icon(Icons.document_scanner, color: Colors.deepPurpleAccent, size: 50));
                             }),
                           )
@@ -662,7 +663,7 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
                     child: _selfieFile != null
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(16),
-                            child: Image.network(_selfieFile!.path, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) {
+                            child: Image.file(File(_selfieFile!.path), fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) {
                               return const Center(child: Icon(Icons.face, color: Colors.deepPurpleAccent, size: 50));
                             }),
                           )
