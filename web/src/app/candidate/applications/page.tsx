@@ -274,9 +274,9 @@ export default function CandidateApplicationsPage() {
           <div className="text-center py-32 space-y-4">
             <FileText className="w-12 h-12 mx-auto text-zinc-700" />
             <p className="text-zinc-400 font-semibold">No applications yet.</p>
-            <Link href="/candidate/smart-apply"
+            <Link href="/candidate/jobs"
               className="inline-block px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition">
-              Start Smart Apply
+              Browse Jobs
             </Link>
           </div>
         ) : (
@@ -354,13 +354,11 @@ interface KanbanCardProps {
 }
 
 const SOURCE_COLORS: Record<string, string> = {
-  smart_apply_autonomous: 'bg-violet-500/15 text-violet-300 border-violet-500/25',
-  smart_apply:            'bg-indigo-500/15 text-indigo-300 border-indigo-500/25',
-  supervised:             'bg-sky-500/15    text-sky-300    border-sky-500/25',
+  supervised: 'bg-sky-500/15 text-sky-300 border-sky-500/25',
 };
 
 function KanbanCard({ app, col, expanded, onToggle, onDragStart, onMoveTo }: KanbanCardProps) {
-  const sourceLabel = app.source?.includes('autonomous') ? 'Auto' : app.source ? 'Manual' : '';
+  const sourceLabel = app.source ? 'Manual' : '';
   const sourceColor = SOURCE_COLORS[app.source ?? ''] ?? 'bg-white/5 text-zinc-400 border-white/10';
 
   const otherCols = COLUMNS.filter(c => c.id !== col.id);

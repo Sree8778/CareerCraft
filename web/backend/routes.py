@@ -1,4 +1,4 @@
-# backend/routes.py
+﻿# backend/routes.py
 from flask import request, jsonify, send_file, Blueprint
 import io
 
@@ -45,8 +45,6 @@ import hashlib as _hashlib_lib
 
 # In-memory OTP fallback (used only when Firestore is unavailable)
 _otp_store: dict = {}
-# Tracks running autonomous apply threads per user
-_autonomous_sessions: dict = {}
 
 # Create a Blueprint for API routes
 api_bp = Blueprint('api', __name__)
@@ -56,7 +54,7 @@ def _is_no_keys(e: Exception) -> bool:
 
 def _no_keys_resp(e: Exception = None):
     msg = str(e).replace("NO_API_KEYS:", "").strip() if e else \
-          "Add your API keys in Profile → Settings to unlock AI-powered features."
+          "Add your API keys in Profile â†’ Settings to unlock AI-powered features."
     return jsonify({
         "error": "no_api_keys",
         "message": msg,
@@ -69,7 +67,7 @@ def configure_dynamic_api_key():
     set_api_key("")
     set_request_wallet([])
 
-    # Inline wallet via header (signup flow — user's own keys before Firestore registration).
+    # Inline wallet via header (signup flow â€” user's own keys before Firestore registration).
     import json as _json
     inline_wallet_json = request.headers.get('X-API-Wallet', '').strip()
     if inline_wallet_json:
@@ -118,7 +116,7 @@ def configure_dynamic_api_key():
             return
         wallet = user_doc.to_dict().get('apiKeysWallet', [])
 
-        # Status-change callback — persists key state changes back to Firestore.
+        # Status-change callback â€” persists key state changes back to Firestore.
         def _on_status_change(entry):
             try:
                 update = {'status': entry.status}
@@ -362,7 +360,7 @@ def evaluate_response_route():
 @api_bp.route('/practice-interview/ai-turn', methods=['POST'])
 @require_auth
 def practice_ai_turn():
-    """Conversational AI interviewer turn — returns natural speech text."""
+    """Conversational AI interviewer turn â€” returns natural speech text."""
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
     data = request.json
@@ -524,10 +522,10 @@ def _get_all_candidates_helper():
                     exp_items = []
                     for e in experience_list:
                         if isinstance(e, dict):
-                            exp_items.append(f"{e.get('jobTitle', '')} at {e.get('company', '')} ({e.get('dates', '')}) • {e.get('description', '')}")
+                            exp_items.append(f"{e.get('jobTitle', '')} at {e.get('company', '')} ({e.get('dates', '')}) â€¢ {e.get('description', '')}")
                         else:
                             exp_items.append(str(e))
-                    experience_str = " • ".join(filter(None, exp_items))
+                    experience_str = " â€¢ ".join(filter(None, exp_items))
                 
                 education_list = resume_data.get('education', [])
                 education_str = ""
@@ -538,7 +536,7 @@ def _get_all_candidates_helper():
                             edu_items.append(f"{ed.get('degree', '')} from {ed.get('institution', '')} ({ed.get('graduationYear', '')})")
                         else:
                             edu_items.append(str(ed))
-                    education_str = " • ".join(filter(None, edu_items))
+                    education_str = " â€¢ ".join(filter(None, edu_items))
                 
                 candidates.append({
                     "id": uid,
@@ -853,7 +851,7 @@ def analyze_resume_quality_route():
     """
     Rule-based resume completeness/quality check.
     Accepts { resumeData } in body, or loads from Firestore for authenticated user.
-    No AI cost — instant response.
+    No AI cost â€” instant response.
     """
     configure_dynamic_api_key()
     uid = request.user.get('uid')
@@ -1101,7 +1099,7 @@ def schedule_interview_route():
                     'read': False,
                 })
 
-        # Attempt Google Calendar event — graceful fallback
+        # Attempt Google Calendar event â€” graceful fallback
         cal_link = meeting_link
         try:
             clean_time = scheduled_at.split('.')[0].replace('Z', '')
@@ -1110,7 +1108,7 @@ def schedule_interview_route():
             attendees = [e for e in [candidate_email, recruiter_email] if e]
             if attendees:
                 cal_link = create_calendar_event(
-                    summary=f"{interview_type.title()} Interview – {job_title}",
+                    summary=f"{interview_type.title()} Interview â€“ {job_title}",
                     description=notes or f"Interview for {job_title} at {company}",
                     start_time=start_dt,
                     end_time=end_dt,
@@ -1127,7 +1125,7 @@ def schedule_interview_route():
                         meet_link=cal_link,
                     )
         except FileNotFoundError:
-            pass  # Calendar credentials not configured — use stored meetingLink
+            pass  # Calendar credentials not configured â€” use stored meetingLink
         except Exception as cal_err:
             print(f"[schedule] calendar/email non-fatal error: {cal_err}")
 
@@ -1286,13 +1284,13 @@ def post_job_v1():
             "jobType": job_type or 'Full-time',
             "department": data.get('department', ''),
             "location": data.get('location', 'Remote'),
-            # The company on a posting is what the recruiter typed — never
+            # The company on a posting is what the recruiter typed â€” never
             # silently replace it with the recruiter's personal name.
             "company": data.get('company') or request.user.get('name', 'Confidential Employer'),
             "recruiterId": recruiter_id,
             "postedDate": datetime.datetime.utcnow().strftime('%Y-%m-%d'),
             "status": status,
-            # Recruiter intake — previously collected by the UI and dropped here.
+            # Recruiter intake â€” previously collected by the UI and dropped here.
             "requirements": data.get('requirements', []),
             "benefits": data.get('benefits', []),
             "skills": data.get('skills', ''),
@@ -1308,7 +1306,7 @@ def post_job_v1():
             doc_ref = db.collection('jobs').add(new_job)
             new_job['id'] = doc_ref[1].id
         else:
-            return jsonify({"error": "Firebase not initialized — cannot post job"}), 503
+            return jsonify({"error": "Firebase not initialized â€” cannot post job"}), 503
 
         return jsonify({"status": "success", "job": new_job}), 201
     except Exception as e:
@@ -1408,7 +1406,7 @@ def verify_key_route():
         if provider == 'Gemini':
             try:
                 import requests as _req
-                # Use ListModels — doesn't depend on any specific model name being available
+                # Use ListModels â€” doesn't depend on any specific model name being available
                 resp = _req.get(
                     'https://generativelanguage.googleapis.com/v1beta/models',
                     params={'key': key, 'pageSize': 1},
@@ -1438,7 +1436,7 @@ def verify_key_route():
             else:
                 return jsonify({"valid": False, "error": "Invalid OpenAI key format (must start with sk-)."}), 200
         elif provider == 'NVIDIA NIM':
-            # Live check — NVIDIA free credits expire, so format-only is not enough
+            # Live check â€” NVIDIA free credits expire, so format-only is not enough
             if not key.startswith('nvapi-'):
                 return jsonify({"valid": False, "error": "NVIDIA NIM keys must start with nvapi-"}), 200
             try:
@@ -1460,7 +1458,7 @@ def verify_key_route():
                 if resp.status_code in (401, 403):
                     return jsonify({"valid": False, "error": f"NVIDIA key rejected ({resp.status_code}): {detail}. Get a fresh key at build.nvidia.com"}), 200
                 if resp.status_code == 429:
-                    # Quota hit but key is valid — accept it
+                    # Quota hit but key is valid â€” accept it
                     return jsonify({"valid": True, "message": "NVIDIA NIM key accepted (quota limit hit, will reset)."}), 200
                 return jsonify({"valid": False, "error": f"NVIDIA API error {resp.status_code}: {detail}"}), 200
             except Exception as e:
@@ -1604,7 +1602,7 @@ def wallet_remove_key():
         return jsonify({"error": str(e)}), 500
 
 
-# ── APPLICATION SYSTEM ──────────────────────────────────────────────────────
+# â”€â”€ APPLICATION SYSTEM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _run_match_analysis(app_id: str, resume_data: dict, job_details: dict, wallet: list):
     """Background thread: compute job match score and persist it on the application document."""
@@ -1614,7 +1612,7 @@ def _run_match_analysis(app_id: str, resume_data: dict, job_details: dict, walle
         if not (firebase_initialized and db):
             return
 
-        # Rule-based score — fast, no tokens needed
+        # Rule-based score â€” fast, no tokens needed
         rule_based: dict = {}
         rule_score = 0
         try:
@@ -1695,7 +1693,7 @@ def apply_to_job(job_id):
     candidate_name = data.get('candidateName') or request.user.get('name', 'Candidate')
     candidate_email = data.get('candidateEmail') or request.user.get('email', '')
     cover_letter = data.get('coverLetter', '')
-    # Capture wallet now — Flask g is not accessible from background threads
+    # Capture wallet now â€” Flask g is not accessible from background threads
     from ollama_utils import get_request_wallet
     candidate_wallet = get_request_wallet()
     try:
@@ -1743,7 +1741,7 @@ def apply_to_job(job_id):
                     'read': False,
                 })
 
-            # Launch background analysis — uses candidate's own API key, zero platform cost
+            # Launch background analysis â€” uses candidate's own API key, zero platform cost
             try:
                 import threading
                 resume_data: dict = {}
@@ -1806,7 +1804,7 @@ def get_applications():
                 apps = []
                 for doc in docs:
                     a = doc.to_dict(); a['id'] = doc.id
-                    # Normalize appliedAt → appliedDate string for the frontend
+                    # Normalize appliedAt â†’ appliedDate string for the frontend
                     applied_at = a.get('appliedAt')
                     if applied_at is not None and not isinstance(applied_at, str):
                         try:
@@ -2019,7 +2017,7 @@ def get_chats():
         if firebase_initialized and db:
             seen_ids = set()
             chats = []
-            # Query both fields — a user can appear in either candidateId or recruiterId
+            # Query both fields â€” a user can appear in either candidateId or recruiterId
             # (same-role connections store one user in the "wrong" role field)
             for query_docs in [
                 db.collection('chats').where('candidateId', '==', uid).stream(),
@@ -2077,7 +2075,7 @@ def create_chat():
             chat_data['id'] = ref[1].id
             return jsonify({"status": "success", "chat": chat_data}), 201
 
-        return jsonify({"error": "Firebase not initialized — cannot create chat"}), 503
+        return jsonify({"error": "Firebase not initialized â€” cannot create chat"}), 503
     except Exception as e:
         print(f"Error creating chat: {e}")
         return jsonify({"error": str(e)}), 500
@@ -2135,7 +2133,7 @@ def send_chat_message(chat_id):
             })
             return jsonify({"status": "success", "message": msg_data}), 201
 
-        return jsonify({"error": "Firebase not initialized — cannot send message"}), 503
+        return jsonify({"error": "Firebase not initialized â€” cannot send message"}), 503
     except Exception as e:
         print(f"Error sending message: {e}")
         return jsonify({"error": str(e)}), 500
@@ -2503,13 +2501,13 @@ def get_users():
         from firebase_utils import db, firebase_initialized
         if firebase_initialized and db:
             def _mask_email(addr):
-                # jane.doe@gmail.com -> j•••@gmail.com — enough to disambiguate,
+                # jane.doe@gmail.com -> jâ€¢â€¢â€¢@gmail.com â€” enough to disambiguate,
                 # not enough to harvest. Full contact info is only shared after
                 # a connection is accepted.
                 if not addr or '@' not in addr:
                     return ''
                 local, _, domain = addr.partition('@')
-                return f"{local[0]}•••@{domain}"
+                return f"{local[0]}â€¢â€¢â€¢@{domain}"
 
             docs = db.collection('users').stream()
             for doc in docs:
@@ -2588,7 +2586,7 @@ def request_connection():
                 receiver_email = r_data.get('email', receiver_email)
                 receiver_role = r_data.get('role', receiver_role)
         else:
-            return jsonify({"error": "Firebase not initialized — cannot request connection"}), 503
+            return jsonify({"error": "Firebase not initialized â€” cannot request connection"}), 503
 
         now_str = datetime.datetime.utcnow().isoformat() + "Z"
         conn_data = {
@@ -2682,7 +2680,7 @@ def respond_connection(connection_id):
                 return jsonify({"error": "Connection record not found"}), 404
             conn_data = snap.to_dict()
         else:
-            return jsonify({"error": "Firebase not initialized — cannot respond to connection"}), 503
+            return jsonify({"error": "Firebase not initialized â€” cannot respond to connection"}), 503
 
         # Ensure only the receiver can respond
         if conn_data.get('receiverId') != current_uid:
@@ -2873,7 +2871,7 @@ def get_profile_completion(uid):
 
 
 # =============================================================================
-# EMAIL OTP — signup verification via Resend
+# EMAIL OTP â€” signup verification via Resend
 # =============================================================================
 
 @api_bp.route('/auth/send-email-otp', methods=['POST'])
@@ -2968,7 +2966,7 @@ def setup_2fa():
         else:
             user_email = uid
         uri = totp.provisioning_uri(name=user_email, issuer_name='CareerCraft')
-        # Store secret temporarily (unverified) — confirmed on /verify
+        # Store secret temporarily (unverified) â€” confirmed on /verify
         if firebase_initialized and db:
             db.collection('users').document(uid).set({'totp_secret_pending': secret}, merge=True)
         return jsonify({'secret': secret, 'uri': uri}), 200
@@ -2997,7 +2995,7 @@ def verify_2fa_setup():
             return jsonify({'error': '2FA setup not initiated'}), 400
         totp = pyotp.TOTP(secret)
         if not totp.verify(otp, valid_window=1):
-            return jsonify({'error': 'Invalid OTP — please try again'}), 401
+            return jsonify({'error': 'Invalid OTP â€” please try again'}), 401
         # Promote pending secret to active
         if firebase_initialized and db:
             db.collection('users').document(uid).set({
@@ -3028,7 +3026,7 @@ def validate_2fa():
             return jsonify({'valid': True}), 200  # bypass in mock mode
         secret = user_data.get('totp_secret', '')
         if not secret:
-            return jsonify({'valid': True}), 200   # 2FA not enabled — allow through
+            return jsonify({'valid': True}), 200   # 2FA not enabled â€” allow through
         totp = pyotp.TOTP(secret)
         valid = totp.verify(otp, valid_window=1)
         return jsonify({'valid': valid}), 200 if valid else 401
@@ -3065,7 +3063,7 @@ def disable_2fa():
         return jsonify({'error': str(e)}), 500
 
 
-# ─── Email OTP verification ───────────────────────────────────────────────────
+# â”€â”€â”€ Email OTP verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @api_bp.route('/auth/send-email-otp', methods=['POST'])
 def send_email_otp():
@@ -3116,14 +3114,14 @@ def verify_email_otp():
             ref = db.collection('_otps').document(email)
             doc = ref.get()
             if not doc.exists:
-                return jsonify({'error': 'No code found — please request a new one'}), 400
+                return jsonify({'error': 'No code found â€” please request a new one'}), 400
             stored = doc.to_dict()
             expiry = stored.get('expiry')
             if expiry and expiry < now:
                 ref.delete()
-                return jsonify({'error': 'Code expired — please request a new one'}), 400
+                return jsonify({'error': 'Code expired â€” please request a new one'}), 400
             if stored.get('otp') != otp:
-                return jsonify({'error': 'Incorrect code — please try again'}), 400
+                return jsonify({'error': 'Incorrect code â€” please try again'}), 400
             ref.delete()
             return jsonify({'verified': True})
         except Exception as e:
@@ -3139,802 +3137,6 @@ def verify_email_otp():
         del _otp_store[email]
         return jsonify({'verified': True})
 
-
-# ── Smart Apply ───────────────────────────────────────────────────────────────
-
-def _filter_relevant_jobs(job_list, role_terms, loc):
-    """Keep only jobs matching the requested roles + location.
-
-    Free sources (Arbeitnow especially) ignore or weakly apply their search
-    param and return unrelated roles. Enforce relevance server-side so the
-    user's role and location filters actually mean something.
-    """
-    import re as _re3
-    _generic = {
-        'developer', 'engineer', 'engineering', 'manager', 'designer', 'analyst',
-        'architect', 'consultant', 'specialist', 'lead', 'senior', 'junior',
-        'intern', 'internship', 'staff', 'principal', 'associate',
-    }
-    _skip = {'the', 'and', 'for', 'with', 'role', 'position', 'a', 'an', 'of',
-             'remote', 'onsite', 'hybrid', 'contract', 'part', 'time', 'full'}
-
-    role_kw = []  # (specific_terms, generic_terms) per role
-    for _r in role_terms:
-        words = [w.lower() for w in _re3.findall(r"[a-zA-Z][a-zA-Z0-9#+.]*", str(_r))]
-        spec = [w for w in words if w not in _generic and w not in _skip and len(w) > 1]
-        gen  = [w for w in words if w in _generic]
-        if spec or gen:
-            role_kw.append((spec, gen))
-    if not role_kw:
-        return job_list
-
-    loc_l = (loc or '').lower()
-    want_remote = loc_l in ('remote', 'anywhere', 'worldwide', '')
-
-    kept = []
-    for _j in job_list:
-        title = (_j.get('title') or '').lower()
-        tags  = ' '.join(str(t) for t in (_j.get('tags') or [])).lower()
-        desc  = (_j.get('description') or '').lower()
-        body_txt = f"{tags} {desc}"
-
-        role_ok = False
-        for spec, gen in role_kw:
-            title_spec = any(w in title for w in spec)
-            # A title counts as "generic role match" if it contains the role's own
-            # generic words OR any common role noun (engineer/developer/etc.) —
-            # e.g. "Frontend Engineer" should match a "React Developer" search
-            # when React appears in the tags/description.
-            title_gen  = any(w in title for w in gen) or any(w in title for w in _generic)
-            body_spec  = any(w in body_txt for w in spec)
-            # A specific term in the title is a strong match; a generic title
-            # word ("developer") needs a specific term somewhere in the body.
-            if title_spec or (title_gen and (body_spec or not spec)):
-                role_ok = True
-                break
-        if not role_ok:
-            continue
-
-        jloc = (_j.get('location') or '').lower()
-        if want_remote:
-            loc_ok = 'remote' in jloc or 'anywhere' in jloc or 'worldwide' in jloc
-        else:
-            loc_ok = (not jloc) or loc_l in jloc or 'remote' in jloc
-        if not loc_ok:
-            continue
-
-        kept.append(_j)
-    return kept
-
-
-
-@api_bp.route('/smart-apply/search', methods=['POST'])
-@require_auth
-def smart_apply_search():
-    """Scrape jobs from RemoteOK + Indeed; cache results in shared Firestore pool."""
-    from firebase_utils import db
-    from datetime import datetime as _dt
-
-    uid      = getattr(request, 'uid', None)
-    body     = request.get_json() or {}
-    roles    = [r.strip() for r in body.get('roles', []) if str(r).strip()]
-    query    = body.get('query', '').strip()
-    # Build combined query from roles list or fall back to plain query field
-    if roles:
-        query = ' OR '.join(roles)
-    elif not query:
-        query = ''
-    location = body.get('location', 'Remote').strip() or 'Remote'
-    sources  = body.get('sources', ['remoteok', 'indeed', 'linkedin'])
-
-    # Retrieve the user's Apify key from their encrypted vault wallet.
-    import ollama_utils as _ou
-    from vault_utils import decrypt_key as _vault_decrypt
-    _wallet    = _ou.get_request_wallet() or []
-    _apify_e   = next((e for e in _wallet if e.get('provider') == 'Apify'
-                       and e.get('status') not in ('Invalid', 'Exhausted')), None)
-    apify_key  = ''
-    if _apify_e:
-        _enc = _apify_e.get('encryptedKey', '')
-        try:
-            apify_key = _vault_decrypt(_enc) if _enc else _apify_e.get('key', '')
-        except Exception:
-            apify_key = _apify_e.get('key', '')
-
-    if not query:
-        return jsonify({'error': 'Search query is required'}), 400
-
-    # Cache key based on all roles (or query) + location
-    roles_key  = '_'.join(r.lower().replace(' ', '_') for r in roles) if roles else query.lower().replace(' ', '_')
-    search_key = f"{roles_key}_{location.lower().replace(' ', '_')}"
-
-    # ── Firestore cache check (< 24 h) ──────────────────────────────────────
-    # Query by search_key only (single-field index, no composite needed).
-    # Filter by age in Python to avoid the composite index requirement.
-    if db:
-        try:
-            cutoff = _dt.utcnow() - timedelta(hours=24)
-            cached_docs = (
-                db.collection('scraped_jobs')
-                  .where('search_key', '==', search_key)
-                  .limit(60)
-                  .stream()
-            )
-            cached = []
-            for doc in cached_docs:
-                d = doc.to_dict()
-                sat = d.get('scraped_at')
-                # Accept Firestore Timestamp or Python datetime; skip stale docs
-                if sat is not None:
-                    sat_dt = sat if isinstance(sat, _dt) else getattr(sat, 'datetime', None)
-                    if sat_dt and sat_dt.replace(tzinfo=None) < cutoff:
-                        continue
-                if hasattr(sat, 'isoformat'):
-                    d['scraped_at'] = sat.isoformat()
-                cached.append({'id': doc.id, **d})
-            if cached:
-                # Cached docs may predate the relevance filter — re-apply it.
-                cached = _filter_relevant_jobs(cached, roles or [query], location)
-                if cached:
-                    return jsonify({'jobs': cached, 'cached': True, 'count': len(cached)})
-        except Exception as _cache_err:
-            print(f'Cache check skipped: {_cache_err}')
-
-    jobs = []
-
-    # ── Arbeitnow (free public API, no auth) ─────────────────────────────────
-    if 'arbeitnow' in sources:
-        try:
-            _seen_arbeit = set()
-            for _role in (roles or [query])[:3]:
-                try:
-                    resp = _requests_lib.get(
-                        'https://www.arbeitnow.com/api/job-board-api',
-                        params={'search': _role, 'page': 1},
-                        headers={'Accept': 'application/json', 'User-Agent': 'CareerCraft/1.0'},
-                        timeout=15,
-                    )
-                    if resp.ok:
-                        for j in resp.json().get('data', [])[:15]:
-                            _jurl = j.get('url', '')
-                            if not _jurl or _jurl in _seen_arbeit:
-                                continue
-                            _seen_arbeit.add(_jurl)
-                            jobs.append({
-                                'title':       j.get('title', ''),
-                                'company':     j.get('company_name', ''),
-                                'location':    'Remote' if j.get('remote') else (j.get('location') or location),
-                                'salary':      '',
-                                'description': (j.get('description') or '')[:600],
-                                'url':         _jurl,
-                                'source':      'arbeitnow',
-                                'tags':        j.get('tags', []),
-                                'logo':        j.get('logo', ''),
-                            })
-                except Exception:
-                    pass
-        except Exception as e:
-            print(f'Arbeitnow error: {e}')
-
-    # ── Jobicy (free public API, remote jobs, no auth) ────────────────────────
-    # Jobicy uses `tag` (single keyword) not `keyword` — extract tech terms
-    if 'jobicy' in sources:
-        try:
-            import re as _re2
-            _jcy_stopwords = {
-                'senior', 'junior', 'mid', 'level', 'developer', 'engineer', 'software',
-                'full', 'stack', 'web', 'mobile', 'lead', 'staff', 'principal', 'the',
-                'and', 'for', 'with', 'role', 'position', 'remote', 'contract',
-                'backend', 'frontend', 'devops', 'manager', 'architect',
-            }
-            _jcy_tags = []
-            _jcy_seen_tags = set()
-            for _role in (roles or [query]):
-                for _w in _re2.findall(r'\b[a-zA-Z][a-zA-Z0-9#+.]*\b', _role):
-                    _wl = _w.lower()
-                    if _wl not in _jcy_stopwords and len(_wl) > 1 and _wl not in _jcy_seen_tags:
-                        _jcy_seen_tags.add(_wl)
-                        _jcy_tags.append(_wl)
-
-            _seen_jobicy = set()
-            # Try each extracted tag; fall back to unfiltered if none found
-            for _tag in (_jcy_tags[:4] if _jcy_tags else [None]):
-                try:
-                    params = {'count': 20}
-                    if _tag:
-                        params['tag'] = _tag
-                    resp = _requests_lib.get(
-                        'https://jobicy.com/api/v2/remote-jobs',
-                        params=params,
-                        headers={'Accept': 'application/json'},
-                        timeout=15,
-                    )
-                    if resp.ok:
-                        data = resp.json()
-                        job_list = data.get('jobs', []) if isinstance(data, dict) else []
-                        for j in job_list[:15]:
-                            _jurl = j.get('url') or j.get('jobUrl', '')
-                            if not _jurl or _jurl in _seen_jobicy:
-                                continue
-                            _seen_jobicy.add(_jurl)
-                            salary = ''
-                            if j.get('annualSalaryMin'):
-                                salary = f"${j['annualSalaryMin']:,}–${j.get('annualSalaryMax', j['annualSalaryMin']):,}"
-                            jobs.append({
-                                'title':       j.get('jobTitle', '') or j.get('title', ''),
-                                'company':     j.get('companyName', '') or j.get('company', ''),
-                                'location':    j.get('jobGeo', 'Remote') or 'Remote',
-                                'salary':      salary,
-                                'description': (j.get('jobExcerpt') or j.get('jobDescription') or j.get('description') or '')[:600],
-                                'url':         _jurl,
-                                'source':      'jobicy',
-                                'tags':        [j['jobType']] if j.get('jobType') else [],
-                                'logo':        j.get('companyLogo', ''),
-                            })
-                        if len(_seen_jobicy) >= 15:
-                            break
-                except Exception:
-                    pass
-        except Exception as e:
-            print(f'Jobicy error: {e}')
-
-    # ── crawl4ai: async AI-powered web crawler ───────────────────────────────
-    # Accepts a list of direct company career page URLs via the `career_urls` field
-    if 'crawl4ai' in sources:
-        career_urls = body.get('career_urls', [])
-        if career_urls:
-            try:
-                from crawl4ai import AsyncWebCrawler
-                from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
-                import asyncio as _asyncio
-
-                schema = {
-                    'name': 'jobs',
-                    'baseSelector': 'a, [class*="job"], [class*="position"], [class*="opening"]',
-                    'fields': [
-                        {'name': 'title',   'selector': 'h2, h3, h4, [class*="title"], [class*="role"]',   'type': 'text'},
-                        {'name': 'company', 'selector': '[class*="company"], [class*="employer"]',          'type': 'text'},
-                        {'name': 'url',     'selector': 'a',                                               'type': 'attribute', 'attribute': 'href'},
-                        {'name': 'location','selector': '[class*="location"], [class*="city"]',             'type': 'text'},
-                    ]
-                }
-                strategy = JsonCssExtractionStrategy(schema, verbose=False)
-
-                async def _crawl_careers():
-                    _c4_jobs = []
-                    async with AsyncWebCrawler(verbose=False) as crawler:
-                        for _curl in career_urls[:5]:
-                            try:
-                                result = await crawler.arun(url=_curl, extraction_strategy=strategy)
-                                if result.success and result.extracted_content:
-                                    import json as _json
-                                    _extracted = _json.loads(result.extracted_content) if isinstance(result.extracted_content, str) else result.extracted_content
-                                    for _j in (_extracted if isinstance(_extracted, list) else [])[:10]:
-                                        _jurl = _j.get('url', '')
-                                        if _jurl and not _jurl.startswith('http'):
-                                            from urllib.parse import urljoin
-                                            _jurl = urljoin(_curl, _jurl)
-                                        if not _jurl:
-                                            continue
-                                        _c4_jobs.append({
-                                            'title':       _j.get('title', 'Open Position'),
-                                            'company':     _j.get('company', ''),
-                                            'location':    _j.get('location', location),
-                                            'salary':      '',
-                                            'description': '',
-                                            'url':         _jurl,
-                                            'source':      'crawl4ai',
-                                            'tags':        [],
-                                            'logo':        '',
-                                        })
-                            except Exception as _ce:
-                                print(f'crawl4ai error for {_curl}: {_ce}')
-                    return _c4_jobs
-
-                _c4_results = _asyncio.run(_crawl_careers())
-                jobs.extend(_c4_results)
-            except Exception as e:
-                print(f'crawl4ai error: {e}')
-
-    # ── Firecrawl: high-quality content extraction (BYOK) ────────────────────
-    if 'firecrawl' in sources:
-        try:
-            _fc_e = next((e for e in _wallet if e.get('provider') == 'Firecrawl'
-                          and e.get('status') not in ('Invalid', 'Exhausted')), None)
-            if _fc_e:
-                _fc_key = _vault_decrypt(_fc_e.get('encryptedKey', '')) if _fc_e.get('encryptedKey') else _fc_e.get('key', '')
-                if _fc_key:
-                    from firecrawl import FirecrawlApp
-                    _fc = FirecrawlApp(api_key=_fc_key)
-                    for _role in (roles or [query])[:2]:
-                        try:
-                            # Use Firecrawl's search (maps + scrape career pages)
-                            _fc_result = _fc.search(
-                                f'site:jobs.lever.co OR site:boards.greenhouse.io {_role} {location}',
-                                limit=10,
-                            )
-                            for _r in (_fc_result.get('data', []) if isinstance(_fc_result, dict) else []):
-                                _furl = _r.get('url', '')
-                                if not _furl:
-                                    continue
-                                jobs.append({
-                                    'title':       _r.get('title', _role),
-                                    'company':     '',
-                                    'location':    location,
-                                    'salary':      '',
-                                    'description': (_r.get('markdown') or _r.get('content') or '')[:600],
-                                    'url':         _furl,
-                                    'source':      'firecrawl',
-                                    'tags':        [],
-                                    'logo':        '',
-                                })
-                        except Exception as _fce:
-                            print(f'Firecrawl search error: {_fce}')
-        except Exception as e:
-            print(f'Firecrawl error: {e}')
-
-    # ── RemoteOK public JSON API ─────────────────────────────────────────────
-    if 'remoteok' in sources:
-        try:
-            import re as _re
-            # RemoteOK uses single-keyword tags — extract tech terms from each role
-            _stopwords = {
-                'senior', 'junior', 'mid', 'level', 'developer', 'engineer', 'software',
-                'full', 'stack', 'web', 'mobile', 'lead', 'staff', 'principal', 'the',
-                'and', 'for', 'with', 'role', 'position', 'remote', 'contract', 'part',
-                'time', 'full', 'backend', 'frontend', 'devops',
-            }
-            _seen_tags = set()
-            _tag_queue = []
-            for _role in (roles or [query]):
-                for _word in _re.findall(r'\b[a-zA-Z][a-zA-Z0-9#+.]*\b', _role):
-                    _w = _word.lower()
-                    if _w not in _stopwords and len(_w) > 1 and _w not in _seen_tags:
-                        _seen_tags.add(_w)
-                        _tag_queue.append(_w)
-
-            _rok_seen = set()
-            for _tag in _tag_queue[:5]:  # try up to 5 keywords
-                try:
-                    resp = _requests_lib.get(
-                        f'https://remoteok.com/api?tag={_tag}',
-                        headers={'User-Agent': 'CareerCraft-JobScout/1.0'},
-                        timeout=10,
-                    )
-                    if resp.ok:
-                        data = resp.json()
-                        items = data[1:] if isinstance(data, list) and len(data) > 1 else []
-                        for j in items[:20]:
-                            _jid = str(j.get('id', ''))
-                            if _jid in _rok_seen:
-                                continue
-                            _rok_seen.add(_jid)
-                            jobs.append({
-                                'title':       j.get('position', ''),
-                                'company':     j.get('company', ''),
-                                'location':    'Remote',
-                                'salary':      j.get('salary', ''),
-                                'description': (j.get('description') or '')[:600],
-                                'url':         j.get('url') or f"https://remoteok.com/l/{_jid}",
-                                'source':      'remoteok',
-                                'tags':        j.get('tags', []),
-                                'logo':        j.get('company_logo', ''),
-                            })
-                        if len(jobs) >= 20:
-                            break
-                except Exception:
-                    pass
-        except Exception as e:
-            print(f'RemoteOK error: {e}')
-
-    def _run_apify_actor(actor_slug, input_payload, source_name):
-        """Call an Apify run-sync actor and return a list of raw items (may be empty)."""
-        try:
-            resp = _requests_lib.post(
-                f'https://api.apify.com/v2/acts/{actor_slug}/run-sync-get-dataset-items',
-                params={'token': apify_key, 'timeout': 60, 'memory': 512},
-                json=input_payload,
-                timeout=90,
-            )
-            if resp.ok:
-                body = resp.json()
-                return body if isinstance(body, list) else body.get('items', []) if isinstance(body, dict) else []
-            else:
-                err_body = resp.json() if resp.headers.get('content-type', '').startswith('application/json') else {}
-                err_type = err_body.get('error', {}).get('type', '') if isinstance(err_body.get('error'), dict) else ''
-                if err_type in ('actor-is-not-rented', 'actor-not-rented'):
-                    print(f'Apify {source_name}: actor requires rental — skipping')
-                else:
-                    print(f'Apify {source_name} {resp.status_code}: {resp.text[:200]}')
-        except Exception as e:
-            print(f'Apify {source_name} error: {e}')
-        return []
-
-    # ── Indeed via Apify (haris2303/indeed-scraper — free public actor) ──────
-    if 'indeed' in sources and apify_key:
-        _indeed_query = roles[0] if roles else query
-        for _actor in ('haris2303~indeed-scraper', 'misceres~indeed-scraper',
-                       'maxcopell~indeed-scraper', 'bebity~indeed-scraper'):
-            _items = _run_apify_actor(_actor, {
-                'keyword': _indeed_query, 'location': location, 'maxItems': 20,
-                'country': 'US', 'position': _indeed_query,
-            }, 'Indeed')
-            if _items:
-                for item in _items[:20]:
-                    url = (item.get('url') or item.get('jobUrl') or item.get('applyUrl')
-                           or item.get('externalApplyLink') or item.get('positionLink') or '')
-                    if not url:
-                        continue
-                    jobs.append({
-                        'title':       item.get('title', '') or item.get('positionName', ''),
-                        'company':     item.get('company') or item.get('companyName', ''),
-                        'location':    item.get('location') or item.get('jobLocation', location),
-                        'salary':      item.get('salary') or item.get('jobSalary', ''),
-                        'description': (item.get('description') or item.get('snippet') or '')[:600],
-                        'url':         url,
-                        'source':      'indeed',
-                        'tags':        [],
-                        'logo':        item.get('companyLogo') or item.get('companyImage', ''),
-                    })
-                break  # stop trying actors once one succeeds
-
-    # ── LinkedIn via Apify ───────────────────────────────────────────────────
-    if 'linkedin' in sources and apify_key:
-        _linkedin_query = roles[0] if roles else query
-        for _actor in ('haris2303~linkedin-jobs-scraper', 'curious_coder~linkedin-jobs-scraper',
-                       'bebity~linkedin-jobs-scraper'):
-            _items = _run_apify_actor(_actor, {
-                'keyword': _linkedin_query, 'location': location, 'maxJobs': 20,
-                'searchKeywords': _linkedin_query,
-            }, 'LinkedIn')
-            if _items:
-                for item in _items[:20]:
-                    url = (item.get('url') or item.get('jobUrl') or item.get('link')
-                           or item.get('jobLink') or item.get('applyUrl') or '')
-                    if not url:
-                        continue
-                    jobs.append({
-                        'title':       item.get('title', '') or item.get('position', ''),
-                        'company':     item.get('company') or item.get('companyName', ''),
-                        'location':    item.get('location') or item.get('jobLocation', location),
-                        'salary':      item.get('salary', ''),
-                        'description': (item.get('description') or item.get('snippet') or '')[:600],
-                        'url':         url,
-                        'source':      'linkedin',
-                        'tags':        [],
-                        'logo':        item.get('companyLogo') or item.get('companyImage', ''),
-                    })
-                break
-
-    now_str = datetime.datetime.utcnow().isoformat()
-
-    def _flat_tags(raw):
-        """Flatten/stringify tags so Firestore never sees nested arrays."""
-        if not isinstance(raw, list):
-            return []
-        out = []
-        for t in raw:
-            if isinstance(t, list):
-                out.extend(str(x) for x in t if x is not None)
-            elif t is not None:
-                out.append(str(t))
-        return out
-
-    _pre_filter_count = len(jobs)
-    jobs = _filter_relevant_jobs(jobs, roles or [query], location)
-    print(f'Smart-apply relevance filter: {_pre_filter_count} -> {len(jobs)} jobs')
-
-    # ── Write to shared Firestore pool ───────────────────────────────────────
-    if db and jobs:
-        batch = db.batch()
-        result = []
-        for job in jobs:
-            job['tags'] = _flat_tags(job.get('tags', []))
-            key     = _hashlib_lib.md5(f"{job['source']}|{job['url']}".encode()).hexdigest()
-            ref     = db.collection('scraped_jobs').document(key)
-            payload = {**job, 'search_key': search_key, 'query': query,
-                       'scraped_at': datetime.datetime.utcnow(), 'scraped_by': uid}
-            batch.set(ref, payload, merge=True)
-            result.append({'id': key, **job, 'scraped_at': now_str})
-        try:
-            batch.commit()
-        except Exception as _batch_err:
-            print(f'Firestore batch write failed: {_batch_err}')
-            result = [{'id': str(i), **j, 'scraped_at': now_str} for i, j in enumerate(jobs)]
-    else:
-        result = [{'id': str(i), **j, 'scraped_at': now_str} for i, j in enumerate(jobs)]
-
-    return jsonify({'jobs': result, 'cached': False, 'count': len(result)})
-
-
-@api_bp.route('/smart-apply/queue', methods=['GET'])
-@require_auth
-def get_smart_apply_queue():
-    from firebase_utils import db
-    from datetime import datetime as _dt
-    uid = getattr(request, 'uid', None)
-    if not db:
-        return jsonify({'queue': [], 'applied_today': 0, 'autonomous_running': False, 'applied_jobs': []})
-
-    doc = db.collection('apply_sessions').document(uid).get()
-    if not doc.exists:
-        return jsonify({'queue': [], 'applied_today': 0, 'autonomous_running': False, 'applied_jobs': []})
-
-    data  = doc.to_dict()
-    today = _dt.utcnow().date()
-    lr    = data.get('last_reset')
-    if lr and hasattr(lr, 'date') and lr.date() < today:
-        db.collection('apply_sessions').document(uid).update(
-            {'applied_today': 0, 'last_reset': _dt.utcnow()}
-        )
-        data['applied_today'] = 0
-
-    return jsonify({
-        'queue':              data.get('queue', []),
-        'applied_today':      data.get('applied_today', 0),
-        'autonomous_running': data.get('autonomous_running', False),
-        'applied_jobs':       data.get('applied_jobs', []),
-    })
-
-
-@api_bp.route('/smart-apply/queue/add', methods=['POST'])
-@require_auth
-def add_to_apply_queue():
-    from firebase_utils import db
-    uid = getattr(request, 'uid', None)
-    job = (request.get_json() or {}).get('job')
-    if not job:
-        return jsonify({'error': 'Job data required'}), 400
-    if db:
-        db.collection('apply_sessions').document(uid).set(
-            {'queue': firestore.ArrayUnion([job])}, merge=True
-        )
-    return jsonify({'success': True})
-
-
-@api_bp.route('/smart-apply/queue/remove', methods=['POST'])
-@require_auth
-def remove_from_apply_queue():
-    from firebase_utils import db
-    uid    = getattr(request, 'uid', None)
-    job_id = (request.get_json() or {}).get('job_id')
-    if db:
-        snap = db.collection('apply_sessions').document(uid).get()
-        if snap.exists:
-            queue = [j for j in snap.to_dict().get('queue', []) if j.get('id') != job_id]
-            db.collection('apply_sessions').document(uid).update({'queue': queue})
-    return jsonify({'success': True})
-
-
-@api_bp.route('/smart-apply/apply-supervised', methods=['POST'])
-@require_auth
-def apply_supervised():
-    from firebase_utils import db
-    from datetime import datetime as _dt
-    uid       = getattr(request, 'uid', None)
-    body      = request.get_json() or {}
-    job_id    = body.get('job_id')
-    job_data  = body.get('job_data', {})
-    cover_ltr = body.get('cover_letter', '')
-    if not job_id:
-        return jsonify({'error': 'job_id required'}), 400
-    if db:
-        snap     = db.collection('apply_sessions').document(uid).get()
-        existing = snap.to_dict() if snap.exists else {}
-        queue    = [j for j in existing.get('queue', []) if j.get('id') != job_id]
-        db.collection('apply_sessions').document(uid).set({
-            'queue':        queue,
-            'applied_today': firestore.Increment(1),
-            'last_reset':   _dt.utcnow(),
-            'applied_jobs': firestore.ArrayUnion([{
-                'job_id': job_id, 'job_data': job_data,
-                'cover_letter': cover_ltr,
-                'applied_at': _dt.utcnow().isoformat(),
-                'status': 'applied', 'mode': 'supervised',
-            }]),
-        }, merge=True)
-        db.collection('applications').add({
-            'candidateId': uid,
-            'jobId':       job_id,
-            'jobTitle':    job_data.get('title', ''),
-            'company':     job_data.get('company', ''),
-            'coverLetter': cover_ltr,
-            'source':      'smart_apply',
-            'appliedAt':   _dt.utcnow(),
-            'status':      'applied',
-        })
-    return jsonify({'success': True})
-
-
-@api_bp.route('/smart-apply/status', methods=['GET'])
-@require_auth
-def smart_apply_status():
-    from firebase_utils import db
-    uid = getattr(request, 'uid', None)
-    if not db:
-        return jsonify({'autonomous_running': False, 'applied_today': 0, 'progress': []})
-    doc = db.collection('apply_sessions').document(uid).get()
-    if not doc.exists:
-        return jsonify({'autonomous_running': False, 'applied_today': 0, 'progress': []})
-    d = doc.to_dict()
-    return jsonify({
-        'autonomous_running': d.get('autonomous_running', False),
-        'applied_today':      d.get('applied_today', 0),
-        'progress':           d.get('autonomous_progress', []),
-    })
-
-
-@api_bp.route('/smart-apply/autonomous/start', methods=['POST'])
-@require_auth
-def start_autonomous_apply():
-    from firebase_utils import db
-    from datetime import datetime as _dt
-    uid       = getattr(request, 'uid', None)
-    body      = request.get_json() or {}
-    daily_cap = min(int(body.get('daily_cap', 20)), 20)
-
-    if not db:
-        return jsonify({'error': 'Firebase not available'}), 503
-
-    snap = db.collection('apply_sessions').document(uid).get()
-    if not snap.exists:
-        return jsonify({'error': 'Add jobs to your queue first.'}), 400
-
-    data          = snap.to_dict()
-    queue         = data.get('queue', [])
-    applied_today = data.get('applied_today', 0)
-
-    if not queue:
-        return jsonify({'error': 'Queue is empty. Search for jobs and add them first.'}), 400
-
-    remaining = daily_cap - applied_today
-    if remaining <= 0:
-        return jsonify({'error': f'Daily cap of {daily_cap} reached. Resets at midnight UTC.'}), 429
-
-    jobs_batch = queue[:remaining]
-    db.collection('apply_sessions').document(uid).update({
-        'autonomous_running':  True,
-        'autonomous_progress': [],
-    })
-
-    # Fetch resume data + Gemini key for the worker
-    resume_data = {}
-    try:
-        r_snap = db.collection('resumes').document(uid).get()
-        if r_snap.exists:
-            resume_data = r_snap.to_dict().get('resumeData', {})
-    except Exception:
-        pass
-
-    gemini_key = os.environ.get('GEMINI_API_KEY', '')
-    # Also try user's vault Gemini key
-    try:
-        import ollama_utils as _ou2
-        from vault_utils import decrypt_key as _vdk
-        _w2 = _ou2.get_request_wallet() or []
-        _ge = next((e for e in _w2 if e.get('provider') in ('Gemini', 'Google')), None)
-        if _ge:
-            _enc2 = _ge.get('encryptedKey', '')
-            gemini_key = _vdk(_enc2) if _enc2 else _ge.get('key', gemini_key)
-    except Exception:
-        pass
-
-    def _worker(u, jobs, _db, _resume_data, _gemini_key):
-        from auto_apply import apply_to_job
-        from document_generator import generate_pdf_from_data
-        import google.generativeai as _genai
-
-        for job in jobs:
-            # Honour stop requests
-            try:
-                _chk = _db.collection('apply_sessions').document(u).get()
-                if not _chk.exists or not _chk.to_dict().get('autonomous_running'):
-                    break
-            except Exception:
-                pass
-
-            try:
-                # 1. Generate a tailored cover letter
-                cover_letter = ''
-                try:
-                    if _gemini_key:
-                        _genai.configure(api_key=_gemini_key)
-                        model = _genai.GenerativeModel('gemini-1.5-flash')
-                        _personal = _resume_data.get('personal', {})
-                        _skills   = '; '.join(
-                            s.get('skills_list', '') for s in _resume_data.get('skills', [])[:3]
-                        )
-                        _cl_prompt = (
-                            f"Write a 3-paragraph professional cover letter (under 250 words) for this application.\n"
-                            f"Job: {job.get('title')} at {job.get('company')}\n"
-                            f"Description snippet: {(job.get('description') or '')[:400]}\n"
-                            f"Candidate: {_personal.get('name','')}, skills: {_skills}\n"
-                            "Output only the body paragraphs — no 'Dear Hiring Manager' header."
-                        )
-                        cover_letter = model.generate_content(_cl_prompt).text.strip()
-                except Exception as _ce:
-                    print(f'Cover letter gen error: {_ce}')
-
-                # 2. Generate resume PDF
-                pdf_bytes = None
-                try:
-                    pdf_bytes = generate_pdf_from_data(_resume_data)
-                except Exception as _pe:
-                    print(f'PDF gen error: {_pe}')
-
-                # 3. Autonomous browser apply
-                result = apply_to_job(
-                    job_url=job.get('url', ''),
-                    resume_data=_resume_data,
-                    cover_letter=cover_letter,
-                    pdf_bytes=pdf_bytes,
-                    gemini_key=_gemini_key,
-                )
-
-                status = 'applied' if result.get('success') else 'partially_applied'
-                _db.collection('apply_sessions').document(u).update({
-                    'autonomous_progress': firestore.ArrayUnion([{
-                        'job_id':     job.get('id'),
-                        'title':      job.get('title'),
-                        'company':    job.get('company'),
-                        'status':     status,
-                        'method':     result.get('method', ''),
-                        'message':    result.get('message', '')[:300],
-                        'applied_at': _dt.utcnow().isoformat(),
-                    }]),
-                    'applied_today': firestore.Increment(1),
-                })
-                _db.collection('applications').add({
-                    'candidateId':  u,
-                    'jobId':        job.get('id'),
-                    'jobTitle':     job.get('title', ''),
-                    'company':      job.get('company', ''),
-                    'source':       'smart_apply_autonomous',
-                    'appliedAt':    _dt.utcnow(),
-                    'status':       status,
-                    'automation':   result.get('method', 'none'),
-                    'cover_letter': cover_letter[:500],
-                })
-
-            except Exception as exc:
-                print(f'Autonomous apply error ({job.get("id")}): {exc}')
-                try:
-                    _db.collection('apply_sessions').document(u).update({
-                        'autonomous_progress': firestore.ArrayUnion([{
-                            'job_id':  job.get('id'),
-                            'title':   job.get('title'),
-                            'company': job.get('company'),
-                            'status':  'failed',
-                            'message': str(exc)[:200],
-                        }]),
-                    })
-                except Exception:
-                    pass
-
-        try:
-            _db.collection('apply_sessions').document(u).update({
-                'autonomous_running': False,
-                'queue':              [],
-            })
-        except Exception:
-            pass
-
-    t = _threading_lib.Thread(target=_worker, args=(uid, jobs_batch, db, resume_data, gemini_key), daemon=True)
-    _autonomous_sessions[uid] = t
-    t.start()
-
-    return jsonify({'success': True, 'jobs_queued': len(jobs_batch)})
-
-
-@api_bp.route('/smart-apply/autonomous/stop', methods=['POST'])
-@require_auth
-def stop_autonomous_apply():
-    from firebase_utils import db
-    uid = getattr(request, 'uid', None)
-    if db:
-        db.collection('apply_sessions').document(uid).update({'autonomous_running': False})
-    _autonomous_sessions.pop(uid, None)
-    return jsonify({'success': True})
 
 
 @api_bp.route('/auto-apply/solve-questions', methods=['POST'])
@@ -3982,7 +3184,7 @@ def auto_apply_log():
         return jsonify({"error": str(e)}), 500
 
 
-# ─── Browser Extension Plugin Token ──────────────────────────────────────────
+# â”€â”€â”€ Browser Extension Plugin Token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @api_bp.route('/plugin/token', methods=['GET'])
 @require_auth
@@ -4137,9 +3339,9 @@ def record_plugin_applied():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SUPER ADMIN MODULE — feature flags, platform stats, user & job management
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# SUPER ADMIN MODULE â€” feature flags, platform stats, user & job management
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 from firebase_utils import require_admin, is_admin_user
 
 # Every feature the admin can toggle. New features should launch behind a flag.
@@ -4184,7 +3386,7 @@ def feature_enabled(name: str) -> bool:
 @api_bp.route('/platform/config', methods=['GET'])
 @require_auth
 def platform_config():
-    """Public (authenticated) — the frontend uses this to hide disabled features."""
+    """Public (authenticated) â€” the frontend uses this to hide disabled features."""
     return jsonify({"features": get_platform_features()}), 200
 
 @api_bp.route('/admin/me', methods=['GET'])
@@ -4295,9 +3497,9 @@ def admin_list_jobs():
         return jsonify({"error": str(e)}), 500
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SOCIAL FEED — LinkedIn-style posts (behind the "feed" feature flag)
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# SOCIAL FEED â€” LinkedIn-style posts (behind the "feed" feature flag)
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def _feed_guard():
     if not feature_enabled('feed'):

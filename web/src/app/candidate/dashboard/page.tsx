@@ -9,7 +9,7 @@ import CandidateLayout from '@/components/layout/CandidateLayout';
 import {
   Sparkles, Briefcase, FileEdit, Calendar,
   TrendingUp, CheckCircle, ChevronRight, ShieldCheck,
-  FileText, Zap, Lightbulb, BarChart2, Activity,
+  FileText, Lightbulb, BarChart2, Activity,
   Mic, Star, Send, Eye, X,
 } from 'lucide-react';
 import { API_BASE, authHeader } from '@/lib/api';
@@ -139,7 +139,7 @@ function AIInsightCard({ applications, atsScore }: { applications: any[]; atsSco
   let tipColor = 'text-indigo-300';
 
   if (total === 0) {
-    tip = 'Start applying via Smart Apply to see insights here. Target 5–10 applications per day for best results.';
+    tip = 'Start applying to jobs to see insights here. Target 5–10 applications per day for best results.';
   } else if (responseRate === 0) {
     tip = 'Zero responses so far. Try tailoring your resume to each JD using the JD Match tool in Resume Builder.';
     tipColor = 'text-amber-300';
@@ -262,7 +262,7 @@ export default function CandidateDashboardPage() {
               </h1>
               <p className="text-xs text-zinc-400 max-w-lg leading-relaxed">
                 {total === 0
-                  ? 'No applications yet — start Smart Apply to get your search running.'
+                  ? 'No applications yet — browse open jobs and apply to get started.'
                   : `${total} applications submitted · ${responseRate}% response rate · ${interviewRate}% interview rate`}
               </p>
             </div>
@@ -389,7 +389,7 @@ export default function CandidateDashboardPage() {
             {/* Quick actions */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { name: 'Smart Apply',     href: '/candidate/smart-apply',       icon: <Zap className="w-4 h-4 text-indigo-400" />,   color: 'hover:border-indigo-500/50' },
+                { name: 'Browse Jobs',     href: '/candidate/jobs',              icon: <Briefcase className="w-4 h-4 text-indigo-400" />,   color: 'hover:border-indigo-500/50' },
                 { name: 'Resume Builder',  href: '/candidate/resume-builder',    icon: <FileEdit className="w-4 h-4 text-cyan-400" />, color: 'hover:border-cyan-500/50' },
                 { name: 'My Applications', href: '/candidate/applications',      icon: <CheckCircle className="w-4 h-4 text-emerald-400" />, color: 'hover:border-emerald-500/50' },
                 { name: 'AI Practice',     href: '/candidate/interview/practice',icon: <Mic className="w-4 h-4 text-purple-400" />,    color: 'hover:border-purple-500/50' },
@@ -490,9 +490,9 @@ export default function CandidateDashboardPage() {
               {applications.length === 0 ? (
                 <div className="text-center py-4 space-y-2">
                   <p className="text-[10px] text-zinc-500">No applications yet.</p>
-                  <Link href="/candidate/smart-apply"
+                  <Link href="/candidate/jobs"
                     className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition">
-                    Start Smart Apply →
+                    Browse Jobs →
                   </Link>
                 </div>
               ) : (

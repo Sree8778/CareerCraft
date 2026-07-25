@@ -19,7 +19,6 @@ type Tab = 'overview' | 'features' | 'users' | 'jobs';
 const FLAG_META: { key: keyof FeatureFlags; label: string; desc: string }[] = [
   { key: 'signups',       label: 'New Signups',        desc: 'Allow new accounts to be created.' },
   { key: 'feed',          label: 'Social Feed',        desc: 'LinkedIn-style posts, likes and comments.' },
-  { key: 'smartApply',    label: 'Smart Apply',        desc: 'Automated job scraping and one-click applications.' },
   { key: 'aiInterview',   label: 'AI Interview',       desc: 'Proctored voice interview with identity check.' },
   { key: 'practiceMode',  label: 'Practice Interviews',desc: 'Unproctored voice practice sessions.' },
   { key: 'resumeBuilder', label: 'Resume Builder',     desc: 'AI resume builder and cover letters.' },

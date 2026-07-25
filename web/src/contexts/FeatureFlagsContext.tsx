@@ -8,13 +8,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { API_BASE } from '@/lib/api';
 
 export type FeatureFlags = {
-  feed: boolean; smartApply: boolean; aiInterview: boolean; practiceMode: boolean;
+  feed: boolean; aiInterview: boolean; practiceMode: boolean;
   resumeBuilder: boolean; network: boolean; messages: boolean; sourcing: boolean;
   webhooks: boolean; companies: boolean; signups: boolean;
 };
 
 const DEFAULTS: FeatureFlags = {
-  feed: true, smartApply: true, aiInterview: true, practiceMode: true,
+  feed: true, aiInterview: true, practiceMode: true,
   resumeBuilder: true, network: true, messages: true, sourcing: true,
   webhooks: true, companies: true, signups: true,
 };

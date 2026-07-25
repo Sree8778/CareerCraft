@@ -3,9 +3,9 @@
 import { useContext, useState, useEffect } from 'react';
 import { ModalContext } from '@/contexts/LoginModalContext';
 import { motion } from 'framer-motion';
-import { Bot, ArrowRight, TrendingUp, Zap, CheckCircle, Sparkles } from 'lucide-react';
+import { ArrowRight, TrendingUp, CheckCircle, Sparkles, Search, FileEdit, Mic } from 'lucide-react';
 
-const liveJobs = [
+const liveMatches = [
   { role: 'Senior Frontend Engineer', co: 'Stripe',  match: 98 },
   { role: 'Full Stack Developer',     co: 'Vercel',  match: 95 },
   { role: 'React Engineer',           co: 'Linear',  match: 92 },
@@ -16,7 +16,7 @@ export default function Hero() {
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    const t = setInterval(() => setTick(n => (n + 1) % liveJobs.length), 2500);
+    const t = setInterval(() => setTick(n => (n + 1) % liveMatches.length), 2500);
     return () => clearInterval(t);
   }, []);
 
@@ -78,12 +78,11 @@ export default function Hero() {
             AI-Powered Job Search
           </div>
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-[1.1] max-w-2xl mx-auto">
-            Apply to{' '}
-            <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">100+ jobs</span>
-            <br />while you sleep
+            Your next role is{' '}
+            <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">one application away</span>
           </h1>
           <p className="mt-4 text-zinc-400 text-base max-w-md mx-auto leading-relaxed">
-            CareerCraft's AI agent scrapes top job boards, matches your profile, and submits applications 24/7 — fully autonomous.
+            CareerCraft matches your skills to top opportunities with AI precision — then helps you stand out with a polished resume and interview prep.
           </p>
         </motion.div>
 
@@ -97,9 +96,9 @@ export default function Hero() {
           {/* card label */}
           <div className="flex items-center gap-2.5 mb-3 pl-1">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-pink-600 flex items-center justify-center shadow-[0_0_18px_rgba(124,58,237,0.6)]">
-              <Bot className="w-4 h-4 text-white" />
+              <Search className="w-4 h-4 text-white" />
             </div>
-            <span className="text-white font-bold text-sm tracking-tight">Smart Apply</span>
+            <span className="text-white font-bold text-sm tracking-tight">AI Job Match</span>
           </div>
 
           {/* main card */}
@@ -134,20 +133,20 @@ export default function Hero() {
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-white/50 text-[9px] uppercase tracking-[0.15em] font-semibold">CareerCraft</p>
-                      <p className="text-white font-bold text-sm">Autonomous Apply</p>
+                      <p className="text-white font-bold text-sm">AI Match Score</p>
                     </div>
                     <div className="w-7 h-7 rounded-full bg-white/15 border border-white/20 flex items-center justify-center">
-                      <Zap className="w-3.5 h-3.5 text-white" />
+                      <Sparkles className="w-3.5 h-3.5 text-white" />
                     </div>
                   </div>
                   <div className="flex items-end justify-between">
                     <div>
-                      <p className="text-white/40 text-[9px] uppercase tracking-widest font-medium">Applied Today</p>
-                      <p className="text-4xl font-black text-white leading-none">47</p>
+                      <p className="text-white/40 text-[9px] uppercase tracking-widest font-medium">Top Match</p>
+                      <p className="text-4xl font-black text-white leading-none">98%</p>
                     </div>
                     <div className="flex items-center gap-1 text-emerald-300 text-[11px] font-semibold">
                       <TrendingUp className="w-3 h-3" />
-                      +12 this week
+                      Skills aligned
                     </div>
                   </div>
                 </div>
@@ -166,7 +165,7 @@ export default function Hero() {
             {/* card body */}
             <div className="bg-zinc-950 p-5">
               <div className="space-y-2 mb-4">
-                {liveJobs.map((j, i) => (
+                {liveMatches.map((j, i) => (
                   <motion.div
                     key={i}
                     animate={{ opacity: tick === i ? 1 : 0.3 }}
@@ -177,12 +176,10 @@ export default function Hero() {
                       {j.co[0]}
                     </div>
                     <span className="text-zinc-300 flex-1 truncate font-medium">{j.role}</span>
-                    {tick === i
-                      ? <span className="text-amber-400 font-semibold flex-shrink-0">Applying…</span>
-                      : i < tick
-                      ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                      : <span className="text-zinc-600 flex-shrink-0">Queued</span>
-                    }
+                    <span className={`font-semibold flex-shrink-0 ${tick === i ? 'text-violet-400' : 'text-zinc-600'}`}>
+                      {j.match}%
+                    </span>
+                    {i < tick && <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
                   </motion.div>
                 ))}
               </div>
@@ -199,12 +196,31 @@ export default function Hero() {
           </div>
         </motion.div>
 
-        {/* stats row */}
+        {/* feature pills */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.6 }}
-          className="flex items-center gap-8 mt-8 text-center"
+          className="flex flex-wrap items-center justify-center gap-3 mt-8"
+        >
+          {[
+            { icon: <Search className="w-3.5 h-3.5" />, label: 'AI Job Matching' },
+            { icon: <FileEdit className="w-3.5 h-3.5" />, label: 'Resume Builder' },
+            { icon: <Mic className="w-3.5 h-3.5" />, label: 'Interview Prep' },
+          ].map((f, i) => (
+            <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-zinc-400 text-xs font-medium">
+              {f.icon}
+              {f.label}
+            </div>
+          ))}
+        </motion.div>
+
+        {/* stats row */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.75 }}
+          className="flex items-center gap-8 mt-6 text-center"
         >
           {[
             { val: '50K+', label: 'Candidates' },

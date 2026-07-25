@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Briefcase, LogOut, Search, FileEdit, Sparkles, MessageSquare, Building2, Network, Mic, Settings, Video, ClipboardList, Zap, Menu, X, Newspaper, ShieldCheck } from 'lucide-react';
+import { Briefcase, LogOut, Search, FileEdit, Sparkles, MessageSquare, Building2, Network, Mic, Settings, Video, ClipboardList, Menu, X, Newspaper, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFeatureFlags } from '@/contexts/FeatureFlagsContext';
 import React, { useState, useEffect } from 'react';
@@ -22,7 +22,6 @@ const navGroups: { label: string | null; links: { name: string; href: string; ic
     label: 'Job Search',
     links: [
       { name: 'Browse Jobs',     href: '/candidate/jobs',         icon: <Search size={18} /> },
-      { name: 'Smart Apply',     href: '/candidate/smart-apply',  icon: <Zap size={18} />, flag: 'smartApply' },
       { name: 'My Applications', href: '/candidate/applications', icon: <ClipboardList size={18} /> },
       { name: 'Companies',       href: '/companies',              icon: <Building2 size={18} />, flag: 'companies' },
     ],
@@ -79,7 +78,7 @@ export default function CandidateSidebar() {
           <div className="flex items-center gap-2 px-1 py-1">
             <Sparkles className="w-4 h-4 text-[var(--cc-accent)] animate-pulse" />
             <span className="text-[10px] font-bold font-mono tracking-widest text-muted uppercase">
-              Autopilot Active
+              AI Powered
             </span>
           </div>
 
