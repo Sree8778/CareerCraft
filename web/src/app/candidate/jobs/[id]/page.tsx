@@ -362,9 +362,9 @@ export default function JobDetailPage() {
       });
       setResumeData(editResume);
       setDrawerOpen(false);
-      // Re-run ATS analysis with the updated resume
+      setCoverLetter(''); // clear so re-analysis generates a fresh one for the tailored resume
       setAnalyzed(false);
-      toast.success('Resume saved! Review your cover letter below and submit when ready.', { id: toastId });
+      toast.success('Resume saved! Regenerating your match score and cover letter…', { id: toastId });
     } catch (err: any) {
       toast.error(err.message || 'Failed to save resume.', { id: toastId });
     } finally {
