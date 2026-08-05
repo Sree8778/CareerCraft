@@ -1,4 +1,4 @@
-﻿// src/app/candidate/resume-builder/page.tsx
+// src/app/candidate/resume-builder/page.tsx
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -56,20 +56,21 @@ const useHistory = (initialState: any) => {
 // --- UI Primitive Components ---
 const Card = ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (<div className="glass" {...props}>{children}</div>);
 const CardHeader = ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (<div className="p-6" {...props}>{children}</div>);
-const CardTitle = ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (<h3 className="text-xl font-semibold text-white" {...props}>{children}</h3>);
+const CardTitle = ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (<h3 className="text-xl font-semibold text-[var(--cc-text)]" {...props}>{children}</h3>);
 const CardContent = ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (<div className="p-6 pt-0" {...props}>{children}</div>);
 const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'outline' | 'destructive', size?: 'default' | 'sm', as?: React.ElementType }>(({ children, variant, size, className, as: Component = 'button', ...props }, ref) => {
     const baseStyle = "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50 disabled:pointer-events-none";
-    const variantStyles = { default: "bg-indigo-600 text-white hover:bg-indigo-700", outline: "border border-gray-300 text-white bg-transparent hover:bg-white/10 hover:border-white/20", destructive: "bg-red-600 text-white hover:bg-red-700" };
+    // outline uses CSS token so the label is visible in both light and dark mode
+    const variantStyles = { default: "bg-indigo-600 text-white hover:bg-indigo-700", outline: "border border-[var(--cc-border)] text-[var(--cc-text)] bg-transparent hover:bg-[var(--cc-surface)] hover:border-[var(--cc-accent)]/40", destructive: "bg-red-600 text-white hover:bg-red-700" };
     const sizeStyles = { default: "h-10 py-2 px-4", sm: "h-9 px-3" };
     return <Component ref={ref} className={`${baseStyle} ${variantStyles[variant || 'default']} ${sizeStyles[size || 'default']} ${className}`} {...props}>{children}</Component>;
 });
 Button.displayName = 'Button';
 
-const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => (<input {...props} className="flex h-10 w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder-gray-400" />);
-const Select = ({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) => (<select {...props} className="flex h-10 w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm text-white">{children}</select>);
-const Label = (props: React.LabelHTMLAttributes<HTMLLabelElement>) => (<label {...props} className="text-sm font-medium leading-none block mb-1 text-gray-200" />);
-const Textarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => ( <textarea {...props} className="flex min-h-[80px] w-full rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder-gray-400" />);
+const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => (<input {...props} className="flex h-10 w-full rounded-md border border-[var(--cc-border)] bg-[var(--cc-surface)] px-3 py-2 text-sm text-[var(--cc-text)] placeholder-[var(--cc-text-muted)]" />);
+const Select = ({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) => (<select {...props} className="flex h-10 w-full rounded-md border border-[var(--cc-border)] bg-[var(--cc-surface)] px-3 py-2 text-sm text-[var(--cc-text)]">{children}</select>);
+const Label = (props: React.LabelHTMLAttributes<HTMLLabelElement>) => (<label {...props} className="text-sm font-medium leading-none block mb-1 text-[var(--cc-text-muted)]" />);
+const Textarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => ( <textarea {...props} className="flex min-h-[80px] w-full rounded-md border border-[var(--cc-border)] bg-[var(--cc-surface)] px-3 py-2 text-sm text-[var(--cc-text)] placeholder-[var(--cc-text-muted)]" />);
 
 // --- Utility function to unescape HTML entities ---
 function unescapeHtml(html: string) {
@@ -1482,6 +1483,20 @@ export default function ResumeBuilder() {
         }
     };
 
+    // Bug fix: allow removing individual uploaded resume files from Firestore
+    const handleDeleteUploadedFile = async (index: number) => {
+        if (!user?.id) return;
+        const toDelete = uploadedFiles[index];
+        if (!toDelete) return;
+        try {
+            await updateDoc(doc(db, 'resumes', user.id), { uploadedFiles: arrayRemove(toDelete) });
+            setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+            toast.success(`"${toDelete.name}" removed`);
+        } catch (e: any) {
+            toast.error(`Failed to remove file: ${e.message}`);
+        }
+    };
+
     const handleClearResume = () => {
         setResumeDataState({
             personal: { name: '', email: '', phone: '', location: '', legalStatus: 'Prefer not to say', website: '', linkedin: '' },
@@ -1498,6 +1513,9 @@ export default function ResumeBuilder() {
         setProfilePic({ preview: '', file: null });
         setSectionOrder([...DEFAULT_SECTION_ORDER]);
         setHiddenSections(new Set());
+        // Bug fix: clear ATS analysis so stale score from previous resume doesn't persist
+        setResumeAnalysis(null);
+        setShowAnalysis(false);
         toast.success("Cleared. Start building your new resume!");
     };
 
@@ -1515,7 +1533,7 @@ export default function ResumeBuilder() {
             });
             const result = await res.json();
             if (res.status === 402 && result.error === 'no_api_keys') {
-                toast.warning('Add your API keys in Profile → Settings to generate AI summaries.', { duration: 6000 });
+                toast.warning('No AI key found — go to Settings → API Keys and add your Gemini API key to enable AI features.', { duration: 8000 });
                 return;
             }
             const newOnes: string[] = Array.isArray(result.summaries) ? result.summaries : [];
@@ -1805,7 +1823,7 @@ export default function ResumeBuilder() {
             });
             const result = await response.json();
             if (response.status === 402 && result.error === 'no_api_keys') {
-                toast.warning('Add your API keys in Profile → Settings to use AI enhancement.', { duration: 6000 });
+                toast.warning('No AI key found — go to Settings → API Keys and add your Gemini API key to enable AI enhancement.', { duration: 8000 });
                 return;
             }
             if (!response.ok) throw new Error('Enhancement failed');
@@ -1845,7 +1863,7 @@ export default function ResumeBuilder() {
             });
             const result = await response.json();
             if (response.status === 402 && result.error === 'no_api_keys') {
-                toast.warning('Add your API keys in Profile → Settings to generate an elevator pitch.', { duration: 6000 });
+                toast.warning('No AI key found — go to Settings → API Keys and add your Gemini API key to generate an elevator pitch.', { duration: 8000 });
                 return;
             }
             if (!response.ok) throw new Error('Failed to generate pitch');
@@ -2145,10 +2163,10 @@ export default function ResumeBuilder() {
             <PitchModal isOpen={showPitchModal} onClose={() => setShowPitchModal(false)} pitchText={pitchText} setPitchText={setPitchText} startRecording={startRecording} stopRecording={stopRecording} isRecording={isRecording} recordedVideoUrl={recordedVideoUrl} videoRef={videoRef} onVideoFileChange={handleVideoFileUpload} onUpload={handleUploadPitchVideo} loading={loading} videoBlob={videoBlob} />
             
             <div className="flex flex-col bg-transparent font-sans -m-4 md:-m-6 h-[calc(100vh-4rem)]">
-                <header className="flex-shrink-0 bg-white/5 dark:bg-zinc-900/40 backdrop-blur-md border-b border-white/10 p-4">
+                <header className="flex-shrink-0 bg-[var(--cc-surface)] backdrop-blur-md border-b border-[var(--cc-border)] p-4">
                   <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
                       <div className="flex items-center gap-2">
-                           <div><h1 className="text-2xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">AI Resume Builder</h1><p className="text-xs text-gray-300">Craft your professional resume with AI assistance</p></div>
+                           <div><h1 className="text-2xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">AI Resume Builder</h1><p className="text-xs text-[var(--cc-text-muted)]">Craft your professional resume with AI assistance</p></div>
                       </div>
                       <div className="flex items-center gap-4">
                            <Button onClick={handleGeneratePitch} disabled={loading} size="sm" variant="outline"><Mic size={14} className="mr-1.5" />Elevator Pitch</Button>
@@ -2378,7 +2396,7 @@ export default function ResumeBuilder() {
                                <Button className="w-full bg-zinc-700 hover:bg-zinc-600 text-white border border-zinc-500" onClick={handleSaveDraft} disabled={loading}><Save size={15} className="mr-2" />Save Draft</Button>
                                <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" onClick={handleSaveResume} disabled={loading}><Upload size={15} className="mr-2" />Save & Publish</Button>
                                <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleDownload('PDF')} disabled={loading}><Download size={15} className="mr-2" />Download PDF</Button>
-                               <Button variant="outline" className="w-full" onClick={() => handleDownload('DOCX')} disabled={loading}><Download size={15} className="mr-2" />Download DOCX</Button>
+                               <Button variant="outline" className="w-full text-[var(--cc-text)] hover:bg-[var(--cc-surface)]" onClick={() => handleDownload('DOCX')} disabled={loading}><Download size={15} className="mr-2" />Download DOCX</Button>
                            </div>
 
                            {/* ── Upload Resume File ───────────────────────────── */}
@@ -2390,8 +2408,28 @@ export default function ResumeBuilder() {
                                    className="hidden"
                                    onChange={handleResumeFileUpload}
                                />
+                               {uploadedFiles.length > 0 && (
+                                   <div className="mt-2 space-y-1">
+                                       <p className="text-[10px] text-[var(--cc-text-muted)] uppercase tracking-wider font-semibold">Files used when applying to jobs</p>
+                                       {uploadedFiles.map((f, i) => (
+                                           <div key={i} className="flex items-center gap-2 text-[11px] text-[var(--cc-text-muted)] bg-[var(--cc-surface)] border border-[var(--cc-border)] rounded-lg px-2 py-1.5">
+                                               <FileText size={10} className="text-[var(--cc-text-muted)] flex-shrink-0" />
+                                               <span className="truncate flex-1">{f.name}</span>
+                                               <a href={f.url} target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 flex-shrink-0" title="Open file">↗</a>
+                                               <button
+                                                   type="button"
+                                                   onClick={() => handleDeleteUploadedFile(i)}
+                                                   className="text-[var(--cc-text-muted)] hover:text-red-400 transition-colors flex-shrink-0"
+                                                   title="Remove file"
+                                               >
+                                                   <Trash2 size={10} />
+                                               </button>
+                                           </div>
+                                       ))}
+                                   </div>
+                               )}
                                <Button
-                                   className="w-full bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white text-xs"
+                                   className="w-full bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-white text-xs mt-3"
                                    onClick={() => fileUploadRef.current?.click()}
                                    disabled={uploadingFile}
                                >
@@ -2399,19 +2437,6 @@ export default function ResumeBuilder() {
                                        ? <><Loader2 size={14} className="mr-2 animate-spin" />Uploading & Parsing…</>
                                        : <><UploadCloud size={14} className="mr-2" />Attach a resume file for applications</>
                                    }
-                               </Button>
-                               {uploadedFiles.length > 0 && (
-                                   <div className="mt-2 space-y-1">
-                                       <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Files used when applying to jobs</p>
-                                       {uploadedFiles.map((f, i) => (
-                                           <div key={i} className="flex items-center gap-2 text-[11px] text-zinc-400 bg-white/5 rounded-lg px-2 py-1.5">
-                                               <FileText size={10} className="text-zinc-500 flex-shrink-0" />
-                                               <span className="truncate flex-1">{f.name}</span>
-                                               <a href={f.url} target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 flex-shrink-0">↗</a>
-                                           </div>
-                                       ))}
-                                   </div>
-                               )}
                            </div>
 
                            {/* ── Saved Versions ───────────────────────────────── */}
