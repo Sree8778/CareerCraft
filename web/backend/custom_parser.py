@@ -174,82 +174,263 @@ _RE_DECORATION = re.compile(r"^[\s=\-_*|~#+]+$")  # lines that are just decorato
 
 
 # ── Section header map ─────────────────────────────────────────────────────────
+#
+# Each key maps to a compiled regex that matches (case-insensitively) every
+# real-world heading variant seen for that section.  The regex uses a full-line
+# anchor (^...$) applied to the *cleaned* candidate (decoration and trailing
+# colons already stripped by _clean_header_candidate).
 
 _SECTION_MAP: dict[str, re.Pattern] = {
+
+    # ── Summary / Objective ──────────────────────────────────────────────────
     "summary": re.compile(
-        r"^(?:summary|objective|profile|about(?: me)?|professional summary"
-        r"|career objective|overview|executive summary|career summary"
-        r"|professional profile|personal statement|introduction|bio"
-        r"|career profile|professional overview|personal profile"
-        r"|career goal|goals?|professional goal|about the candidate)$",
+        r"^(?:"
+        r"summary|summaries"
+        r"|objective|career objective|professional objective|job objective|work objective"
+        r"|profile|professional profile|personal profile|candidate profile"
+        r"|about(?: me)?|about the candidate|about myself"
+        r"|professional summary|executive summary|career summary|brief summary"
+        r"|overview|professional overview|career overview|work overview"
+        r"|introduction|professional introduction"
+        r"|personal statement|statement of purpose"
+        r"|bio|biography|professional bio"
+        r"|career profile|career goal|goals?"
+        r"|professional goal|at a glance|snapshot"
+        r"|highlights|key highlights|career highlights"
+        r"|value proposition"
+        r")$",
         re.I,
     ),
+
+    # ── Work Experience ──────────────────────────────────────────────────────
     "experience": re.compile(
-        r"^(?:(?:work\s+)?experience|work history|employment(?: history)?"
-        r"|professional experience|career(?: history)?|positions? held"
-        r"|relevant experience|work background|job history|career experience"
-        r"|professional background|employment record|working experience"
-        r"|professional history|job experience|career background|work experience history"
-        r"|internship(?:s)?|internship experience|industry experience)$",
+        r"^(?:"
+        r"(?:work\s+)?experience|experiences"
+        r"|work history|employment(?: history)?|employment record"
+        r"|professional experience|career(?: history)?"
+        r"|positions? held|positions? of responsibility"
+        r"|relevant experience|related experience|core experience"
+        r"|work background|job history|career experience|job experience"
+        r"|professional background|professional history"
+        r"|working experience|work experience history"
+        r"|career background|career record"
+        r"|industry experience|field experience"
+        r"|internship(?:s)?|internship experience|internships?\ &?\ training"
+        r"|practical experience|hands.on experience"
+        r"|consulting experience|freelance experience|contract experience"
+        r"|prior experience|previous experience"
+        r"|employment details|work details"
+        r")$",
         re.I,
     ),
+
+    # ── Education ────────────────────────────────────────────────────────────
     "education": re.compile(
-        r"^(?:education|academic(?: background)?|qualifications?|schooling"
-        r"|educational background|academic qualifications|academic credentials"
-        r"|educational qualifications|academic history|educational history"
-        r"|academic details|degrees?|academic profile|school|college|university)$",
+        r"^(?:"
+        r"education|educational background|educational history|educational details"
+        r"|educational qualifications|educational record"
+        r"|academic(?: background)?|academic qualifications|academic credentials"
+        r"|academic history|academic details|academic profile|academic record"
+        r"|academic achievements|academic training"
+        r"|qualifications?|formal qualifications"
+        r"|schooling|school|college|university|universities"
+        r"|degrees?|degree details"
+        r"|formal education|training \& education"
+        r"|coursework|relevant coursework"
+        r")$",
         re.I,
     ),
+
+    # ── Skills ───────────────────────────────────────────────────────────────
     "skills": re.compile(
-        r"^(?:(?:technical\s+)?skills?|competencies|expertise|technologies"
-        r"|tools?(?:\s*[&/]\s*technologies)?|core competencies"
-        r"|key skills|professional skills|technical expertise|skill set"
-        r"|tech stack|technology stack|core skills|areas of expertise"
-        r"|technical proficiencies|programming skills|it skills"
-        r"|software skills|hard skills|soft skills|languages?\s*[&/]\s*technologies)$",
+        r"^(?:"
+        r"(?:technical\s+)?skills?"
+        r"|competencies|core competencies|key competencies"
+        r"|expertise|areas? of expertise|domain expertise"
+        r"|technologies|tools?"
+        r"|tools?(?:\s*[&/]\s*technologies)?"
+        r"|technologies\s*[&/]\s*tools?"
+        r"|key skills|professional skills|functional skills"
+        r"|technical expertise|technical proficiencies|technical knowledge"
+        r"|skill set|skillset|skills summary"
+        r"|tech stack|technology stack|stack"
+        r"|core skills|additional skills|other skills"
+        r"|programming skills|software skills|computer skills|digital skills"
+        r"|it skills|it competencies"
+        r"|hard skills|soft skills"
+        r"|languages?\s*[&/]\s*technologies"
+        r"|capabilities|core capabilities"
+        r"|proficiencies"
+        r"|strengths|key strengths|core strengths"
+        r"|knowledge"
+        r")$",
         re.I,
     ),
+
+    # ── Projects ─────────────────────────────────────────────────────────────
     "projects": re.compile(
-        r"^(?:projects?|personal projects?|side projects?|portfolio"
-        r"|notable projects?|key projects?|academic projects?|major projects?"
-        r"|project work|project experience|project highlights)$",
+        r"^(?:"
+        r"projects?|project details"
+        r"|personal projects?|side projects?"
+        r"|portfolio|portfolio projects?"
+        r"|notable projects?|key projects?|major projects?"
+        r"|academic projects?|course projects?|university projects?"
+        r"|technical projects?|engineering projects?"
+        r"|project work|project experience|project highlights"
+        r"|open source|open.source contributions?"
+        r"|featured projects?|selected projects?"
+        r"|capstone projects?|thesis projects?"
+        r"|independent projects?"
+        r")$",
         re.I,
     ),
+
+    # ── Certifications / Training ─────────────────────────────────────────────
     "certifications": re.compile(
-        r"^(?:certifications?|certificates?|licenses?|credentials?"
-        r"|professional development|licenses?\s*[&/]\s*certifications?"
-        r"|professional certifications?|it certifications?|training"
-        r"|training\s*[&/]\s*certifications?|courses?|online courses?)$",
+        r"^(?:"
+        r"certifications?|professional certifications?"
+        r"|certificates?|certificate programs?"
+        r"|licenses?|licenses?\s*[&/]\s*certifications?"
+        r"|credentials?|professional credentials?"
+        r"|professional development"
+        r"|it certifications?|technical certifications?"
+        r"|training|training\s*[&/]\s*certifications?"
+        r"|training\s*[&/]\s*development"
+        r"|courses?|online courses?|relevant courses?"
+        r"|workshops?|seminars?"
+        r"|moocs?|e.learning"
+        r"|continuing education"
+        r")$",
         re.I,
     ),
+
+    # ── Publications ─────────────────────────────────────────────────────────
     "publications": re.compile(
-        r"^(?:publications?|research(?: papers?)?|papers?|articles?"
-        r"|research work|published work|journal articles?)$",
+        r"^(?:"
+        r"publications?|published work|published articles?"
+        r"|research(?: papers?)?|research articles?"
+        r"|papers?|journal papers?|conference papers?"
+        r"|articles?|journal articles?"
+        r"|research work|scholarly work"
+        r"|books?|book chapters?"
+        r"|technical reports?"
+        r")$",
         re.I,
     ),
+
+    # ── Awards / Honours ──────────────────────────────────────────────────────
     "awards": re.compile(
-        r"^(?:awards?|honors?|achievements?|accomplishments?|recognition"
-        r"|awards?\s*[&/]\s*honors?|honors?\s*[&/]\s*awards?"
-        r"|accolades?|prizes?)$",
+        r"^(?:"
+        r"awards?|awards?\s*[&/]\s*honors?"
+        r"|honors?|honours?|honors?\s*[&/]\s*awards?"
+        r"|achievements?|academic achievements?"
+        r"|accomplishments?"
+        r"|recognition|recognitions"
+        r"|accolades?|distinctions?"
+        r"|prizes?|scholarships?"
+        r"|fellowships?"
+        r"|awards?\s*[&/]\s*scholarships?"
+        r"|honors?\s*[&/]\s*scholarships?"
+        r")$",
         re.I,
     ),
+
+    # ── Languages ────────────────────────────────────────────────────────────
     "languages": re.compile(
-        r"^(?:languages?|spoken languages?|language proficiency"
-        r"|foreign languages?)$",
+        r"^(?:"
+        r"languages?|language skills?"
+        r"|spoken languages?|written languages?"
+        r"|language proficiency|language abilities"
+        r"|foreign languages?|second languages?"
+        r"|linguistic skills?"
+        r")$",
         re.I,
     ),
+
+    # ── Volunteer / Community ─────────────────────────────────────────────────
     "volunteer": re.compile(
-        r"^(?:volunteer(?:ing)?|community service|civic engagement"
-        r"|volunteer work|volunteering experience|social work)$",
+        r"^(?:"
+        r"volunteer(?:ing)?|volunteer work|volunteer experience"
+        r"|volunteering experience|voluntary work|voluntary experience"
+        r"|community service|community involvement|community engagement"
+        r"|civic engagement|civic activities"
+        r"|social work|social impact"
+        r"|non.?profit(?: work)?"
+        r"|outreach"
+        r")$",
         re.I,
     ),
+
+    # ── Interests / Hobbies ───────────────────────────────────────────────────
     "interests": re.compile(
-        r"^(?:interests?|hobbies|hobbies\s*[&/]\s*interests?"
-        r"|personal interests?|extracurricular)$",
+        r"^(?:"
+        r"interests?|personal interests?|professional interests?"
+        r"|hobbies|hobby"
+        r"|hobbies\s*[&/]\s*interests?|interests?\s*[&/]\s*hobbies"
+        r"|extracurricular|extracurricular activities"
+        r"|outside interests?|other interests?"
+        r"|passions?"
+        r")$",
         re.I,
     ),
+
+    # ── References ────────────────────────────────────────────────────────────
     "references": re.compile(
-        r"^(?:references?|referees?|references?\s+available)$",
+        r"^(?:"
+        r"references?|referees?"
+        r"|references?\s+available|references?\s+on\s+request"
+        r"|professional references?"
+        r")$",
+        re.I,
+    ),
+
+    # ── Leadership ────────────────────────────────────────────────────────────
+    "leadership": re.compile(
+        r"^(?:"
+        r"leadership|leadership experience|leadership roles?"
+        r"|leadership\s*[&/]\s*management"
+        r"|management experience|managerial experience"
+        r"|positions? of leadership"
+        r"|student leadership"
+        r")$",
+        re.I,
+    ),
+
+    # ── Activities / Clubs ────────────────────────────────────────────────────
+    "activities": re.compile(
+        r"^(?:"
+        r"activities|activity"
+        r"|extracurricular activities|co.?curricular activities"
+        r"|campus activities|student activities"
+        r"|clubs?\s*[&/]\s*activities"
+        r"|clubs?\s*[&/]\s*organizations?"
+        r"|organizations?|memberships?"
+        r"|professional memberships?|professional affiliations?"
+        r"|affiliations?"
+        r"|associations?"
+        r")$",
+        re.I,
+    ),
+
+    # ── Research ──────────────────────────────────────────────────────────────
+    "research": re.compile(
+        r"^(?:"
+        r"research|research experience"
+        r"|research projects?|research work"
+        r"|research interests?|research areas?"
+        r"|academic research"
+        r"|thesis|dissertation"
+        r"|research\s*[&/]\s*publications?"
+        r")$",
+        re.I,
+    ),
+
+    # ── Patents ───────────────────────────────────────────────────────────────
+    "patents": re.compile(
+        r"^(?:"
+        r"patents?|patent applications?"
+        r"|inventions?|intellectual property"
+        r")$",
         re.I,
     ),
 }
@@ -1233,6 +1414,103 @@ def _extract_volunteer(sections: dict) -> list:
     return out
 
 
+# ── Leadership ────────────────────────────────────────────────────────────────
+# Reuses the same entry-parsing logic as volunteer (role / org / dates / desc)
+
+def _extract_leadership(sections: dict) -> list:
+    """Parse Leadership / Management Experience section into role-style entries."""
+    lines = [l for l in sections.get("leadership", []) if l.strip()]
+    if not lines:
+        return []
+    entries = []
+    current: dict | None = None
+    for line in lines:
+        stripped = line.strip()
+        is_bullet = bool(re.match(r"^[•\-\*▸▪‣◦✓→]", stripped))
+        clean = re.sub(r"^[•\-\*▸▪‣◦✓→]\s*", "", stripped)
+        has_date = bool(_RE_DATE_RANGE.search(clean))
+        if not is_bullet and (current is None or has_date or (current and current["_desc"])):
+            role, org, dates = clean, "", ""
+            dm = _RE_DATE_RANGE.search(clean)
+            if dm:
+                dates = dm.group(0)
+                role = clean[:dm.start()].strip().rstrip(',|–—-').strip()
+            parts = re.split(r"\s+[–—-]\s+|,\s+|\s+at\s+|\s+@\s+", role, maxsplit=1)
+            if len(parts) == 2:
+                role, org = parts[0].strip(), parts[1].strip()
+            current = {"role": role, "organization": org, "dates": dates, "_desc": []}
+            entries.append(current)
+        elif current is not None:
+            current["_desc"].append(clean)
+        else:
+            current = {"role": clean, "organization": "", "dates": "", "_desc": []}
+            entries.append(current)
+    out = []
+    for e in entries:
+        desc = "<ul>" + "".join(f"<li>{d}</li>" for d in e["_desc"]) + "</ul>" if e["_desc"] else ""
+        out.append({"role": e["role"], "organization": e["organization"],
+                    "dates": e["dates"], "description": desc})
+    return out
+
+
+# ── Activities / Memberships ───────────────────────────────────────────────────
+
+def _extract_activities(sections: dict) -> list:
+    """Parse Activities / Clubs / Memberships section."""
+    out = []
+    for line in sections.get("activities", []):
+        line = re.sub(r"^[•\-\*▸▪‣◦✓→]\s*", "", line.strip())
+        if not line:
+            continue
+        date_str, rest = _extract_date_range(line)
+        name = rest.strip("|, ").strip() if date_str else line
+        # "Role — Organization" split
+        org = ""
+        sm = re.split(r"\s+[–—-]\s+|,\s+(?=[A-Z])|\s+at\s+|\s+@\s+", name, maxsplit=1)
+        if len(sm) == 2:
+            name, org = sm[0].strip(), sm[1].strip()
+        if name:
+            out.append({"activity": name, "organization": org, "dates": date_str})
+    return out
+
+
+# ── Research ──────────────────────────────────────────────────────────────────
+
+def _extract_research(sections: dict) -> list:
+    """Parse Research section into project-style entries."""
+    all_lines = [l.strip() for l in sections.get("research", []) if l.strip()]
+    if not all_lines:
+        return []
+    # Reuse the project block parser — research entries look identical
+    blocks = _to_blocks(sections.get("research", []))
+    if len(blocks) > 1:
+        return [p for b in blocks for p in [_parse_project_block(b)] if p]
+    p = _parse_project_block(all_lines)
+    return [p] if p else []
+
+
+# ── Patents ───────────────────────────────────────────────────────────────────
+
+def _extract_patents(sections: dict) -> list:
+    """Parse Patents section — one line per patent."""
+    out = []
+    for line in sections.get("patents", []):
+        line = re.sub(r"^[•\-\*▸▪‣◦✓→]\s*", "", line.strip())
+        if not line:
+            continue
+        date_str, rest = _extract_date_range(line)
+        title = rest.strip("|, ").strip() if date_str else line
+        # Patent number heuristic: "US1234567" or "#1234567"
+        number = ""
+        nm = re.search(r"\b(?:US|EP|WO|CN|IN|JP)?\s*#?\d{6,12}\b", title)
+        if nm:
+            number = nm.group().strip()
+            title = (title[:nm.start()] + title[nm.end():]).strip().strip(',|–').strip()
+        if title:
+            out.append({"title": title, "number": number, "date": date_str})
+    return out
+
+
 def parse_resume_text(text: str) -> dict:
     """
     Parse structured data from extracted resume text.
@@ -1251,17 +1529,22 @@ def parse_resume_text(text: str) -> dict:
 
     personal = _extract_personal(text, header_lines)
     return {
-        "personal":       personal,
-        "summary":        _extract_summary(sections, personal),
-        "experience":     _extract_experience(sections),
-        "education":      _extract_education(sections),
-        "skills":         _extract_skills(sections),
-        "projects":       _extract_projects(sections),
-        "certifications": _extract_certifications(sections),
-        "publications":   _extract_publications(sections),
-        "languages":      _extract_languages(sections),
-        "volunteer":      _extract_volunteer(sections),
-        "awards":         _extract_awards(sections),
+        "personal":        personal,
+        "summary":         _extract_summary(sections, personal),
+        "experience":      _extract_experience(sections),
+        "education":       _extract_education(sections),
+        "skills":          _extract_skills(sections),
+        "projects":        _extract_projects(sections),
+        "certifications":  _extract_certifications(sections),
+        "publications":    _extract_publications(sections),
+        "languages":       _extract_languages(sections),
+        "volunteer":       _extract_volunteer(sections),
+        "awards":          _extract_awards(sections),
+        # ── New sections ──────────────────────────────────────────────────────
+        "leadership":      _extract_leadership(sections),
+        "activities":      _extract_activities(sections),
+        "research":        _extract_research(sections),
+        "patents":         _extract_patents(sections),
     }
 
 
