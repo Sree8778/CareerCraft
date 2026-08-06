@@ -1,6 +1,8 @@
-﻿// src/app/candidate/network/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/candidate/network/page.tsx
 import { useState, useEffect, useCallback } from 'react';
 import CandidateLayout from '@/components/layout/CandidateLayout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,7 +30,7 @@ export default function CandidateNetworkPage() {
     if (!isAuthenticated || user?.role !== 'candidate') { router.push('/'); return; }
   }, [authLoading, isAuthenticated, user, router]);
 
-  // ── Connections via backend API ──────────────────────────────────────────
+  // -- Connections via backend API ------------------------------------------
   // Direct Firestore listeners require deployed security rules; the API uses
   // the Admin SDK, so it works regardless and is the reliable path.
   const fetchConnections = useCallback(async () => {
@@ -39,7 +41,7 @@ export default function CandidateNetworkPage() {
       });
       const data = await res.json();
       if (res.ok) setConnectionsList(data.connections || []);
-    } catch { /* non-fatal — tabs simply stay empty */ }
+    } catch { /* non-fatal � tabs simply stay empty */ }
   }, [user, getToken]);
 
   const fetchDirectory = useCallback(async () => {
@@ -311,7 +313,7 @@ export default function CandidateNetworkPage() {
                               onClick={() => router.push('/candidate/messages')}
                               className="w-full py-2 bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 text-indigo-400 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
                             >
-                              Connected • Chat
+                              Connected � Chat
                               <ArrowRight className="w-3 h-3" />
                             </button>
                           )}
@@ -340,7 +342,7 @@ export default function CandidateNetworkPage() {
                         </div>
                         <div>
                           <h3 className="font-bold text-sm">{conn.senderName}</h3>
-                          <p className="text-xs text-zinc-400">{conn.senderEmail} • {conn.senderRole}</p>
+                          <p className="text-xs text-zinc-400">{conn.senderEmail} � {conn.senderRole}</p>
                         </div>
                       </div>
                       <div className="flex gap-2">

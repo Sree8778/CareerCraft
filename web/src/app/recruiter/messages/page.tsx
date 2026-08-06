@@ -1,6 +1,8 @@
-// src/app/recruiter/messages/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/recruiter/messages/page.tsx
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';

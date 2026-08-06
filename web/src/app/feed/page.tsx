@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 // Social feed — LinkedIn-style posts shared by candidates and recruiters.
 // Gated by the "feed" feature flag (hidden in UI + enforced by the API).
 import { useEffect, useState, useCallback } from 'react';

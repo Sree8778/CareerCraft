@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 // Job posting pipeline — built around how a recruiter actually works:
 // 1. Role intake (the brief from the hiring manager)
 // 2. Description (AI-drafted, human-edited)

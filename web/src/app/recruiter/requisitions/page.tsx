@@ -1,6 +1,8 @@
-﻿// src/app/recruiter/requisitions/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/recruiter/requisitions/page.tsx
 import { useState, useEffect } from 'react';
 
 import RequisitionCard from '@/components/recruiter/RequisitionCard';

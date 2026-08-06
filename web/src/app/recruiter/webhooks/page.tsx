@@ -1,6 +1,8 @@
-﻿// src/app/recruiter/webhooks/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/recruiter/webhooks/page.tsx
 import { useState, useEffect } from 'react';
 
 import RecruiterLayout from '@/components/layout/RecruiterLayout';

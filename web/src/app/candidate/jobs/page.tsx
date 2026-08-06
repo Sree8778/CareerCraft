@@ -1,6 +1,8 @@
-// src/app/candidate/jobs/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/candidate/jobs/page.tsx
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, DollarSign, Sparkles, Search, SlidersHorizontal, Eye, RotateCcw, CheckCircle, Bell, BellOff, X, Plus } from 'lucide-react';
 import Link from 'next/link';

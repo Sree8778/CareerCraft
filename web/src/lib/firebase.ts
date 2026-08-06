@@ -1,7 +1,7 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { getAuth, type Auth } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -13,10 +13,28 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Initialize Firebase
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+// Firebase must only be initialised in the browser.
+// During Next.js SSR / build-time static generation the NEXT_PUBLIC_*
+// variables are not available, and calling initializeApp would throw
+// FirebaseError: auth/invalid-api-key.
+// All pages that use Firebase are already marked 'use client' +
+// force-dynamic, so these stubs are never exercised at runtime.
+const isBrowser = typeof window !== 'undefined';
+
+// @ts-expect-error — intentional lazy init; value assigned below
+let app: FirebaseApp = null;
+// @ts-expect-error
+let auth: Auth = null;
+// @ts-expect-error
+let db: Firestore = null;
+// @ts-expect-error
+let storage: FirebaseStorage = null;
+
+if (isBrowser) {
+  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  auth = getAuth(app);
+  db = getFirestore(app);
+  storage = getStorage(app);
+}
 
 export { app, auth, db, storage };

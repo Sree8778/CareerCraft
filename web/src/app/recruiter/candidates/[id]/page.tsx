@@ -1,6 +1,8 @@
-// src/app/recruiter/candidates/[id]/page.tsx
-"use client";
+'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/recruiter/candidates/[id]/page.tsx
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";

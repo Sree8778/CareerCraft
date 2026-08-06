@@ -1,6 +1,8 @@
-// src/app/candidate/dashboard/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/candidate/dashboard/page.tsx
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';

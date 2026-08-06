@@ -1,6 +1,8 @@
-﻿// src/app/recruiter/requisitions/[id]/applications/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/recruiter/requisitions/[id]/applications/page.tsx
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { API_BASE } from '@/lib/api';

@@ -1,6 +1,8 @@
-// src/app/recruiter/sourcing/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/recruiter/sourcing/page.tsx
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';

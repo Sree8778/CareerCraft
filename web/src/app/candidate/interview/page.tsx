@@ -1,6 +1,8 @@
-// src/app/candidate/interview/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/candidate/interview/page.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 

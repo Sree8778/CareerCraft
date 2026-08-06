@@ -1,6 +1,8 @@
-﻿// src/app/recruiter/network/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/recruiter/network/page.tsx
 import { useState, useEffect, useCallback } from 'react';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { useAuth } from '@/contexts/AuthContext';

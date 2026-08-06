@@ -1,6 +1,8 @@
-﻿// src/app/companies/[id]/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/companies/[id]/page.tsx
 import React, { useEffect, useState, use } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';

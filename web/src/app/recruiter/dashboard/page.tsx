@@ -1,6 +1,8 @@
-// src/app/recruiter/dashboard/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/recruiter/dashboard/page.tsx
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import {
   Users, ClipboardList, TrendingUp, Sparkles,

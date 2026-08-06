@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 // Super Admin console — feature flags, platform stats, user & job management.
 // Access: backend email allowlist (SUPER_ADMIN_EMAILS). The UI guard here is
 // convenience; every admin endpoint re-checks the allowlist server-side.

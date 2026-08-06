@@ -1,6 +1,8 @@
-// src/app/candidate/resume-builder/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/candidate/resume-builder/page.tsx
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { FileText, Download, Eye, Sparkles, User, Briefcase, GraduationCap, Award, Upload, X, Mic, BookOpen, FolderGit2, Palette, StopCircle, UploadCloud, Copy, Trash2, Bold, Italic, List, ListOrdered, Link as LinkIcon, Unlink, FilePlus2, LayoutTemplate, Save, CheckCircle2, Star, FolderOpen, ChevronDown, ChevronUp, Loader2, Globe, Heart, Trophy, Target, ChevronUp as ArrowUp, ChevronDown as ArrowDown, EyeOff, Languages, Mail, AlignLeft, GripVertical } from 'lucide-react';
@@ -2437,6 +2439,7 @@ export default function ResumeBuilder() {
                                        ? <><Loader2 size={14} className="mr-2 animate-spin" />Uploading & Parsing…</>
                                        : <><UploadCloud size={14} className="mr-2" />Attach a resume file for applications</>
                                    }
+                                </Button>
                            </div>
 
                            {/* ── Saved Versions ───────────────────────────────── */}

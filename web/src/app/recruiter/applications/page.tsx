@@ -1,6 +1,8 @@
-// src/app/recruiter/applications/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+// src/app/recruiter/applications/page.tsx
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';

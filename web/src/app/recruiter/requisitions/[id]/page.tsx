@@ -1,5 +1,8 @@
-﻿// src/app/recruiter/requisitions/[id]/page.tsx
 'use client';
+
+export const dynamic = 'force-dynamic';
+
+// src/app/recruiter/requisitions/[id]/page.tsx
 import React, { useEffect, useState } from 'react';
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import { useParams, useRouter } from 'next/navigation';
