@@ -40,7 +40,7 @@ class _RecruiterMessagesPageState extends State<RecruiterMessagesPage> {
         });
       }
     } catch (e) {
-      print('Error loading recruiter chats: $e');
+      debugPrint('Error loading recruiter chats: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -183,7 +183,7 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
         if (!silent) _scrollToBottom();
       }
     } catch (e) {
-      print('Error loading messages: $e');
+      debugPrint('Error loading messages: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -214,8 +214,9 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
     _messageController.clear();
 
     final user = FirebaseAuth.instance.currentUser;
-    final senderId = user?.uid ?? widget.chat['recruiterId'] ?? 'mock_recruiter_123';
-    final senderName = user?.displayName ?? widget.chat['recruiterName'] ?? 'Recruiter';
+    if (user == null) return;
+    final senderId = user.uid;
+    final senderName = user.displayName ?? user.email ?? 'Recruiter';
 
     try {
       final msg = await sendChatMessage(widget.chat['id'], text, senderId, senderName);
@@ -226,7 +227,7 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
         _scrollToBottom();
       }
     } catch (e) {
-      print('Failed to send message: $e');
+      debugPrint('Failed to send message: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -237,8 +238,8 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
   }
 
   Future<void> _sendSystemMessage(String text) async {
-    final senderId = 'system';
-    final senderName = 'System Notification';
+    const senderId = 'system';
+    const senderName = 'System Notification';
     try {
       final msg = await sendChatMessage(widget.chat['id'], text, senderId, senderName);
       if (msg != null && mounted) {
@@ -248,7 +249,7 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
         _scrollToBottom();
       }
     } catch (e) {
-      print('Failed to send system alert message: $e');
+      debugPrint('Failed to send system alert message: $e');
     }
   }
 
@@ -271,9 +272,10 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
           expand: false,
           builder: (context, scrollController) {
             return FutureBuilder<DocumentSnapshot>(
-              future: candidateId.isNotEmpty
-                  ? FirebaseFirestore.instance.collection('users').doc(candidateId).get()
-                  : Future.value(null),
+              future: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(candidateId.isNotEmpty ? candidateId : '__empty__')
+                  .get(),
               builder: (context, snapshot) {
                 Map<String, dynamic> cd = {};
                 if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
@@ -488,8 +490,8 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
     final descController = TextEditingController(text: 'Live discussion concerning your application for ${widget.chat['jobTitle']}.');
     final dateController = TextEditingController();
     final timeController = TextEditingController();
-    final candidateEmailController = TextEditingController(text: 'candidate@careercraft.com');
-    final recruiterEmailController = TextEditingController(text: 'recruiter@careercraft.com');
+    final candidateEmailController = TextEditingController(text: widget.chat['candidateEmail'] ?? '');
+    final recruiterEmailController = TextEditingController(text: FirebaseAuth.instance.currentUser?.email ?? '');
     
     DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
     TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
@@ -698,7 +700,7 @@ class _RecruiterChatThreadScreenState extends State<RecruiterChatThreadScreen> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final chat = widget.chat;
     final user = FirebaseAuth.instance.currentUser;
-    final myUid = user?.uid ?? chat['recruiterId'] ?? 'mock_recruiter_123';
+    final myUid = user?.uid ?? chat['recruiterId'] ?? '';
 
     return Scaffold(
       backgroundColor: isDarkMode ? const Color(0xFF0F0C20) : Colors.white,

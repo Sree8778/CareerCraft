@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:recruit_edge/api/api_service.dart';
-import 'package:recruit_edge/theme/app_theme.dart';
+import 'package:recruit_edge/services/auth_service.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:recruit_edge/pages/job_details_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -42,7 +42,7 @@ class _CandidateApplicationsPageState extends State<CandidateApplicationsPage> {
         });
       }
     } catch (e) {
-      print('Error fetching apps on page: $e');
+      debugPrint('Error fetching apps on page: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -57,8 +57,7 @@ class _CandidateApplicationsPageState extends State<CandidateApplicationsPage> {
     });
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      final token = user != null ? 'mock_token' : 'demo_token';
+      final token = await AuthService.getToken() ?? '';
       
       // Fetch full job detail from backend
       final response = await http.get(
@@ -90,7 +89,7 @@ class _CandidateApplicationsPageState extends State<CandidateApplicationsPage> {
         }
       }
     } catch (e) {
-      print('Failed to load full job details: $e');
+      debugPrint('Failed to load full job details: $e');
       if (mounted) {
         Navigator.push(
           context,

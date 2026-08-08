@@ -4,7 +4,6 @@ import 'package:http/http.dart' as http;
 import 'package:recruit_edge/api/api_service.dart';
 import 'package:recruit_edge/services/auth_service.dart';
 import 'package:recruit_edge/theme/app_theme.dart';
-import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:recruit_edge/pages/job_details_page.dart';
 
 class JobSearchPage extends StatefulWidget {
@@ -19,7 +18,6 @@ class _JobSearchPageState extends State<JobSearchPage> {
   List<dynamic> _jobs = [];
   List<dynamic> _dynamicJobs = [];
   bool _isLoading = false;
-  String _searchedQuery = "";
 
   @override
   void initState() {
@@ -37,7 +35,7 @@ class _JobSearchPageState extends State<JobSearchPage> {
         _dynamicJobs = fetched;
       });
     } catch (e) {
-      print('Failed to fetch dynamic jobs: $e');
+      debugPrint('Failed to fetch dynamic jobs: $e');
     } finally {
       setState(() {
         _isLoading = false;
@@ -52,7 +50,6 @@ class _JobSearchPageState extends State<JobSearchPage> {
 
     setState(() {
       _isLoading = true;
-      _searchedQuery = query;
     });
 
     try {
@@ -79,11 +76,13 @@ class _JobSearchPageState extends State<JobSearchPage> {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Semantic job search failed: $e. Proceeding with simulated matches.');
-      // Simulating semantic match sorting
-      setState(() {
-        _jobs = _getSimulatedMatchedJobs(query);
-      });
+      debugPrint('Semantic job search failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('AI job search unavailable. Showing all jobs instead.')),
+        );
+        setState(() => _jobs = _dynamicJobs);
+      }
     } finally {
       setState(() {
         _isLoading = false;
@@ -230,10 +229,10 @@ class _JobSearchPageState extends State<JobSearchPage> {
         final fitDescription = job['matchDescription'] ?? job['fitDescription'] ?? job['copilotReasoning'] ?? "Matches your skill filters.";
 
         Color scoreColor = Colors.green;
-        if (matchScore < 60) {
-          scoreColor = Colors.amber;
-        } else if (matchScore < 40) {
+        if (matchScore < 40) {
           scoreColor = Colors.red;
+        } else if (matchScore < 60) {
+          scoreColor = Colors.amber;
         }
 
         return GestureDetector(
@@ -326,31 +325,4 @@ class _JobSearchPageState extends State<JobSearchPage> {
     );
   }
 
-  // Simulate semantic query matches
-  List<dynamic> _getSimulatedMatchedJobs(String query) {
-    if (_dynamicJobs.isEmpty) return [];
-    
-    final lower = query.toLowerCase();
-    return _dynamicJobs.map((job) {
-      final title = (job['title'] ?? '').toString().toLowerCase();
-      final desc = (job['description'] ?? '').toString().toLowerCase();
-      
-      int score = 70;
-      String reason = "Matches your skill profile and interests.";
-      
-      if (lower.split(' ').any((word) => word.length > 2 && (title.contains(word) || desc.contains(word)))) {
-        score = 92;
-        reason = "Excellent match! The job details strongly align with your prompt query criteria.";
-      } else if (lower.contains('remote') && (title.contains('remote') || desc.contains('remote'))) {
-        score = 88;
-        reason = "Great match! This role accommodates remote schedules requested in your query.";
-      }
-      
-      return {
-        ...job,
-        'matchPercentage': score,
-        'matchDescription': reason,
-      };
-    }).toList()..sort((a, b) => (b['matchPercentage'] as int).compareTo(a['matchPercentage'] as int));
-  }
 }

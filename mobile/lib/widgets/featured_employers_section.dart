@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:recruit_edge/api/api_service.dart';
 import 'package:recruit_edge/models/employer.dart';
-import 'package:recruit_edge/theme/app_theme.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
+import 'package:recruit_edge/pages/companies_page.dart';
+import 'package:recruit_edge/pages/company_details_page.dart';
 
 class FeaturedEmployersSection extends StatefulWidget {
   const FeaturedEmployersSection({super.key});
@@ -63,7 +64,13 @@ class _FeaturedEmployersSectionState extends State<FeaturedEmployersSection> {
 
                   return GlassCard(
                     onTap: () {
-                      print('Tapped on employer: ${employer.name}');
+                      Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => CompanyDetailsPage(company: {
+                          'name': employer.name,
+                          'logoUrl': employer.logoUrl,
+                          'industry': employer.industry,
+                        }),
+                      ));
                     },
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -102,7 +109,9 @@ class _FeaturedEmployersSectionState extends State<FeaturedEmployersSection> {
           Center(
             child: ElevatedButton(
               onPressed: () {
-                print('View All Employers tapped');
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => const CompaniesPage(),
+                ));
               },
               child: const Text('View All Employers'),
             ),

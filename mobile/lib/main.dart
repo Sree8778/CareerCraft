@@ -12,11 +12,8 @@ import 'package:recruit_edge/widgets/theme_toggle.dart';
 // Candidate pages
 import 'package:recruit_edge/pages/candidate_dashboard_page.dart';
 import 'package:recruit_edge/pages/job_search_page.dart';
-import 'package:recruit_edge/pages/candidate_applications_page.dart';
 import 'package:recruit_edge/pages/candidate_messages_page.dart';
-import 'package:recruit_edge/pages/candidate_profile_page.dart';
 import 'package:recruit_edge/pages/feed_page.dart';
-import 'package:recruit_edge/pages/network_page.dart';
 import 'package:recruit_edge/pages/more_page.dart';
 
 // Recruiter pages

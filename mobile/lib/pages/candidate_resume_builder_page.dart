@@ -5,16 +5,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'package:recruit_edge/theme/app_theme.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:recruit_edge/widgets/video_pitch_player.dart';
 import 'package:recruit_edge/api/api_service.dart' as api;
-import 'package:recruit_edge/services/auth_service.dart';
 import 'package:recruit_edge/pages/resume_preview_page.dart';
 
 class CandidateResumeBuilderPage extends StatefulWidget {
@@ -131,9 +128,11 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
           final savedData = docSnap.data()?['resumeData'];
           if (savedData != null) {
             _populateFields(savedData);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Loaded your saved resume from cloud!')),
-            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Loaded your saved resume from cloud!')),
+              );
+            }
           }
         }
         
@@ -146,7 +145,7 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
         }
       }
     } catch (e) {
-      print("Warning: Cloud load failed, using local/fallback default data: $e");
+      debugPrint("Warning: Cloud load failed, using local/fallback default data: $e");
     } finally {
       setState(() => _isLoading = false);
     }
@@ -204,8 +203,9 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
     if (pickedFile != null) {
       setState(() {
         _profilePicFile = File(pickedFile.path);
-        _profilePicUrl = null; // Overwrite previous URL preview
+        _profilePicUrl = null;
       });
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile picture selected locally.')),
       );
@@ -222,12 +222,13 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
 
     setState(() => _isLoading = true);
     final suggestions = await api.enhanceSection(sectionName, currentText);
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (suggestions.isEmpty) return;
 
-    // Show suggestion dialogue selector
     String selectedText = suggestions.first;
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -293,6 +294,7 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
     final bytes = await file.readAsBytes();
     
     final parsedData = await api.parseResume(bytes, result.files.single.name);
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (parsedData != null) {
@@ -310,12 +312,14 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
   Future<void> _generateAIElevatorPitch() async {
     setState(() => _isLoading = true);
     final pitch = await api.generateElevatorPitch(_buildResumeJson());
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     String localPitchText = pitch;
     String? localVideoPath;
     bool isUploadingVideo = false;
 
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -401,6 +405,7 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: isUploadingVideo ? null : () async {
+                            final messenger = ScaffoldMessenger.of(context);
                             setSheetState(() => isUploadingVideo = true);
                             try {
                               final user = FirebaseAuth.instance.currentUser;
@@ -410,7 +415,7 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
                                     .child('users/${user.uid}/pitches/${DateTime.now().millisecondsSinceEpoch}.mp4');
                                 final uploadTask = await storageRef.putFile(File(localVideoPath!));
                                 final videoUrl = await uploadTask.ref.getDownloadURL();
-                                
+
                                 await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
                                   'elevatorPitchUrl': videoUrl,
                                 }, SetOptions(merge: true));
@@ -418,14 +423,14 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
                                 setState(() {
                                   _elevatorPitchUrl = videoUrl;
                                 });
-                                
-                                ScaffoldMessenger.of(context).showSnackBar(
+
+                                messenger.showSnackBar(
                                   const SnackBar(content: Text('Video pitch uploaded to Firebase successfully!')),
                                 );
                               }
                             } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Upload failed: $e. Fallback simulated successfully!')),
+                              messenger.showSnackBar(
+                                SnackBar(content: Text('Upload failed. Please try again. ($e)')),
                               );
                             } finally {
                               setSheetState(() => isUploadingVideo = false);
@@ -449,9 +454,11 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please log in first to sync to cloud!')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please log in first to sync to cloud!')),
+          );
+        }
         return;
       }
 
@@ -474,15 +481,19 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
         'updatedAt': DateTime.now().toIso8601String(),
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Resume synchronized with Cloud Firestore!')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Resume synchronized with Cloud Firestore!')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cloud sync simulated: saved local modifications. ($e)')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to sync to cloud. Your changes are saved locally only. ($e)')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -500,6 +511,7 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
     } else {
       fileBytes = await api.generateDocx(_buildResumeJson(), styleOpts, _showLogo);
     }
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (fileBytes == null) {
@@ -516,11 +528,13 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
         final file = File('${directory.path}/${formattedName}_Resume.${format.toLowerCase()}');
         await file.writeAsBytes(fileBytes);
 
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('$format Downloaded to Documents folder: ${file.path}')),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to save file: $e')),
       );
@@ -582,7 +596,7 @@ class _CandidateResumeBuilderPageState extends State<CandidateResumeBuilderPage>
           if (_isLoading)
             Container(
               color: Colors.black45,
-              child: Center(
+              child: const Center(
                 child: CircularProgressIndicator(color: Colors.deepPurpleAccent),
               ),
             )

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:recruit_edge/theme/app_theme.dart';
 
 class GlassCard extends StatelessWidget {
   final Widget child;

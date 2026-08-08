@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:recruit_edge/theme/app_theme.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:recruit_edge/api/api_service.dart';
 import 'package:recruit_edge/pages/recruiter_messages_page.dart';
@@ -29,13 +28,17 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
     });
 
     final user = FirebaseAuth.instance.currentUser;
-    final recruiterId = user?.uid ?? 'mock_recruiter_123';
-    final recruiterName = user?.displayName ?? 'Recruiter Evaluator';
-    
-    final candidateId = widget.candidateData['id'] ?? widget.candidateData['uid'] ?? 'mock_uid_123';
+    if (user == null) {
+      if (mounted) setState(() => _isCreatingChat = false);
+      return;
+    }
+    final recruiterId = user.uid;
+    final recruiterName = user.displayName ?? user.email ?? 'Recruiter';
+
+    final candidateId = widget.candidateData['id'] ?? widget.candidateData['uid'] ?? '';
     final candidateName = widget.candidateData['name'] ?? 'Anonymous Candidate';
     final jobTitle = widget.candidateData['title'] ?? 'Software Professional';
-    final jobId = widget.candidateData['jobId'] ?? 'job_mock_123';
+    final jobId = widget.candidateData['jobId'] ?? '';
 
     try {
       final chat = await createChat(
@@ -54,7 +57,7 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
             builder: (context) => RecruiterChatThreadScreen(chat: chat),
           ),
         );
-      } else {
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             backgroundColor: Colors.red,
@@ -63,7 +66,7 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
         );
       }
     } catch (e) {
-      print('Error starting chat: $e');
+      debugPrint('Error starting chat: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -90,7 +93,7 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
 
   // Fetch candidate's dynamic interview records from Cloud Firestore
   Future<void> _fetchInterviewRecord() async {
-    final candidateId = widget.candidateData['id'] ?? widget.candidateData['uid'] ?? 'mock_uid_123';
+    final candidateId = widget.candidateData['id'] ?? widget.candidateData['uid'] ?? '';
     try {
       final docSnap = await FirebaseFirestore.instance
           .collection('interviews')
@@ -103,7 +106,7 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
         });
       }
     } catch (e) {
-      print('Error loading interview record: $e');
+      debugPrint('Error loading interview record: $e');
     } finally {
       setState(() {
         _isLoadingRecord = false;
@@ -117,7 +120,7 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
       _isSavingNotes = true;
     });
 
-    final candidateId = widget.candidateData['id'] ?? widget.candidateData['uid'] ?? 'mock_uid_123';
+    final candidateId = widget.candidateData['id'] ?? widget.candidateData['uid'] ?? '';
     try {
       // Sync notes directly to Firestore user profile
       await FirebaseFirestore.instance.collection('users').doc(candidateId).set({
@@ -125,6 +128,7 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
         'lastNotesSyncAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Colors.green,
@@ -132,6 +136,7 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red[800],
@@ -148,7 +153,6 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
   @override
   Widget build(BuildContext context) {
     final candidateName = widget.candidateData['name'] ?? 'Candidate Profile';
-    final candidateTitle = widget.candidateData['title'] ?? 'Software Engineer';
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F0C20),
@@ -190,12 +194,12 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
 
   // --- TAB 1: PROFILE DETAILS ---
   Widget _buildProfileTab(BoxConstraints constraints) {
-    final email = widget.candidateData['email'] ?? 'candidate@careercraft.com';
-    final phone = widget.candidateData['phone'] ?? '+1 (555) 019-2834';
-    final location = widget.candidateData['location'] ?? 'New York, USA';
-    final skills = widget.candidateData['skills'] ?? 'Flutter, Dart, Firebase, Python, Next.js, Flask';
-    final experience = widget.candidateData['experience'] ?? 'Senior Software Engineer at TechCorp (2023 - Present)';
-    final education = widget.candidateData['education'] ?? 'B.S. Computer Science, Stanford University (2022)';
+    final email = widget.candidateData['email'] ?? 'Not provided';
+    final phone = widget.candidateData['phone'] ?? 'Not provided';
+    final location = widget.candidateData['location'] ?? 'Not provided';
+    final skills = widget.candidateData['skills'] ?? 'Not provided';
+    final experience = widget.candidateData['experience'] ?? 'Not provided';
+    final education = widget.candidateData['education'] ?? 'Not provided';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
@@ -371,8 +375,8 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
       return _buildNoVoiceRecordState();
     }
 
-    final overallScore = _interviewRecord!['overallScore'] ?? 87;
-    final overallFeedback = _interviewRecord!['overallFeedback'] ?? 'Excellent command of technical structures.';
+    final overallScore = _interviewRecord!['overallScore'];
+    final overallFeedback = _interviewRecord!['overallFeedback'] ?? 'No feedback recorded.';
     final List<dynamic> conversation = _interviewRecord!['conversationHistory'] ?? [];
     final List<dynamic> scorecards = _interviewRecord!['responses'] ?? [];
 
@@ -397,8 +401,8 @@ class _RecruiterCandidateDetailsPageState extends State<RecruiterCandidateDetail
                     ),
                     child: Center(
                       child: Text(
-                        '$overallScore',
-                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                        overallScore != null ? '$overallScore' : 'N/A',
+                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),

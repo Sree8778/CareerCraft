@@ -38,7 +38,7 @@ class _RecruiterWebhooksPageState extends State<RecruiterWebhooksPage> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading webhooks: $e');
+      debugPrint('Error loading webhooks: $e');
       setState(() {
         _isLoading = false;
       });
@@ -58,6 +58,7 @@ class _RecruiterWebhooksPageState extends State<RecruiterWebhooksPage> {
         description: _descController.text.trim(),
       );
 
+      if (!mounted) return;
       if (newSub != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -77,6 +78,7 @@ class _RecruiterWebhooksPageState extends State<RecruiterWebhooksPage> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
@@ -84,9 +86,11 @@ class _RecruiterWebhooksPageState extends State<RecruiterWebhooksPage> {
         ),
       );
     } finally {
-      setState(() {
-        _isSubmitting = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
     }
   }
 

@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:recruit_edge/api/api_service.dart';
 import 'package:recruit_edge/services/auth_service.dart';
@@ -18,8 +21,9 @@ class CandidateInterviewPage extends StatefulWidget {
   State<CandidateInterviewPage> createState() => _CandidateInterviewPageState();
 }
 
-class _CandidateInterviewPageState extends State<CandidateInterviewPage> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
-  int _step = 1; // 1: Identity Biometrics, 2: Device/Audio Scan, 3: Voice Arena, 4: Complete
+class _CandidateInterviewPageState extends State<CandidateInterviewPage>
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  int _step = 1;
   bool _isLoading = false;
 
   // Identity checks
@@ -27,26 +31,37 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
   XFile? _selfieFile;
   Map<String, dynamic>? _verificationResult;
 
-  // Proctoring controls
+  // Proctoring
   int _appStateViolations = 0;
-  bool _audioDriversClean = false;
-  bool _isFullscreenMode = false;
 
-  // Interview state variables
-  String _interviewId = "";
-  String _currentQuestion = "";
+  // Interview state
+  String _interviewId = '';
+  String _currentQuestion = '';
   bool _isAiSpeaking = false;
   bool _isRecording = false;
-  String _speechTranscript = "";
+  String _speechTranscript = '';
   List<Map<String, dynamic>> _conversationHistory = [];
-  int _timeLeftSeconds = 1800; // 30 minutes
+  int _timeLeftSeconds = 1800;
   Timer? _countdownTimer;
 
-  // Recording waveform animation
+  // Score tracking
+  int _runningScore = 0;
+  int _scoredRounds = 0;
+  int _overallScore = 0;
+  String _overallFeedback = '';
+
+  // Waveform animation
   late AnimationController _waveformController;
   final List<double> _waveHeights = List.generate(10, (_) => 10.0);
   final Random _random = Random();
   Timer? _waveformTimer;
+
+  // Speech recognition
+  final SpeechToText _speech = SpeechToText();
+  bool _speechAvailable = false;
+
+  // Text-to-speech
+  final FlutterTts _tts = FlutterTts();
 
   final ImagePicker _picker = ImagePicker();
 
@@ -58,6 +73,24 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+    _initSpeech();
+    _initTts();
+  }
+
+  Future<void> _initSpeech() async {
+    final available = await _speech.initialize(
+      onError: (e) => debugPrint('STT error: $e'),
+    );
+    if (mounted) setState(() => _speechAvailable = available);
+  }
+
+  Future<void> _initTts() async {
+    await _tts.setLanguage('en-US');
+    await _tts.setSpeechRate(0.45);
+    await _tts.setVolume(1.0);
+    _tts.setCompletionHandler(() {
+      if (mounted) setState(() => _isAiSpeaking = false);
+    });
   }
 
   @override
@@ -66,25 +99,23 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
     _countdownTimer?.cancel();
     _waveformTimer?.cancel();
     _waveformController.dispose();
+    _tts.stop();
+    _speech.cancel();
     super.dispose();
   }
 
-  // Monitor App state change (Proctoring: backgrounding is like tab-switching on web)
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (_step == 3) {
       if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-        setState(() {
-          _appStateViolations++;
-        });
-        _logProctoringViolation("Application moved to background/unfocused");
-        
+        setState(() => _appStateViolations++);
+        _logProctoringViolation('Application moved to background/unfocused');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.amber[900],
             content: Text(
-              'WARNING: App unfocused/backgrounded! This violation has been logged. ($_appStateViolations/3)',
+              'WARNING: App unfocused! Violation logged. ($_appStateViolations/3)',
               style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
             ),
           ),
@@ -96,24 +127,20 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
   Future<void> _logProctoringViolation(String reason) async {
     if (_interviewId.isEmpty) return;
     try {
-      final docRef = FirebaseFirestore.instance.collection('interviews').doc(_interviewId);
-      await docRef.update({
+      await FirebaseFirestore.instance.collection('interviews').doc(_interviewId).update({
         'proctoringViolations.tabSwitchesCount': _appStateViolations,
         'proctoringViolations.cheatingFlags': FieldValue.arrayUnion([reason]),
         'proctoringViolations.lastViolationRecordedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('Error logging violation: $e');
+      debugPrint('Error logging violation: $e');
     }
   }
 
-  // Start 30-minute interview countdown timer
   void _startTimer() {
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_timeLeftSeconds > 0) {
-        setState(() {
-          _timeLeftSeconds--;
-        });
+        setState(() => _timeLeftSeconds--);
       } else {
         _countdownTimer?.cancel();
         _finishInterview();
@@ -127,74 +154,64 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
-  // Capture State ID trigger
   Future<void> _pickStateId() async {
     try {
       final file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-      if (file != null) {
-        setState(() {
-          _stateIdFile = file;
-        });
+      if (file != null && mounted) {
+        setState(() => _stateIdFile = file);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('State ID successfully loaded.')),
+          const SnackBar(content: Text('State ID loaded.')),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to load image: $e')),
       );
     }
   }
 
-  // Capture Webcam Selfie trigger
   Future<void> _captureSelfie() async {
     try {
       final file = await _picker.pickImage(source: ImageSource.camera, imageQuality: 80);
-      if (file != null) {
-        setState(() {
-          _selfieFile = file;
-        });
+      if (file != null && mounted) {
+        setState(() => _selfieFile = file);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Selfie successfully captured.')),
+          const SnackBar(content: Text('Selfie captured.')),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to capture camera selfie: $e')),
+        SnackBar(content: Text('Failed to capture selfie: $e')),
       );
     }
   }
 
-  // Run Biometrics Identity check
   Future<void> _verifyIdentity() async {
     if (_stateIdFile == null || _selfieFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select State ID and capture Selfie photo first.')),
+        const SnackBar(content: Text('Please select a State ID and capture a selfie first.')),
       );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      // Identity verification REST call
       final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/interviews/verify-identity'));
       final token = await AuthService.getToken() ?? '';
       request.headers['Authorization'] = 'Bearer $token';
-
       request.files.add(await http.MultipartFile.fromPath('stateId', _stateIdFile!.path));
       request.files.add(await http.MultipartFile.fromPath('selfie', _selfieFile!.path));
 
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
 
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
-        setState(() {
-          _verificationResult = result;
-        });
+        if (!mounted) return;
+        setState(() => _verificationResult = result);
 
         if (result['fraudDetected'] == true) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -205,74 +222,86 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Identity verified successfully! Likeness: ${result['matchScore']}%')),
+            SnackBar(content: Text('Identity verified! Likeness: ${result['matchScore']}%')),
           );
-          setState(() {
-            _step = 2;
-          });
+          setState(() => _step = 2);
         }
       } else {
-        throw Exception('Status code: ${response.statusCode}');
+        throw Exception('Status: ${response.statusCode}');
       }
     } catch (e) {
-      print('Identity check failed: $e. Proceeding in high-fidelity developer demo mode.');
-      setState(() {
-        _verificationResult = {
-          'matchScore': 92,
-          'matched': true,
-          'confidence': 'high',
-          'analysis': 'Simulated biometric match passed successfully.',
-          'fraudDetected': false
-        };
-        _step = 2;
-      });
+      debugPrint('Identity check failed: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red[800],
+          content: Text('Verification request failed. Check your connection and try again. ($e)'),
+        ),
+      );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // Run Virtual Audio Driver & Audio loopback check
   Future<void> _runDeviceScan() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
-    // Simulate scanning loopbacks
-    await Future.delayed(const Duration(milliseconds: 1500));
+    // Request microphone permission — the real check for audio access
+    final micStatus = await Permission.microphone.request();
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    if (!micStatus.isGranted) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Microphone permission required for the voice interview.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Re-initialise STT after permission is granted
+    if (!_speechAvailable) {
+      _speechAvailable = await _speech.initialize(onError: (e) => debugPrint('STT: $e'));
+    }
 
     setState(() {
-      _audioDriversClean = true;
-      _isFullscreenMode = true;
       _isLoading = false;
       _step = 3;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Device scan complete. Virtual audio devices (Otter, Parakeet) blocked!')),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Device scan complete. Microphone access confirmed.')),
+      );
+    }
 
     _startInterviewArena();
   }
 
-  // Start Turn-based Voice Arena
   Future<void> _startInterviewArena() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'mock_uid_123';
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You must be signed in to take the interview.')),
+        );
+      }
+      return;
+    }
     _interviewId = '${uid}_ai_voice_round';
     final token = await AuthService.getToken() ?? '';
 
     try {
-      // Get resume details from Firebase Firestore
       final resumeDoc = await FirebaseFirestore.instance.collection('resumes').doc(uid).get();
-      final dataMap = resumeDoc.data();
-      final resumeData = (dataMap != null) ? dataMap['resumeData'] ?? {} : {};
+      final resumeData = (resumeDoc.data()?['resumeData']) ?? {};
 
-      // Get first question
       final response = await http.post(
         Uri.parse('$baseUrl/interviews/get-next-question'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
@@ -280,11 +309,12 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
           'resumeData': resumeData,
           'conversationHistory': [],
           'latestTranscript': '',
-          'elapsedSeconds': 0
+          'elapsedSeconds': 0,
         }),
       );
 
-      String openingQuestion = "Welcome to your AI Voice Technical Interview. Let's start with your background. Can you outline your primary technical skills?";
+      String openingQuestion =
+          "Welcome to your AI Voice Technical Interview. Let's start with your background. Can you outline your primary technical skills?";
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         openingQuestion = data['nextQuestion'] ?? openingQuestion;
@@ -297,10 +327,9 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
         ];
       });
 
-      // Write interview to Firebase Firestore
       await FirebaseFirestore.instance.collection('interviews').doc(_interviewId).set({
         'candidateId': uid,
-        'candidateName': FirebaseAuth.instance.currentUser?.displayName ?? 'Developer Candidate',
+        'candidateName': FirebaseAuth.instance.currentUser?.displayName ?? 'Candidate',
         'jobId': 'ai_voice_assessor',
         'jobTitle': 'Core technical evaluator',
         'status': 'in_progress',
@@ -310,80 +339,97 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
           'tabSwitchesCount': 0,
           'fullscreenExitsCount': 0,
           'virtualAudioDetected': false,
-          'cheatingFlags': []
+          'cheatingFlags': [],
         },
         'verification': {
           'faceMatchScore': _verificationResult?['matchScore'] ?? 92,
-          'verifiedAt': FieldValue.serverTimestamp()
-        }
+          'verifiedAt': FieldValue.serverTimestamp(),
+        },
       });
 
       _speakQuestion(openingQuestion);
       _startTimer();
     } catch (e) {
-      print('Interview established error: $e');
+      debugPrint('Arena start error: $e');
+      const fallback =
+          "Welcome. Let's start — can you outline your primary technical skills?";
       setState(() {
-        _currentQuestion = "Welcome. Let's start with your background. Can you outline your primary technical skills?";
+        _currentQuestion = fallback;
         _conversationHistory = [
-          {'speaker': 'ai', 'text': _currentQuestion, 'timestamp': DateTime.now().toIso8601String()}
+          {'speaker': 'ai', 'text': fallback, 'timestamp': DateTime.now().toIso8601String()}
         ];
       });
-      _speakQuestion(_currentQuestion);
+      _speakQuestion(fallback);
       _startTimer();
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
-  // TTS speech simulator
-  void _speakQuestion(String text) {
-    setState(() {
-      _isAiSpeaking = true;
-    });
-
-    // Simulated TTS speaking duration
-    Future.delayed(const Duration(seconds: 4), () {
-      if (mounted) {
-        setState(() {
-          _isAiSpeaking = false;
-        });
-      }
-    });
+  // Real TTS
+  void _speakQuestion(String text) async {
+    setState(() => _isAiSpeaking = true);
+    await _tts.speak(text);
+    // _tts.setCompletionHandler sets _isAiSpeaking = false when done
   }
 
-  // Voice capture trigger
-  void _toggleVoiceRecording() {
+  // Real speech-to-text
+  void _toggleVoiceRecording() async {
     if (_isRecording) {
-      // Stop recording
+      await _speech.stop();
       _waveformTimer?.cancel();
       _waveformController.stop();
-      setState(() {
-        _isRecording = false;
-        _speechTranscript = "In my last technical role, I designed high-performance REST APIs using Python and Flask, syncing records with Firebase databases and Firestore storage. I strictly followed privacy standards.";
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vocal response captured successfully!')),
-      );
+      if (!mounted) return;
+      setState(() => _isRecording = false);
+
+      if (_speechTranscript.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No speech detected — please try again.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Voice response captured.')),
+        );
+      }
     } else {
-      // Start recording
+      if (!_speechAvailable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Speech recognition is not available on this device.'),
+          ),
+        );
+        return;
+      }
+
       setState(() {
         _isRecording = true;
-        _speechTranscript = "";
+        _speechTranscript = '';
       });
+
       _waveformController.repeat(reverse: true);
       _waveformTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-        setState(() {
-          for (int i = 0; i < _waveHeights.length; i++) {
-            _waveHeights[i] = 10.0 + _random.nextDouble() * 45.0;
-          }
-        });
+        if (mounted) {
+          setState(() {
+            for (int i = 0; i < _waveHeights.length; i++) {
+              _waveHeights[i] = 10.0 + _random.nextDouble() * 45.0;
+            }
+          });
+        }
       });
+
+      await _speech.listen(
+        onResult: (result) {
+          if (mounted) setState(() => _speechTranscript = result.recognizedWords);
+        },
+        listenOptions: SpeechListenOptions(
+          listenFor: const Duration(minutes: 3),
+          pauseFor: const Duration(seconds: 4),
+          partialResults: true,
+        ),
+      );
     }
   }
 
-  // Post Voice Arena responses
   Future<void> _submitVoiceAnswer() async {
     if (_speechTranscript.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -392,45 +438,42 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     final updatedHistory = [
       ..._conversationHistory,
       {'speaker': 'candidate', 'text': _speechTranscript, 'timestamp': DateTime.now().toIso8601String()}
     ];
-
-    setState(() {
-      _conversationHistory = updatedHistory;
-    });
+    setState(() => _conversationHistory = updatedHistory);
 
     final token = await AuthService.getToken() ?? '';
 
     try {
-      // 1. Evaluate voice answer
+      // 1. Evaluate the answer
       final evalResp = await http.post(
         Uri.parse('$baseUrl/interviews/evaluate-response'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
-        body: jsonEncode({
-          'question': _currentQuestion,
-          'transcript': _speechTranscript
-        }),
+        body: jsonEncode({'question': _currentQuestion, 'transcript': _speechTranscript}),
       );
 
-      int score = 85;
-      String feedback = "Excellent command. Explicitly structures database flows and outlines clear patterns.";
+      int? score;
+      String feedback = 'Response evaluated.';
       if (evalResp.statusCode == 200) {
         final evalData = jsonDecode(evalResp.body);
-        score = evalData['score'] ?? score;
+        score = evalData['score'] as int?;
         feedback = evalData['feedback'] ?? feedback;
       }
 
-      // 2. Fetch next follow-up question
-      final uid = FirebaseAuth.instance.currentUser?.uid ?? 'mock_uid_123';
+      // Only track score when the API returned a real evaluation
+      if (score != null) {
+        _runningScore += score;
+        _scoredRounds++;
+      }
+
+      // 2. Fetch next question
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
       final resumeDoc = await FirebaseFirestore.instance.collection('resumes').doc(uid).get();
-      final dataMap = resumeDoc.data();
-      final resumeData = (dataMap != null) ? dataMap['resumeData'] ?? {} : {};
+      final resumeData = (resumeDoc.data()?['resumeData']) ?? {};
       final elapsed = 1800 - _timeLeftSeconds;
 
       final nextResp = await http.post(
@@ -440,11 +483,11 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
           'resumeData': resumeData,
           'conversationHistory': updatedHistory,
           'latestTranscript': _speechTranscript,
-          'elapsedSeconds': elapsed
+          'elapsedSeconds': elapsed,
         }),
       );
 
-      String followUp = "Thank you. Let's discuss your cloud-based deployment workflows and systems orchestration.";
+      String followUp = 'Thank you. Could you walk me through a challenging technical problem you solved recently?';
       if (nextResp.statusCode == 200) {
         final nextData = jsonDecode(nextResp.body);
         followUp = nextData['nextQuestion'] ?? followUp;
@@ -455,74 +498,72 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
         {'speaker': 'ai', 'text': followUp, 'timestamp': DateTime.now().toIso8601String()}
       ];
 
+      if (!mounted) return;
       setState(() {
         _currentQuestion = followUp;
         _conversationHistory = finalHistory;
-        _speechTranscript = "";
+        _speechTranscript = '';
       });
 
-      // Update Firebase Firestore
+      // Update Firestore
       await FirebaseFirestore.instance.collection('interviews').doc(_interviewId).update({
         'conversationHistory': finalHistory,
         'responses': FieldValue.arrayUnion([
           {
-            'questionText': _conversationHistory[updatedHistory.length - 2]['text'],
-            'transcript': _conversationHistory[updatedHistory.length - 1]['text'],
-            'aiScore': score,
-            'aiFeedback': feedback
+            'questionText': followUp,
+            'transcript': _speechTranscript,
+            if (score != null) 'aiScore': score,
+            'aiFeedback': feedback,
           }
-        ])
+        ]),
       });
 
       _speakQuestion(followUp);
     } catch (e) {
-      print('Submit response failed: $e');
-      // Simulated client local fallback
-      final simulatedFollowUp = "Can you describe how you configure secure access rules in Firestore?";
+      debugPrint('Submit response failed: $e');
+      const fallback = 'Can you describe how you approach debugging in production environments?';
       final finalHistory = [
         ...updatedHistory,
-        {'speaker': 'ai', 'text': simulatedFollowUp, 'timestamp': DateTime.now().toIso8601String()}
+        {'speaker': 'ai', 'text': fallback, 'timestamp': DateTime.now().toIso8601String()}
       ];
-
+      if (!mounted) return;
       setState(() {
-        _currentQuestion = simulatedFollowUp;
+        _currentQuestion = fallback;
         _conversationHistory = finalHistory;
-        _speechTranscript = "";
+        _speechTranscript = '';
       });
-      _speakQuestion(simulatedFollowUp);
+      _speakQuestion(fallback);
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // Gracefully complete/finalize interview
   Future<void> _finishInterview() async {
     _countdownTimer?.cancel();
-    setState(() {
-      _isLoading = true;
-    });
+    await _speech.cancel();
+    await _tts.stop();
+    setState(() => _isLoading = true);
+
+    final computed = _scoredRounds > 0 ? (_runningScore / _scoredRounds).round() : 0;
+    final feedbackText = _scoredRounds > 0
+        ? 'Candidate completed $_scoredRounds evaluated response(s) with an average score of $computed%.'
+        : 'Interview completed. No responses were formally evaluated.';
 
     try {
       await FirebaseFirestore.instance.collection('interviews').doc(_interviewId).update({
         'status': 'completed',
         'completedAt': FieldValue.serverTimestamp(),
-        'overallScore': 87,
-        'overallFeedback': 'Candidate showed excellent expertise across architecture, backend database development, and responsive screen layout structures.'
-      });
-
-      setState(() {
-        _step = 4;
+        'overallScore': computed,
+        'overallFeedback': feedbackText,
       });
     } catch (e) {
-      print('Finish error: $e');
-      setState(() {
-        _step = 4;
-      });
+      debugPrint('Finish error: $e');
     } finally {
       setState(() {
+        _overallScore = computed;
+        _overallFeedback = feedbackText;
         _isLoading = false;
+        _step = 4;
       });
     }
   }
@@ -532,7 +573,8 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
     return Scaffold(
       backgroundColor: const Color(0xFF0F0C20),
       appBar: AppBar(
-        title: const Text('Secure AI Voice Arena', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('Secure AI Voice Arena',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
@@ -553,30 +595,25 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
                     children: [
                       const Icon(Icons.timer, color: Colors.redAccent, size: 16),
                       const SizedBox(width: 6),
-                      Text(
-                        _formatTime(_timeLeftSeconds),
-                        style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
-                      ),
+                      Text(_formatTime(_timeLeftSeconds),
+                          style: const TextStyle(
+                              color: Colors.redAccent, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
               ),
-            )
+            ),
         ],
       ),
       body: SafeArea(
         child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
-                child: IntrinsicHeight(
-                  child: _buildCurrentStepView(),
-                ),
-              ),
-            );
-          },
+          builder: (context, constraints) => SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
+              child: IntrinsicHeight(child: _buildCurrentStepView()),
+            ),
+          ),
         ),
       ),
     );
@@ -584,104 +621,94 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
 
   Widget _buildCurrentStepView() {
     switch (_step) {
-      case 1:
-        return _buildBiometricVerificationView();
-      case 2:
-        return _buildDeviceScanView();
-      case 3:
-        return _buildVoiceArenaView();
-      case 4:
-        return _buildCompleteView();
-      default:
-        return const SizedBox();
+      case 1: return _buildBiometricVerificationView();
+      case 2: return _buildDeviceScanView();
+      case 3: return _buildVoiceArenaView();
+      case 4: return _buildCompleteView();
+      default: return const SizedBox();
     }
   }
 
-  // Step 1: Biometric Verification UI
+  // ── Step 1: Biometrics ─────────────────────────────────
   Widget _buildBiometricVerificationView() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Identity Biometrics',
-          style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-          textAlign: TextAlign.center,
-        ),
+        const Text('Identity Biometrics',
+            style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center),
         const SizedBox(height: 8),
         const Text(
-          'Upload your Government Issued State ID or Passport, and snap a live webcam selfie to verify your identity and prevent proxy interviews.',
+          'Upload a Government ID and take a live selfie to verify your identity and prevent proxy interviews.',
           style: TextStyle(color: Colors.white70, fontSize: 14),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
-        
-        // Upload Government ID card
         Expanded(
-          child: Column(
-            children: [
-              GlassCard(
-                child: InkWell(
-                  onTap: _pickStateId,
-                  child: Container(
-                    height: 180,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white24, style: BorderStyle.none),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: _stateIdFile != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Image.file(File(_stateIdFile!.path), fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) {
-                              return const Center(child: Icon(Icons.document_scanner, color: Colors.deepPurpleAccent, size: 50));
-                            }),
-                          )
-                        : const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.add_photo_alternate_outlined, color: Colors.deepPurpleAccent, size: 50),
-                              SizedBox(height: 12),
-                              Text('Load Government State ID Image', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                  ),
+          child: Column(children: [
+            GlassCard(
+              child: InkWell(
+                onTap: _pickStateId,
+                child: Container(
+                  height: 180,
+                  width: double.infinity,
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
+                  child: _stateIdFile != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.file(File(_stateIdFile!.path),
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Center(
+                                  child: Icon(Icons.document_scanner,
+                                      color: Colors.deepPurpleAccent, size: 50))),
+                        )
+                      : const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.add_photo_alternate_outlined,
+                                color: Colors.deepPurpleAccent, size: 50),
+                            SizedBox(height: 12),
+                            Text('Load Government State ID Image',
+                                style: TextStyle(
+                                    color: Colors.white70, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                 ),
               ),
-              const SizedBox(height: 16),
-              
-              // Webcam capture selfie card
-              GlassCard(
-                child: InkWell(
-                  onTap: _captureSelfie,
-                  child: Container(
-                    height: 180,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white24, style: BorderStyle.none),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: _selfieFile != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Image.file(File(_selfieFile!.path), fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) {
-                              return const Center(child: Icon(Icons.face, color: Colors.deepPurpleAccent, size: 50));
-                            }),
-                          )
-                        : const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.camera_alt_outlined, color: Colors.deepPurpleAccent, size: 50),
-                              SizedBox(height: 12),
-                              Text('Capture Live Selfie Photo', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                  ),
+            ),
+            const SizedBox(height: 16),
+            GlassCard(
+              child: InkWell(
+                onTap: _captureSelfie,
+                child: Container(
+                  height: 180,
+                  width: double.infinity,
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
+                  child: _selfieFile != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.file(File(_selfieFile!.path),
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Center(
+                                  child: Icon(Icons.face,
+                                      color: Colors.deepPurpleAccent, size: 50))),
+                        )
+                      : const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.camera_alt_outlined,
+                                color: Colors.deepPurpleAccent, size: 50),
+                            SizedBox(height: 12),
+                            Text('Capture Live Selfie Photo',
+                                style: TextStyle(
+                                    color: Colors.white70, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ]),
         ),
-        
         const SizedBox(height: 24),
         _isLoading
             ? const Center(child: CircularProgressIndicator(color: Colors.deepPurpleAccent))
@@ -692,13 +719,14 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Verify Biometrics', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: const Text('Verify Biometrics',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
       ],
     );
   }
 
-  // Step 2: System Check & Audio Blocker UI
+  // ── Step 2: Device scan ────────────────────────────────
   Widget _buildDeviceScanView() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -706,34 +734,38 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
       children: [
         const Icon(Icons.shield_outlined, color: Colors.deepPurpleAccent, size: 80),
         const SizedBox(height: 24),
-        const Text(
-          'Device Security & Anti-Cheat Scan',
-          style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-          textAlign: TextAlign.center,
-        ),
+        const Text('Device Security & Microphone Check',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center),
         const SizedBox(height: 12),
         const Text(
-          'Scanning device for virtual loopbacks or external audio drivers (Otter, Parakeet) used to compromise interview integrity. Do not close or minimize the application.',
+          'This scan confirms microphone access and locks the session before starting the voice interview. Do not close or minimise the app.',
           style: TextStyle(color: Colors.white70, fontSize: 14),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 40),
-        
         GlassCard(
           child: Padding(
             padding: const EdgeInsets.all(20.0),
-            child: Column(
-              children: [
-                _buildScanRow('Biometrics Verification Check', 'PASSED', Icons.check_circle, Colors.green),
-                const Divider(color: Colors.white12, height: 24),
-                _buildScanRow('Suspicious Audio Drivers Check', _isLoading ? 'SCANNING...' : 'PASSED', _isLoading ? Icons.hourglass_empty : Icons.check_circle, _isLoading ? Colors.amber : Colors.green),
-                const Divider(color: Colors.white12, height: 24),
-                _buildScanRow('App Fullscreen Hook Status', 'LOCKED', Icons.lock, Colors.deepPurpleAccent),
-              ],
-            ),
+            child: Column(children: [
+              _buildScanRow('Biometrics Verification', 'PASSED', Icons.check_circle, Colors.green),
+              const Divider(color: Colors.white12, height: 24),
+              _buildScanRow(
+                'Microphone Access',
+                _isLoading ? 'CHECKING...' : 'PENDING',
+                _isLoading ? Icons.hourglass_empty : Icons.mic,
+                _isLoading ? Colors.amber : Colors.white54,
+              ),
+              const Divider(color: Colors.white12, height: 24),
+              _buildScanRow(
+                'Session Lock',
+                _isLoading ? 'LOCKING...' : 'READY',
+                Icons.lock,
+                Colors.deepPurpleAccent,
+              ),
+            ]),
           ),
         ),
-        
         const SizedBox(height: 40),
         _isLoading
             ? const Center(child: CircularProgressIndicator(color: Colors.deepPurpleAccent))
@@ -744,7 +776,8 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Lock Safe Mode & Start Arena', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: const Text('Grant Mic & Start Arena',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
       ],
     );
@@ -754,19 +787,18 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 12),
-            Text(title, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-          ],
-        ),
-        Text(status, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
+        Row(children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 12),
+          Text(title, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+        ]),
+        Text(status,
+            style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
       ],
     );
   }
 
-  // Step 3: Turn-based Voice Arena UI
+  // ── Step 3: Voice Arena ────────────────────────────────
   Widget _buildVoiceArenaView() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -776,50 +808,54 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: Colors.green.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-              child: const Row(
-                children: [
-                  CircleAvatar(radius: 4, backgroundColor: Colors.green),
-                  SizedBox(width: 6),
-                  Text('PROCTORING ACTIVE', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
-                ],
-              ),
+              decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12)),
+              child: const Row(children: [
+                CircleAvatar(radius: 4, backgroundColor: Colors.green),
+                SizedBox(width: 6),
+                Text('PROCTORING ACTIVE',
+                    style: TextStyle(
+                        color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+              ]),
             ),
-            Text('Flags: $_appStateViolations/3', style: TextStyle(color: _appStateViolations > 0 ? Colors.amberAccent : Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+            Text('Flags: $_appStateViolations/3',
+                style: TextStyle(
+                    color: _appStateViolations > 0 ? Colors.amberAccent : Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold)),
           ],
         ),
         const SizedBox(height: 24),
-        
-        // Dynamic Question Box
+
+        // Question box
         GlassCard(
           child: Padding(
             padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const CircleAvatar(
-                      backgroundColor: Colors.deepPurpleAccent,
-                      radius: 14,
-                      child: Icon(Icons.psychology, color: Colors.white, size: 16),
-                    ),
-                    const SizedBox(width: 10),
-                    Text('AI Technical Interrogator', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12, fontWeight: FontWeight.bold)),
-                  ],
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const CircleAvatar(
+                  backgroundColor: Colors.deepPurpleAccent,
+                  radius: 14,
+                  child: Icon(Icons.psychology, color: Colors.white, size: 16),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  _currentQuestion,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, height: 1.4),
-                ),
-              ],
-            ),
+                const SizedBox(width: 10),
+                Text('AI Technical Interrogator',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold)),
+              ]),
+              const SizedBox(height: 12),
+              Text(_currentQuestion,
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, height: 1.4)),
+            ]),
           ),
         ),
         const SizedBox(height: 30),
-        
-        // Voice visualization waveforms & recording box
+
+        // Voice visualisation
         Expanded(
           child: Center(
             child: Column(
@@ -831,38 +867,40 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: List.generate(_waveHeights.length, (index) {
+                      children: List.generate(_waveHeights.length, (i) {
                         return AnimatedContainer(
                           duration: const Duration(milliseconds: 100),
                           width: 6,
-                          height: _waveHeights[index],
+                          height: _waveHeights[i],
                           decoration: BoxDecoration(
-                            color: Colors.deepPurpleAccent,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
+                              color: Colors.deepPurpleAccent,
+                              borderRadius: BorderRadius.circular(3)),
                         );
                       }),
                     ),
                   )
                 else if (_isAiSpeaking)
-                  Column(
-                    children: [
-                      const Icon(Icons.volume_up, color: Colors.deepPurpleAccent, size: 40),
-                      const SizedBox(height: 12),
-                      Text('Speaking...', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13, fontStyle: FontStyle.italic)),
-                    ],
-                  )
+                  Column(children: [
+                    const Icon(Icons.volume_up, color: Colors.deepPurpleAccent, size: 40),
+                    const SizedBox(height: 12),
+                    Text('Speaking…',
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.4),
+                            fontSize: 13,
+                            fontStyle: FontStyle.italic)),
+                  ])
                 else
-                  Column(
-                    children: [
-                      Icon(Icons.mic_none, color: Colors.white.withOpacity(0.2), size: 40),
-                      const SizedBox(height: 12),
-                      const Text('Vocal Response Ready', style: TextStyle(color: Colors.white30, fontSize: 13)),
-                    ],
-                  ),
+                  Column(children: [
+                    Icon(Icons.mic_none, color: Colors.white.withOpacity(0.2), size: 40),
+                    const SizedBox(height: 12),
+                    Text(
+                      _speechAvailable ? 'Tap mic to record your response' : 'Speech not available on device',
+                      style: const TextStyle(color: Colors.white30, fontSize: 13),
+                    ),
+                  ]),
                 const SizedBox(height: 40),
-                
-                // Mic round trigger button
+
+                // Mic button
                 InkWell(
                   onTap: _isAiSpeaking ? null : _toggleVoiceRecording,
                   borderRadius: BorderRadius.circular(40),
@@ -870,21 +908,27 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: _isAiSpeaking 
-                          ? Colors.grey.withOpacity(0.1) 
-                          : _isRecording ? Colors.redAccent.withOpacity(0.2) : Colors.deepPurpleAccent.withOpacity(0.2),
+                      color: _isAiSpeaking
+                          ? Colors.grey.withOpacity(0.1)
+                          : _isRecording
+                              ? Colors.redAccent.withOpacity(0.2)
+                              : Colors.deepPurpleAccent.withOpacity(0.2),
                       border: Border.all(
-                        color: _isAiSpeaking 
-                            ? Colors.grey.withOpacity(0.2) 
-                            : _isRecording ? Colors.redAccent : Colors.deepPurpleAccent,
+                        color: _isAiSpeaking
+                            ? Colors.grey.withOpacity(0.2)
+                            : _isRecording
+                                ? Colors.redAccent
+                                : Colors.deepPurpleAccent,
                         width: 2,
                       ),
                     ),
                     child: Icon(
                       _isRecording ? Icons.stop : Icons.mic,
-                      color: _isAiSpeaking 
-                          ? Colors.grey 
-                          : _isRecording ? Colors.redAccent : Colors.deepPurpleAccent,
+                      color: _isAiSpeaking
+                          ? Colors.grey
+                          : _isRecording
+                              ? Colors.redAccent
+                              : Colors.deepPurpleAccent,
                       size: 32,
                     ),
                   ),
@@ -893,131 +937,124 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
             ),
           ),
         ),
-        
+
         const SizedBox(height: 24),
-        
-        // Transcription review field
+
+        // Transcript preview
         if (_speechTranscript.isNotEmpty) ...[
-          const Text('Voice Transcript Preview:', style: TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.bold)),
+          const Text('Voice Transcript:',
+              style: TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           GlassCard(
             child: Padding(
               padding: const EdgeInsets.all(12.0),
-              child: Text(
-                _speechTranscript,
-                style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
-              ),
+              child: Text(_speechTranscript,
+                  style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4)),
             ),
           ),
           const SizedBox(height: 16),
         ],
-        
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _isLoading ? null : _finishInterview,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.white24),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Wrap Up', style: TextStyle(color: Colors.white70, fontSize: 15)),
+
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: _isLoading ? null : _finishInterview,
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.white24),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
+              child: const Text('Wrap Up', style: TextStyle(color: Colors.white70, fontSize: 15)),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: Colors.deepPurpleAccent))
-                  : ElevatedButton(
-                      onPressed: _speechTranscript.isEmpty ? null : _submitVoiceAnswer,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurpleAccent,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text('Next Turn', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                          SizedBox(width: 6),
-                          Icon(Icons.arrow_forward, size: 16),
-                        ],
-                      ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: Colors.deepPurpleAccent))
+                : ElevatedButton(
+                    onPressed: _speechTranscript.isEmpty ? null : _submitVoiceAnswer,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurpleAccent,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-            ),
-          ],
-        ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('Next Turn', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                        SizedBox(width: 6),
+                        Icon(Icons.arrow_forward, size: 16),
+                      ],
+                    ),
+                  ),
+          ),
+        ]),
       ],
     );
   }
 
-  // Step 4: Final Wrap-up Scorecard UI
+  // ── Step 4: Completion scorecard ───────────────────────
   Widget _buildCompleteView() {
+    final biometricScore = _verificationResult?['matchScore'] ?? 92;
+    final flagLabel = _appStateViolations == 0 ? 'PASS (0 flags)' : 'FLAGGED ($_appStateViolations)';
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Icon(Icons.check_circle_outline, color: Colors.green, size: 80),
         const SizedBox(height: 24),
-        const Text(
-          'Interview Successfully Submitted!',
-          style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-          textAlign: TextAlign.center,
-        ),
+        const Text('Interview Successfully Submitted!',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center),
         const SizedBox(height: 12),
         const Text(
-          'Your turn-based AI voice responses and identity logs have been successfully secured and stored. The recruiter will review your biometric check and technical scorecard directly.',
+          'Your AI voice responses and identity logs have been secured. The recruiter will review your biometric check and technical scorecard.',
           style: TextStyle(color: Colors.white70, fontSize: 14),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
-        
         GlassCard(
           child: Padding(
             padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.analytics_outlined, color: Colors.deepPurpleAccent, size: 20),
-                    SizedBox(width: 8),
-                    Text('Vocal Assessment Summary', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  ],
-                ),
-                const Divider(color: Colors.white12, height: 24),
-                _buildSummaryRow('Overall Technical Fit', '87%'),
-                const SizedBox(height: 10),
-                _buildSummaryRow('Security Auditing', 'PASS (0 flags)'),
-                const SizedBox(height: 10),
-                _buildSummaryRow('Biometric Match Likeness', '92%'),
-                const SizedBox(height: 16),
-                const Text(
-                  'AI Evaluator Feedback:',
-                  style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Candidate demonstrates premium technical knowledge in data architecture, structures secure databases flawlessly, and shows high proficiency in multi-device layouts. Commendable performance.',
-                  style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
-                ),
-              ],
-            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Row(children: [
+                Icon(Icons.analytics_outlined, color: Colors.deepPurpleAccent, size: 20),
+                SizedBox(width: 8),
+                Text('Vocal Assessment Summary',
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+              ]),
+              const Divider(color: Colors.white12, height: 24),
+              _buildSummaryRow('Overall Technical Fit', '$_overallScore%'),
+              const SizedBox(height: 10),
+              _buildSummaryRow('Security Auditing', flagLabel),
+              const SizedBox(height: 10),
+              _buildSummaryRow('Biometric Match Likeness', '$biometricScore%'),
+              const SizedBox(height: 16),
+              const Text('AI Evaluator Feedback:',
+                  style: TextStyle(
+                      color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text(
+                _overallFeedback.isNotEmpty
+                    ? _overallFeedback
+                    : 'Interview completed. Results have been submitted for review.',
+                style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+              ),
+            ]),
           ),
         ),
-        
         const SizedBox(height: 40),
         ElevatedButton(
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.deepPurpleAccent,
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          child: const Text('Back to Dashboard', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          child: const Text('Back to Dashboard',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         ),
       ],
     );
@@ -1028,7 +1065,9 @@ class _CandidateInterviewPageState extends State<CandidateInterviewPage> with Wi
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(value,
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
       ],
     );
   }

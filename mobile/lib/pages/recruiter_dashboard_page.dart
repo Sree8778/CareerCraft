@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:recruit_edge/theme/app_theme.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:recruit_edge/pages/recruiter_requisitions_page.dart';
 import 'package:recruit_edge/pages/recruiter_candidates_page.dart';
@@ -119,7 +118,7 @@ class RecruiterDashboardPage extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              'Recent Applications',
+              'Recent Candidates',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 10),

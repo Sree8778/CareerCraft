@@ -27,7 +27,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> with SingleTick
   final TextEditingController _reviewController = TextEditingController();
   int _overallRating = 5;
   int _wlbRating = 5;
-  int _compRating = 5;
+  final int _compRating = 5;
   bool _isSubmittingReview = false;
 
   // Question Submission controllers
@@ -55,7 +55,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> with SingleTick
         _isLoadingReviews = false;
       });
     } catch (e) {
-      print('Error loading company reviews: $e');
+      debugPrint('Error loading company reviews: $e');
       setState(() {
         _isLoadingReviews = false;
       });
@@ -70,7 +70,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> with SingleTick
         _isLoadingQna = false;
       });
     } catch (e) {
-      print('Error loading QnA: $e');
+      debugPrint('Error loading QnA: $e');
       setState(() {
         _isLoadingQna = false;
       });
@@ -90,7 +90,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> with SingleTick
         _isLoadingSalaries = false;
       });
     } catch (e) {
-      print('Error loading salary statistics: $e');
+      debugPrint('Error loading salary statistics: $e');
       setState(() {
         _isLoadingSalaries = false;
       });
@@ -114,6 +114,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> with SingleTick
         reviewText: text,
       );
 
+      if (!mounted) return;
       if (review != null) {
         _reviewController.clear();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -127,6 +128,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> with SingleTick
         throw Exception('Submission returned null');
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red[800],
@@ -134,9 +136,11 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> with SingleTick
         ),
       );
     } finally {
-      setState(() {
-        _isSubmittingReview = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSubmittingReview = false;
+        });
+      }
     }
   }
 
@@ -158,6 +162,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> with SingleTick
         askedBy: askedBy,
       );
 
+      if (!mounted) return;
       if (question != null) {
         _questionController.clear();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -171,6 +176,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> with SingleTick
         throw Exception('Question returned null');
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red[800],
@@ -178,9 +184,11 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> with SingleTick
         ),
       );
     } finally {
-      setState(() {
-        _isSubmittingQuestion = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSubmittingQuestion = false;
+        });
+      }
     }
   }
 
