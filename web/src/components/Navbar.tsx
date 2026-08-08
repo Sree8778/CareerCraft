@@ -203,16 +203,10 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 w-full px-6 py-4 flex justify-between items-center backdrop-blur-md border-b z-[9999] ${
-        isLanding
-          ? 'bg-white/90 border-slate-200/80'
-          : 'bg-white/80 dark:bg-zinc-900/80 border-gray-200/50 dark:border-white/10'
-      }`}
+      className="fixed top-0 left-0 right-0 z-[9999] flex w-full items-center justify-between border-b border-slate-200/80 bg-white/90 px-6 py-4 backdrop-blur-md"
     >
       <div
-        className={`flex items-center gap-2 text-2xl font-bold cursor-pointer hover:opacity-80 transition-opacity ${
-          isLanding ? 'text-slate-900' : 'text-gray-900 dark:text-white'
-        }`}
+        className="flex cursor-pointer items-center gap-2 text-2xl font-bold text-slate-900 transition-opacity hover:opacity-80"
         onClick={handleLogoClick}
       >
         <AppLogo width={80} height={40} className="h-8 w-auto" />
@@ -229,7 +223,7 @@ export default function Navbar() {
         ) : isAuthenticated && user?.role === 'candidate' && (
           <Link
             href="/candidate/jobs"
-            className="text-gray-700 dark:text-white px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="text-slate-600 px-4 py-2 rounded-md hover:bg-slate-100 transition-colors"
           >
             Browse Jobs
           </Link>

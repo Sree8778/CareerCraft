@@ -28,13 +28,14 @@ export const metadata: Metadata = {
     "CareerCraft automates every stage of hiring — AI resume building, semantic job search, voice interviews, and recruiter copilot tools.",
 };
 
-// Runs before hydration: applies the saved theme (dark by default) so there is no flash.
+// Runs before hydration: uses the light product surface by default and respects
+// an explicit dark preference for existing users.
 const themeInitScript = `
 (function () {
   try {
     var t = localStorage.getItem('theme');
-    if (t !== 'light') document.documentElement.classList.add('dark');
-  } catch (e) { document.documentElement.classList.add('dark'); }
+    if (t === 'dark') document.documentElement.classList.add('dark');
+  } catch (e) {}
 })();
 `;
 

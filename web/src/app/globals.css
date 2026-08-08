@@ -43,6 +43,57 @@ body {
   font-feature-settings: 'ss01' on, 'cv11' on;
 }
 
+/* Shared workspace system: candidate, recruiter, and admin routes use the
+   same clear editorial surface as the public site without changing their data
+   flows or route-specific components. */
+.cc-workspace {
+  --cc-bg: #f7f9fc;
+  --cc-surface: rgba(255, 255, 255, 0.92);
+  --cc-surface-solid: #ffffff;
+  --cc-border: #e3e9f2;
+  --cc-text: #16223a;
+  --cc-text-muted: #6d7b91;
+  --cc-accent: #7057e8;
+  --cc-accent-2: #477df4;
+  --cc-accent-3: #e878b3;
+  --cc-glow: rgba(112, 87, 232, 0.16);
+  background: #f7f9fc;
+  color: #16223a;
+}
+.cc-workspace .cc-card,
+.cc-workspace [class*="bg-slate-950"],
+.cc-workspace [class*="bg-zinc-950"],
+.cc-workspace [class*="bg-[#0B0F19"] {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: #e3e9f2 !important;
+  box-shadow: 0 10px 28px rgba(34, 53, 83, 0.06);
+}
+.cc-workspace [class*="border-white/"] { border-color: #e3e9f2 !important; }
+.cc-workspace [class*="divide-white/"] > :not([hidden]) ~ :not([hidden]) { border-color: #edf1f7 !important; }
+.cc-workspace [class*="text-white"],
+.cc-workspace [class*="text-zinc-200"],
+.cc-workspace [class*="text-zinc-300"] { color: #16223a !important; }
+.cc-workspace [class*="text-zinc-400"] { color: #6d7b91 !important; }
+.cc-workspace [class*="text-zinc-500"],
+.cc-workspace [class*="text-zinc-600"] { color: #8794a8 !important; }
+.cc-workspace input,
+.cc-workspace select,
+.cc-workspace textarea {
+  background: #fff !important;
+  color: #16223a !important;
+  border-color: #dce4f0 !important;
+}
+.cc-workspace aside {
+  background: #ffffff !important;
+  border-color: #e3e9f2 !important;
+  box-shadow: 10px 0 30px rgba(28, 47, 77, 0.035);
+}
+.cc-workspace aside strong { color: #16223a !important; }
+.cc-workspace aside [class*="text-muted"] { color: #728099 !important; }
+.cc-workspace aside [class*="hover:bg-white"]:hover { background: #f4f6fb !important; }
+.cc-workspace table thead { background: #f8faff; }
+.cc-workspace table tbody tr:hover { background: #fbfcff; }
+
 /* ── Aurora ambient background ─────────────────────────────── */
 .cc-aurora-blob {
   position: absolute;
