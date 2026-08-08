@@ -251,6 +251,8 @@ def generate_pdf_route():
             download_name=filename,
             mimetype='application/pdf'
         )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
     except Exception as e:
         print(f"Error generating PDF: {e}")
         return jsonify({"error": "An internal error occurred while generating the PDF file."}), 500

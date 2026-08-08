@@ -1,6 +1,7 @@
 # backend/document_generator.py
 import io
 import re
+from copy import deepcopy
 from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_PARAGRAPH_ALIGNMENT
@@ -10,6 +11,29 @@ from weasyprint import HTML
 from jinja2 import Environment, FileSystemLoader
 import os
 from bs4 import BeautifulSoup
+from pypdf import PdfReader
+
+
+ONE_PAGE_SECTION_LIMITS = {
+    'experience': 2,
+    'education': 2,
+    'skills': 2,
+    'projects': 2,
+    'certifications': 3,
+}
+
+
+def prepare_one_page_resume(data: dict) -> dict:
+    """Keep exports aligned with the single standard resume layout."""
+    resume = deepcopy(data or {})
+    for section, limit in ONE_PAGE_SECTION_LIMITS.items():
+        entries = resume.get(section)
+        resume[section] = entries[:limit] if isinstance(entries, list) else []
+
+    # Optional sections are intentionally excluded from the standard one-page export.
+    for section in ('publications', 'languages', 'volunteer', 'awards'):
+        resume[section] = []
+    return resume
 
 # --- Helper function to clean up extra whitespace (more robust) ---
 def clean_text(text: str) -> str:
@@ -115,6 +139,7 @@ def process_inline_html_for_docx(parent_obj, html_snippet, normal_style):
 
 # --- DOCX GENERATION ---
 def generate_docx_from_data(data):
+    data = prepare_one_page_resume(data)
     doc = Document()
     style = data.get('styleOptions', {})
     font_name = style.get('fontFamily', 'Calibri').split(',')[0]
@@ -124,18 +149,24 @@ def generate_docx_from_data(data):
 
     normal_style = doc.styles['Normal']
     normal_style.font.name = font_name
-    normal_style.font.size = Pt(font_size)
+    normal_style.font.size = Pt(min(font_size, 10))
+
+    for section in doc.sections:
+        section.top_margin = Pt(32)
+        section.bottom_margin = Pt(32)
+        section.left_margin = Pt(40)
+        section.right_margin = Pt(40)
 
     try:
         heading_style = doc.styles['SectionHeading']
     except KeyError:
         heading_style = doc.styles.add_style('SectionHeading', 1)
     heading_style.font.name = font_name
-    heading_style.font.size = Pt(14)
+    heading_style.font.size = Pt(11)
     heading_style.font.bold = True
     heading_style.font.color.rgb = accent_color_rgb
-    heading_style.paragraph_format.space_before = Pt(12)
-    heading_style.paragraph_format.space_after = Pt(6)
+    heading_style.paragraph_format.space_before = Pt(6)
+    heading_style.paragraph_format.space_after = Pt(2)
 
     # --- Header ---
     personal = data.get('personal', {})
@@ -144,7 +175,7 @@ def generate_docx_from_data(data):
     runner = p.add_run(personal.get('name', ''))
     runner.bold = True
     runner.font.name = font_name
-    runner.font.size = Pt(24)
+    runner.font.size = Pt(18)
     runner.font.color.rgb = accent_color_rgb
 
     contact_items = [
@@ -158,7 +189,6 @@ def generate_docx_from_data(data):
     contact_info = " | ".join(filter(None, contact_items))
     p = doc.add_paragraph(contact_info)
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    doc.add_paragraph() # Add a blank line for spacing
 
     # --- Sections (now parsing HTML from AI) ---
     if data.get('summary'):
@@ -235,6 +265,7 @@ def generate_docx_from_data(data):
 
 # --- PDF GENERATION ---
 def generate_pdf_from_data(data):
+    data = prepare_one_page_resume(data)
     # Ensure data values are cleaned before rendering, especially for plain text fields
     # HTML fields should generally be passed as-is to Jinja2 and WeasyPrint to preserve structure.
     # We apply a light clean on relevant fields directly in the template render call now,
@@ -249,4 +280,7 @@ def generate_pdf_from_data(data):
 
     rendered_html = template.render(**data)
     
-    return HTML(string=rendered_html).write_pdf()
+    pdf_bytes = HTML(string=rendered_html).write_pdf()
+    if len(PdfReader(io.BytesIO(pdf_bytes)).pages) > 1:
+        raise ValueError('Your resume is longer than one page. Shorten the highlighted sections and try again.')
+    return pdf_bytes

@@ -4,11 +4,16 @@
     <meta charset="UTF-8">
     <title>{{ personal.name }}'s Resume</title>
     <style>
+        @page {
+            size: A4;
+            margin: 0.45in 0.55in;
+        }
+
         /* --- General Body and Font Styles --- */
         body {
             font-family: {{ styleOptions.fontFamily | default('Calibri, sans-serif') }};
-            font-size: {{ styleOptions.fontSize | default(11) }}pt;
-            line-height: 1.4; /* Reduced line-height for a tighter feel */
+            font-size: 10pt;
+            line-height: 1.22;
             color: #333;
         }
 
@@ -19,28 +24,28 @@
         .header {
             text-align: center;
             border-bottom: 1.5px solid #e0e0e0; /* Thinner border */
-            padding-bottom: 10px;
-            margin-bottom: 15px; /* Reduced margin */
+            padding-bottom: 5px;
+            margin-bottom: 7px;
         }
         h1 {
-            font-size: 2.2em; /* Slightly smaller H1 */
+            font-size: 1.85em;
             margin-bottom: 0;
         }
         h2 {
             font-size: 1.1em;
             font-weight: bold;
             border-bottom: 1.5px solid {{ styleOptions.accentColor | default('#34495e') }};
-            padding-bottom: 4px;
-            margin-top: 20px; /* Reduced margin */
-            margin-bottom: 10px; /* Reduced margin */
+            padding-bottom: 2px;
+            margin-top: 9px;
+            margin-bottom: 4px;
         }
         
         /* --- Section and Entry Styling --- */
         .section {
-            margin-bottom: 10px; /* Reduced margin */
+            margin-bottom: 5px;
         }
         .entry {
-            margin-bottom: 10px; /* Reduced margin */
+            margin-bottom: 5px;
             page-break-inside: avoid; /* Prevents a single entry from splitting across pages */
         }
         .job-title, .degree, .project-title, .cert-name, .pub-title {
@@ -54,6 +59,7 @@
             font-weight: bold;
             margin-right: 5px;
         }
+        .skills-list { white-space: normal; }
 
         /* --- Critical Fixes for Blank Space --- */
         /* Reduce paragraph margin to minimum, let content define spacing */
@@ -123,7 +129,7 @@
     </div>
     {% endif %}
 
-    {% if experience and experience[0].jobTitle %}
+    {% if experience and experience|selectattr('jobTitle')|list %}
     <div class="section">
         <h2 class="accent-color">Experience</h2>
         {% for exp in experience %}
@@ -138,7 +144,7 @@
     </div>
     {% endif %}
     
-    {% if education and education[0].degree %}
+    {% if education and education|selectattr('degree')|list %}
     <div class="section">
         <h2 class="accent-color">Education</h2>
         {% for edu in education %}
@@ -153,11 +159,34 @@
     </div>
     {% endif %}
 
-    {% if skills and skills[0].category %}
+    {% if skills and skills|selectattr('skills_list')|list %}
     <div class="section">
         <h2 class="accent-color">Skills</h2>
         {% for skill in skills %}
-        <p><span class="skills-category">{{ skill.category }}:</span> <pre>{{ skill.skills_list }}</pre></p>
+        {% if skill.skills_list %}<p><span class="skills-category">{{ skill.category }}:</span> <span class="skills-list">{{ skill.skills_list }}</span></p>{% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if projects and projects|selectattr('title')|list %}
+    <div class="section">
+        <h2 class="accent-color">Projects</h2>
+        {% for project in projects if project.title %}
+        <div class="entry">
+            <p><span class="project-title">{{ project.title }}</span>{% if project.date %} <span class="project-date">| {{ project.date }}</span>{% endif %}</p>
+            {% if project.description and project.description|striptags|trim %}<div>{{ project.description | safe }}</div>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if certifications and certifications|selectattr('name')|list %}
+    <div class="section">
+        <h2 class="accent-color">Certifications</h2>
+        {% for certification in certifications if certification.name %}
+        <div class="entry">
+            <p><span class="cert-name">{{ certification.name }}</span>{% if certification.issuer %} <span class="cert-issuer">| {{ certification.issuer }}</span>{% endif %}{% if certification.date %} <span class="cert-issuer">| {{ certification.date }}</span>{% endif %}</p>
+        </div>
         {% endfor %}
     </div>
     {% endif %}
