@@ -45,7 +45,19 @@ type EnhancementContext = | { section: 'summary' } | { section: 'experience'; in
 export interface StyleOptions { fontFamily: string; fontSize: number; accentColor: string; lineSpacing: number; pageMargin: 'narrow' | 'normal' | 'wide'; }
 export type ResumeTemplate = 'classic' | 'modern' | 'minimal' | 'executive' | 'creative' | 'compact';
 
-const DEFAULT_SECTION_ORDER = ['summary','experience','education','skills','projects','certifications','publications','languages','volunteer','awards'];
+const DEFAULT_SECTION_ORDER = ['summary', 'experience', 'education', 'skills', 'projects', 'certifications'];
+const ONE_PAGE_LIMITS = {
+    summary: 350,
+    experienceEntries: 2,
+    experienceDescription: 480,
+    educationEntries: 2,
+    educationDetails: 220,
+    skillCategories: 2,
+    skillsPerCategory: 12,
+    projectEntries: 2,
+    projectDescription: 320,
+    certificationEntries: 3,
+};
 
 const plainTextLength = (value: string) => value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim().length;
 const CharacterLimitHint = ({ value, limit }: { value: string; limit: number }) => (
@@ -367,7 +379,7 @@ const SummaryForm = ({ value, onChange, onEnhance, loading, suggestions, newBatc
                     value={value || ''}
                     onChange={onChange}
                     placeholder="A concise summary of your professional experience and goals..."
-                    maxLength={600}
+                    maxLength={ONE_PAGE_LIMITS.summary}
                 />
                 <Button size="sm" variant="outline" className="mt-2" onClick={onEnhance} disabled={loading}><Sparkles size={14} className="mr-1.5" />Enhance</Button>
             </div>
@@ -396,7 +408,7 @@ const ALL_SKILL_SUGGESTIONS = [
 ];
 
 // ─── SkillTagInput ─────────────────────────────────────────────────────────
-const SkillTagInput = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
+const SkillTagInput = ({ value, onChange, maxTags = ONE_PAGE_LIMITS.skillsPerCategory }: { value: string; onChange: (v: string) => void; maxTags?: number }) => {
     const [input, setInput] = useState('');
     const [focused, setFocused] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -410,7 +422,7 @@ const SkillTagInput = ({ value, onChange }: { value: string; onChange: (v: strin
 
     const addTag = (tag: string) => {
         const clean = tag.trim();
-        if (!clean || tags.includes(clean)) { setInput(''); return; }
+        if (!clean || tags.includes(clean) || tags.length >= maxTags) { setInput(''); return; }
         updateTags([...tags, clean]);
         setInput('');
     };
@@ -461,6 +473,7 @@ const SkillTagInput = ({ value, onChange }: { value: string; onChange: (v: strin
                     className="flex-1 min-w-[120px] bg-transparent text-sm text-white placeholder-zinc-500 focus:outline-none"
                 />
             </div>
+            <p className="mt-1 text-right text-[10px] text-zinc-500">{tags.length}/{maxTags} skills</p>
 
             {/* Suggestions dropdown */}
             {focused && suggestions.length > 0 && (
@@ -485,7 +498,7 @@ const SkillTagInput = ({ value, onChange }: { value: string; onChange: (v: strin
 };
 
 // ─── DynamicSection ────────────────────────────────────────────────────────
-const DynamicSection = ({ sectionKey, data, onChange, onAdd, onRemove, onEnhance, fields, addPayload, loading }: any) => (
+const DynamicSection = ({ sectionKey, data, onChange, onAdd, onRemove, onEnhance, fields, addPayload, loading, maxEntries = Infinity }: any) => (
     <div className="space-y-4">
         {(data || []).map((item: any, index: number) => ( // Ensure data is an array
             <div key={item.id} className="p-4 border border-white/20 rounded-lg relative space-y-3">
@@ -519,6 +532,7 @@ const DynamicSection = ({ sectionKey, data, onChange, onAdd, onRemove, onEnhance
                                     <SkillTagInput
                                         value={item[field.key] || ''}
                                         onChange={(v) => onChange(sectionKey, index, field.key, v)}
+                                        maxTags={field.maxTags}
                                     />
                                 </div>
                             );
@@ -543,7 +557,7 @@ const DynamicSection = ({ sectionKey, data, onChange, onAdd, onRemove, onEnhance
                  </div>
             </div>
         ))}
-        <Button variant="outline" onClick={() => onAdd(sectionKey, addPayload)}>+ Add {sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1)}</Button>
+        <Button variant="outline" disabled={(data || []).length >= maxEntries} onClick={() => onAdd(sectionKey, addPayload)}>+ Add {sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1)}{Number.isFinite(maxEntries) ? ` (${(data || []).length}/${maxEntries})` : ''}</Button>
     </div>
 );
 
@@ -576,7 +590,7 @@ const LanguagesForm = ({ data, onChange, onAdd, onRemove }: any) => (
 );
 
 // ─── JD Match Panel ────────────────────────────────────────────────────────
-const JDMatchPanel = ({ resumeData, apiBase, getToken }: { resumeData: ResumeData; apiBase: string; getToken: () => Promise<string | null>; }) => {
+const JDMatchPanel = ({ resumeData, apiBase, getToken, onApplyTailored }: { resumeData: ResumeData; apiBase: string; getToken: () => Promise<string | null>; onApplyTailored: (data: ResumeData) => void; }) => {
     const [jdText, setJdText] = useState('');
     const [jobTitle, setJobTitle] = useState('');
     const [company, setCompany] = useState('');
@@ -615,8 +629,10 @@ const JDMatchPanel = ({ resumeData, apiBase, getToken }: { resumeData: ResumeDat
                 body: JSON.stringify({ resumeData, jobDescription: jdText, missingKeywords: result.missingKeywords }),
             });
             if (res.ok) {
+                const data = await res.json();
+                onApplyTailored(data.resumeData);
                 setTailored(true);
-                import('sonner').then(m => m.toast.success('Resume auto-tailored! Re-run analysis to check new score.'));
+                import('sonner').then(m => m.toast.success('Tailored content has been applied. Re-run analysis to check the new score.'));
             } else { import('sonner').then(m => m.toast.error('Tailoring failed. Try again.')); }
         } catch { import('sonner').then(m => m.toast.error('Tailoring failed.')); }
         finally { setTailoring(false); }
@@ -1220,36 +1236,18 @@ const TEMPLATES: { id: ResumeTemplate; name: string; desc: string; thumb: React.
     },
 ];
 
-const TemplatePickerForm = ({ selected, onSelect }: { selected: ResumeTemplate; onSelect: (t: ResumeTemplate) => void }) => (
-    <div className="space-y-3">
-        <p className="text-sm text-zinc-400">Choose a layout for your resume. The preview updates instantly.</p>
-        <div className="grid grid-cols-3 gap-3">
-            {TEMPLATES.map(t => (
-                <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => onSelect(t.id)}
-                    className={`relative rounded-xl border-2 overflow-hidden transition-all text-left ${
-                        selected === t.id
-                            ? 'border-indigo-500 ring-2 ring-indigo-500/30'
-                            : 'border-white/10 hover:border-white/30'
-                    }`}
-                >
-                    <div className="h-32 bg-white">{t.thumb}</div>
-                    <div className="p-2 bg-white/5">
-                        <p className="text-xs font-semibold text-white">{t.name}</p>
-                        <p className="text-[10px] text-zinc-400 leading-tight mt-0.5">{t.desc}</p>
-                    </div>
-                    {selected === t.id && (
-                        <div className="absolute top-1.5 right-1.5 bg-indigo-500 rounded-full p-0.5">
-                            <CheckCircle2 size={12} className="text-white" />
-                        </div>
-                    )}
-                </button>
-            ))}
+const TemplatePickerForm = () => {
+    const standard = TEMPLATES.find(t => t.id === 'classic')!;
+    return (
+        <div className="space-y-3">
+            <p className="text-sm text-zinc-400">One ATS-friendly standard template is used for every resume, so the layout stays consistent and fits on one page.</p>
+            <div className="max-w-xs overflow-hidden rounded-xl border-2 border-indigo-500 ring-2 ring-indigo-500/30">
+                <div className="h-40 bg-white">{standard.thumb}</div>
+                <div className="bg-white/5 p-3"><p className="text-sm font-semibold text-white">Standard</p><p className="mt-1 text-[11px] leading-tight text-zinc-400">Clean, single-column, ATS-friendly layout.</p></div>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 // --- Refactored Modal Components ---
 const EnhancementModal = ({ isOpen, versions, selected, onSelect, onApply, onClose, originalText }: any) => {
@@ -1315,14 +1313,14 @@ const PitchModal = ({ isOpen, onClose, pitchText, setPitchText, startRecording, 
 
 const CompleteResumeTemplateForm = ({ onApply }: { onApply: () => void }) => (
     <div className="mt-6 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
-        <h3 className="text-sm font-semibold text-indigo-200">Complete resume content template</h3>
-        <p className="mt-1 text-xs text-zinc-400">Adds an empty entry for every optional section, so you can fill in every relevant detail without replacing what you have already entered.</p>
+        <h3 className="text-sm font-semibold text-indigo-200">One-page standard resume</h3>
+        <p className="mt-1 text-xs text-zinc-400">Includes the essential sections: summary, experience, education, skills, projects, and certifications. Existing optional data is preserved but not added to the one-page layout.</p>
         <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-zinc-400">
-            <li>Summary — 600 characters</li><li>Experience — 1,200 per role</li>
-            <li>Education — 600 per entry</li><li>Projects — 1,000 per project</li>
-            <li>Volunteer — 800 per role</li><li>Awards — 500 per award</li>
+            <li>Summary: 350 characters</li><li>Experience: 2 roles, 480 characters each</li>
+            <li>Education: 2 entries, 220 detail characters each</li><li>Skills: 2 categories, 12 skills each</li>
+            <li>Projects: 2 entries, 320 characters each</li><li>Certifications: up to 3 entries</li>
         </ul>
-        <Button type="button" size="sm" className="mt-4" onClick={onApply}><FilePlus2 size={14} className="mr-1.5" />Use complete template</Button>
+        <Button type="button" size="sm" className="mt-4" onClick={onApply}><FilePlus2 size={14} className="mr-1.5" />Set up standard resume</Button>
     </div>
 );
 
@@ -1363,7 +1361,7 @@ export default function ResumeBuilder() {
     const [showPitchModal, setShowPitchModal] = useState<boolean>(false);
     const [pitchText, setPitchText] = useState('');
     const [styleOptions, setStyleOptions] = useState<StyleOptions>({ fontFamily: 'Calibri, sans-serif', fontSize: 11, accentColor: '#34495e', lineSpacing: 1.15, pageMargin: 'normal' });
-    const [selectedTemplate, setSelectedTemplate] = useState<ResumeTemplate>('classic');
+    const [selectedTemplate] = useState<ResumeTemplate>('classic');
     const [hiddenSections, setHiddenSections] = useState<Set<string>>(new Set());
     const [sectionOrder, setSectionOrder] = useState<string[]>([...DEFAULT_SECTION_ORDER]);
     const [uploadedFileName, setUploadedFileName] = useState<string>('');
@@ -1660,23 +1658,30 @@ export default function ResumeBuilder() {
         setStyleOptions(prev => ({...prev, [field]: value}));
     };
 
-    const addDynamicEntry = (section: keyof ResumeData, newEntry: any) => setResumeData((prev: ResumeData) => ({ ...prev, [section]: [...(prev[section] as any[]), { ...newEntry, id: crypto.randomUUID() }] }));
+    const addDynamicEntry = (section: keyof ResumeData, newEntry: any) => setResumeData((prev: ResumeData) => {
+        const limits: Partial<Record<keyof ResumeData, number>> = {
+            experience: ONE_PAGE_LIMITS.experienceEntries,
+            education: ONE_PAGE_LIMITS.educationEntries,
+            skills: ONE_PAGE_LIMITS.skillCategories,
+            projects: ONE_PAGE_LIMITS.projectEntries,
+            certifications: ONE_PAGE_LIMITS.certificationEntries,
+        };
+        const items = prev[section] as any[];
+        if (limits[section] && items.length >= limits[section]!) return prev;
+        return { ...prev, [section]: [...items, { ...newEntry, id: crypto.randomUUID() }] };
+    });
     const removeDynamicEntry = (section: keyof ResumeData, id: string) => setResumeData((prev: ResumeData) => ({ ...prev, [section]: (prev[section] as any[]).filter(item => item.id !== id) }));
     const applyCompleteTemplate = () => {
         setResumeData((prev: ResumeData) => ({
             ...prev,
-            experience: prev.experience.length ? prev.experience : [{ id: crypto.randomUUID(), jobTitle: '', company: '', dates: '', description: '<p></p>' }],
-            education: prev.education.length ? prev.education : [{ id: crypto.randomUUID(), degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }],
-            skills: prev.skills.length ? prev.skills : [{ id: crypto.randomUUID(), category: '', skills_list: '' }],
-            projects: prev.projects.length ? prev.projects : [{ id: crypto.randomUUID(), title: '', date: '', description: '<p></p>' }],
-            certifications: prev.certifications.length ? prev.certifications : [{ id: crypto.randomUUID(), name: '', issuer: '', date: '' }],
-            publications: prev.publications.length ? prev.publications : [{ id: crypto.randomUUID(), title: '', authors: '', journal: '', date: '', link: '' }],
-            languages: prev.languages.length ? prev.languages : [{ id: crypto.randomUUID(), language: '', proficiency: 'Conversational' }],
-            volunteer: prev.volunteer.length ? prev.volunteer : [{ id: crypto.randomUUID(), role: '', organization: '', dates: '', description: '<p></p>' }],
-            awards: prev.awards.length ? prev.awards : [{ id: crypto.randomUUID(), title: '', organization: '', date: '', description: '<p></p>' }],
+            experience: (prev.experience.length ? prev.experience : [{ id: crypto.randomUUID(), jobTitle: '', company: '', dates: '', description: '<p></p>' }]).slice(0, ONE_PAGE_LIMITS.experienceEntries),
+            education: (prev.education.length ? prev.education : [{ id: crypto.randomUUID(), degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }]).slice(0, ONE_PAGE_LIMITS.educationEntries),
+            skills: (prev.skills.length ? prev.skills : [{ id: crypto.randomUUID(), category: '', skills_list: '' }]).slice(0, ONE_PAGE_LIMITS.skillCategories),
+            projects: (prev.projects.length ? prev.projects : [{ id: crypto.randomUUID(), title: '', date: '', description: '<p></p>' }]).slice(0, ONE_PAGE_LIMITS.projectEntries),
+            certifications: (prev.certifications.length ? prev.certifications : [{ id: crypto.randomUUID(), name: '', issuer: '', date: '' }]).slice(0, ONE_PAGE_LIMITS.certificationEntries),
         }));
         setActiveSection('personal');
-        toast.success('Complete resume template is ready. Fill in the sections that apply to you.');
+        toast.success('Your one-page standard resume is ready. Fill in the essential sections.');
     };
 
     const moveSectionUp   = (id: string) => setSectionOrder(prev => { const i = prev.indexOf(id); if (i <= 0) return prev; const n = [...prev]; [n[i-1], n[i]] = [n[i], n[i-1]]; return n; });
@@ -1992,19 +1997,40 @@ export default function ResumeBuilder() {
     };
 
 
+    const exceedsOnePageLimits = () => {
+        const overTextLimit = (value: string, limit: number) => plainTextLength(value || '') > limit;
+        return overTextLimit(resumeData.summary, ONE_PAGE_LIMITS.summary) ||
+            resumeData.experience.length > ONE_PAGE_LIMITS.experienceEntries ||
+            resumeData.education.length > ONE_PAGE_LIMITS.educationEntries ||
+            resumeData.skills.length > ONE_PAGE_LIMITS.skillCategories ||
+            resumeData.projects.length > ONE_PAGE_LIMITS.projectEntries ||
+            resumeData.certifications.length > ONE_PAGE_LIMITS.certificationEntries ||
+            resumeData.experience.some(item => overTextLimit(item.description, ONE_PAGE_LIMITS.experienceDescription)) ||
+            resumeData.education.some(item => overTextLimit(item.achievements, ONE_PAGE_LIMITS.educationDetails)) ||
+            resumeData.projects.some(item => overTextLimit(item.description, ONE_PAGE_LIMITS.projectDescription)) ||
+            resumeData.skills.some(item => item.skills_list.split(',').filter(Boolean).length > ONE_PAGE_LIMITS.skillsPerCategory);
+    };
+
     // --- FULLY INTEGRATED DOWNLOAD HANDLER ---
     const handleDownload = async (type: 'PDF' | 'DOCX') => {
         const endpoint = type === 'PDF' ? '/generate-pdf' : '/generate-docx';
         const filename = `${resumeData.personal.name.replace(/\s/g, '_')}_Resume.${type.toLowerCase()}`;
         const toastId = `${type.toLowerCase()}-download`;
 
+        if (exceedsOnePageLimits()) {
+            toast.error('Shorten the content highlighted by the character limits before downloading the one-page resume.');
+            return;
+        }
+
         toast.info(`Generating ${type} file...`, { id: toastId, duration: 15000 });
         setLoading(true);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/${type === 'PDF' ? 'generate-pdf' : 'generate-docx'}`, {
+            const token = await getToken();
+            if (!token) throw new Error('Please sign in before downloading your resume.');
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ ...resumeData, styleOptions })
             });
 
@@ -2201,19 +2227,13 @@ export default function ResumeBuilder() {
             { id: 'skills',         name: 'Skills',         icon: <Award size={16} /> },
             { id: 'projects',       name: 'Projects',       icon: <FolderGit2 size={16} /> },
             { id: 'certifications', name: 'Certifications', icon: <Award size={16} /> },
-            { id: 'publications',   name: 'Publications',   icon: <BookOpen size={16} /> },
-            { id: 'languages',      name: 'Languages',      icon: <Globe size={16} /> },
-            { id: 'volunteer',      name: 'Volunteer',      icon: <Heart size={16} /> },
-            { id: 'awards',         name: 'Awards',         icon: <Trophy size={16} /> },
         ]},
         { label: 'AI Tools', items: [
             { id: 'jd-match',      name: 'JD Match',     icon: <Target size={16} /> },
             { id: 'cover-letter',  name: 'Cover Letter', icon: <Mail size={16} /> },
         ]},
-        { label: 'Layout & Design', items: [
-            { id: 'section-order', name: 'Order & Visibility', icon: <GripVertical size={16} /> },
-            { id: 'templates',     name: 'Templates',          icon: <LayoutTemplate size={16}/> },
-            { id: 'design',        name: 'Design',             icon: <Palette size={16}/> },
+        { label: 'Resume format', items: [
+            { id: 'templates',     name: 'Standard template',  icon: <LayoutTemplate size={16}/> },
         ]},
     ];
     // Count filled entries so tabs show what the parser actually placed
@@ -2412,16 +2432,16 @@ export default function ResumeBuilder() {
                                 <CardContent>
                                     {activeSection === 'personal' && <PersonalForm data={resumeData.personal} onChange={handlePersonalChange} onPicChange={handleProfilePicChange} onPicRemove={handleProfilePicRemove} picPreview={profilePic.preview} />}
                                     {activeSection === 'summary' && <SummaryForm value={resumeData.summary} onChange={(v: string) => { handleSummaryChange(v); if (summarySuggestions.length > 0) setSummarySuggestions([]); }} onEnhance={() => handleEnhance({ section: 'summary'})} loading={loading} suggestions={summarySuggestions} newBatchFrom={newBatchFrom} suggestionsLoading={suggestionsLoading} onGenerateMore={() => fetchSummarySuggestions(undefined, summarySuggestions.length > 0)} onApplySuggestion={(s: string) => { handleSummaryChange(s); setSummarySuggestions([]); setNewBatchFrom(0); toast.success("Summary applied!"); }} onDismissSuggestions={() => { setSummarySuggestions([]); setNewBatchFrom(0); }} />}
-                                    {activeSection === 'experience' && <DynamicSection sectionKey="experience" data={resumeData.experience} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ jobTitle: '', company: '', dates: '', description: '<p></p>' }} fields={[{key: 'jobTitle', label: 'Job Title', maxLength: 100}, {key: 'company', label: 'Company', maxLength: 100}, {key: 'dates', label: 'Dates', maxLength: 50}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2, maxLength: 1200}]} />}
-                                    {activeSection === 'education' && <DynamicSection sectionKey="education" data={resumeData.education} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }} fields={[{key: 'degree', label: 'Degree', maxLength: 120}, {key: 'institution', label: 'Institution', maxLength: 120}, {key: 'graduationYear', label: 'Graduation Year', maxLength: 20}, {key: 'gpa', label: 'GPA (Optional)', maxLength: 10}, {key: 'achievements', label: 'Achievements & Coursework', type: 'textarea', enhance: true, maxLength: 600}]} />}
-                                    {activeSection === 'skills' && <DynamicSection sectionKey="skills" data={resumeData.skills} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ category: '', skills_list: '' }} fields={[{key: 'category', label: 'Category', maxLength: 60}, {key: 'skills_list', label: 'Skills', type: 'skill_tags', colSpan: 2}]} />}
-                                    {activeSection === 'projects' && <DynamicSection sectionKey="projects" data={resumeData.projects} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ title: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Project Title', maxLength: 120}, {key: 'date', label: 'Date', maxLength: 50}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2, maxLength: 1000}]} />}
+                                    {activeSection === 'experience' && <DynamicSection sectionKey="experience" data={resumeData.experience} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} maxEntries={ONE_PAGE_LIMITS.experienceEntries} addPayload={{ jobTitle: '', company: '', dates: '', description: '<p></p>' }} fields={[{key: 'jobTitle', label: 'Job Title', maxLength: 80}, {key: 'company', label: 'Company', maxLength: 80}, {key: 'dates', label: 'Dates', maxLength: 35}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2, maxLength: ONE_PAGE_LIMITS.experienceDescription}]} />}
+                                    {activeSection === 'education' && <DynamicSection sectionKey="education" data={resumeData.education} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} maxEntries={ONE_PAGE_LIMITS.educationEntries} addPayload={{ degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }} fields={[{key: 'degree', label: 'Degree', maxLength: 90}, {key: 'institution', label: 'Institution', maxLength: 90}, {key: 'graduationYear', label: 'Graduation Year', maxLength: 12}, {key: 'gpa', label: 'GPA (Optional)', maxLength: 10}, {key: 'achievements', label: 'Achievements & Coursework', type: 'textarea', enhance: true, maxLength: ONE_PAGE_LIMITS.educationDetails}]} />}
+                                    {activeSection === 'skills' && <DynamicSection sectionKey="skills" data={resumeData.skills} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} maxEntries={ONE_PAGE_LIMITS.skillCategories} addPayload={{ category: '', skills_list: '' }} fields={[{key: 'category', label: 'Category', maxLength: 40}, {key: 'skills_list', label: 'Skills', type: 'skill_tags', colSpan: 2, maxTags: ONE_PAGE_LIMITS.skillsPerCategory}]} />}
+                                    {activeSection === 'projects' && <DynamicSection sectionKey="projects" data={resumeData.projects} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} maxEntries={ONE_PAGE_LIMITS.projectEntries} addPayload={{ title: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Project Title', maxLength: 90}, {key: 'date', label: 'Date', maxLength: 35}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2, maxLength: ONE_PAGE_LIMITS.projectDescription}]} />}
                                     {activeSection === 'publications' && <DynamicSection sectionKey="publications" data={resumeData.publications} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ title: '', authors: '', journal: '', date: '', link: '' }} fields={[{key: 'title', label: 'Publication Title', maxLength: 180}, {key: 'authors', label: 'Authors', maxLength: 250}, {key: 'journal', label: 'Journal or Conference', maxLength: 180}, {key: 'date', label: 'Publication Date', maxLength: 50}, {key: 'link', label: 'Link (Optional)', maxLength: 300}]} />}
-                                    {activeSection === 'certifications' && <DynamicSection sectionKey="certifications" data={resumeData.certifications} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ name: '', issuer: '', date: '' }} fields={[{key: 'name', label: 'Certification Name', maxLength: 120}, {key: 'issuer', label: 'Issuing Organization', maxLength: 120}, {key: 'date', label: 'Date Received', maxLength: 50}]} />}
+                                    {activeSection === 'certifications' && <DynamicSection sectionKey="certifications" data={resumeData.certifications} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} maxEntries={ONE_PAGE_LIMITS.certificationEntries} addPayload={{ name: '', issuer: '', date: '' }} fields={[{key: 'name', label: 'Certification Name', maxLength: 90}, {key: 'issuer', label: 'Issuing Organization', maxLength: 90}, {key: 'date', label: 'Date Received', maxLength: 25}]} />}
                                     {activeSection === 'languages' && <LanguagesForm data={resumeData.languages} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} />}
                                     {activeSection === 'volunteer' && <DynamicSection sectionKey="volunteer" data={resumeData.volunteer} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ role: '', organization: '', dates: '', description: '<p></p>' }} fields={[{key: 'role', label: 'Role / Title', maxLength: 100}, {key: 'organization', label: 'Organization', maxLength: 120}, {key: 'dates', label: 'Dates', maxLength: 50}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2, maxLength: 800}]} />}
                                     {activeSection === 'awards' && <DynamicSection sectionKey="awards" data={resumeData.awards} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ title: '', organization: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Award Title', maxLength: 120}, {key: 'organization', label: 'Awarding Organization', maxLength: 120}, {key: 'date', label: 'Date', maxLength: 50}, {key: 'description', label: 'Description (optional)', type: 'textarea', colSpan: 2, maxLength: 500}]} />}
-                                    {activeSection === 'jd-match' && <JDMatchPanel resumeData={resumeData} apiBase={API_BASE_URL} getToken={getToken} />}
+                                    {activeSection === 'jd-match' && <JDMatchPanel resumeData={resumeData} apiBase={API_BASE_URL} getToken={getToken} onApplyTailored={(data) => setResumeDataState(normalizeResumeData(data))} />}
                                     {activeSection === 'cover-letter' && <CoverLetterForm resumeData={resumeData} apiBase={API_BASE_URL} getToken={getToken} />}
                                     {activeSection === 'section-order' && (
                                         <div className="space-y-2">
@@ -2441,7 +2461,7 @@ export default function ResumeBuilder() {
                                             })}
                                         </div>
                                     )}
-                                    {activeSection === 'templates' && <><TemplatePickerForm selected={selectedTemplate} onSelect={setSelectedTemplate} /><CompleteResumeTemplateForm onApply={applyCompleteTemplate} /></>}
+                                    {activeSection === 'templates' && <><TemplatePickerForm /><CompleteResumeTemplateForm onApply={applyCompleteTemplate} /></>}
                                     {activeSection === 'design' && <DesignForm options={styleOptions} onChange={handleStyleChange} />}
                                 </CardContent>
                             </Card>
