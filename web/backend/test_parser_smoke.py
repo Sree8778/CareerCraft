@@ -1,4 +1,8 @@
+import io
+import zipfile
+
 from custom_parser import parse_resume_text
+from file_parser import MAX_RESUME_FILE_BYTES, _validate_resume_upload
 
 # Test 1: structured resume with ALL-CAPS headers
 text1 = """
@@ -131,3 +135,16 @@ for e in r3["experience"]:
 
 print()
 print("[OK] All smoke tests passed")
+
+# Upload validation — these are enforced before any parsing work begins.
+assert _validate_resume_upload(b"%PDF-1.7\n", "resume.pdf") is None
+assert "valid PDF" in _validate_resume_upload(b"not a PDF", "resume.pdf")
+assert "Legacy .doc" in _validate_resume_upload(b"legacy", "resume.doc")
+assert "10 MB" in _validate_resume_upload(b"x" * (MAX_RESUME_FILE_BYTES + 1), "resume.pdf")
+
+docx_bytes = io.BytesIO()
+with zipfile.ZipFile(docx_bytes, "w") as archive:
+    archive.writestr("[Content_Types].xml", "<Types />")
+assert _validate_resume_upload(docx_bytes.getvalue(), "resume.docx") is None
+assert "valid DOCX" in _validate_resume_upload(b"not a DOCX", "resume.docx")
+print("[OK] Upload validation tests passed")

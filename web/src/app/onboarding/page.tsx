@@ -30,7 +30,12 @@ interface ExperienceItem { title: string; company: string; startDate: string; en
 interface EducationItem  { degree: string; institution: string; year: string; }
 interface ProjectItem    { name: string; description: string; technologies: string; link: string; }
 interface CertItem       { name: string; issuer: string; date: string; }
-const isSupportedResumeFile = (file: File) => /\.(pdf|docx)$/i.test(file.name);
+const MAX_RESUME_FILE_BYTES = 10 * 1024 * 1024;
+const getResumeFileError = (file: File): string | null => {
+  if (!/\.(pdf|docx)$/i.test(file.name)) return 'Please upload a PDF or DOCX resume.';
+  if (file.size > MAX_RESUME_FILE_BYTES) return 'Resume files must be 10 MB or smaller.';
+  return null;
+};
 
 // ─── Provider config ──────────────────────────────────────────────────────────
 const PROVIDERS = [
@@ -206,8 +211,9 @@ export default function OnboardingPage() {
   // ── Resume parse ──
   const parseResume = async (skip = false): Promise<boolean> => {
     if (skip || !resumeFile) { setStep(4); return false; }
-    if (!isSupportedResumeFile(resumeFile)) {
-      setParseError('Please upload a PDF or DOCX resume.');
+    const fileError = getResumeFileError(resumeFile);
+    if (fileError) {
+      setParseError(fileError);
       return false;
     }
     setParsing(true);
@@ -559,7 +565,8 @@ export default function OnboardingPage() {
                   setDragOver(false);
                   const f = e.dataTransfer.files[0];
                   if (!f) return;
-                  if (!isSupportedResumeFile(f)) { setParseError('Please upload a PDF or DOCX resume.'); return; }
+                  const fileError = getResumeFileError(f);
+                  if (fileError) { setParseError(fileError); return; }
                   setResumeFile(f);
                   setParseError(null);
                 }}
@@ -574,7 +581,8 @@ export default function OnboardingPage() {
                   onChange={e => {
                     const f = e.target.files?.[0];
                     if (!f) return;
-                    if (!isSupportedResumeFile(f)) { setParseError('Please upload a PDF or DOCX resume.'); return; }
+                    const fileError = getResumeFileError(f);
+                    if (fileError) { setParseError(fileError); return; }
                     setResumeFile(f);
                     setParseError(null);
                   }} />

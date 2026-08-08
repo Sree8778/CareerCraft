@@ -58,6 +58,12 @@ const ONE_PAGE_LIMITS = {
     projectDescription: 320,
     certificationEntries: 3,
 };
+const MAX_RESUME_FILE_BYTES = 10 * 1024 * 1024;
+const getResumeFileError = (file: File): string | null => {
+    if (!/\.(pdf|docx)$/i.test(file.name)) return 'Please upload a PDF or DOCX resume.';
+    if (file.size > MAX_RESUME_FILE_BYTES) return 'Resume files must be 10 MB or smaller.';
+    return null;
+};
 
 const plainTextLength = (value: string) => value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim().length;
 const CharacterLimitHint = ({ value, limit }: { value: string; limit: number }) => (
@@ -1467,7 +1473,8 @@ export default function ResumeBuilder() {
     const handleResumeFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !user?.id) return;
-        if (!/\.(pdf|docx)$/i.test(file.name)) { toast.error('Please upload a PDF or DOCX resume.'); return; }
+        const fileError = getResumeFileError(file);
+        if (fileError) { toast.error(fileError); return; }
 
         setUploadingFile(true);
         const toastId = toast.loading(`Uploading ${file.name}…`);
@@ -1794,8 +1801,9 @@ export default function ResumeBuilder() {
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
-        if (!/\.(pdf|docx)$/i.test(file.name)) {
-            toast.error('Please upload a PDF or DOCX resume.');
+        const fileError = getResumeFileError(file);
+        if (fileError) {
+            toast.error(fileError);
             return;
         }
 

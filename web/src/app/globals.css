@@ -98,7 +98,28 @@ body {
 .cc-workspace-shell [class*="bg-gradient-"][class*="text-white"] { color: #ffffff !important; }
 .cc-workspace-shell input,
 .cc-workspace-shell select,
-.cc-workspace-shell textarea { background: #fff !important; color: var(--cc-text) !important; border-color: var(--cc-border) !important; }
+.cc-workspace-shell textarea {
+  background: #fff !important;
+  color: var(--cc-text) !important;
+  border-color: var(--cc-border) !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.cc-workspace-shell input:focus,
+.cc-workspace-shell select:focus,
+.cc-workspace-shell textarea:focus {
+  border-color: color-mix(in srgb, var(--cc-accent) 60%, var(--cc-border)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cc-accent) 14%, transparent);
+  outline: none;
+}
+.cc-workspace-shell table { border-collapse: separate; border-spacing: 0; }
+.cc-workspace-shell th {
+  background: color-mix(in srgb, var(--cc-surface-solid) 72%, var(--cc-bg));
+  color: var(--cc-text-muted);
+  font-size: .6875rem;
+  letter-spacing: .08em;
+}
+.cc-workspace-shell tbody tr { transition: background-color 150ms ease; }
+.cc-workspace-shell tbody tr:hover { background: color-mix(in srgb, var(--cc-accent) 4%, transparent); }
 .dark .cc-workspace-shell [class*="bg-slate-950"],
 .dark .cc-workspace-shell [class*="bg-zinc-950"],
 .dark .cc-workspace-shell [class*="bg-[#0B0F19"] { background-color: rgba(8, 8, 13, 0.68) !important; border-color: rgba(255, 255, 255, 0.09) !important; box-shadow: none; }
@@ -114,6 +135,8 @@ body {
 .dark .cc-workspace-shell input,
 .dark .cc-workspace-shell select,
 .dark .cc-workspace-shell textarea { background: rgba(8, 8, 13, 0.75) !important; color: #f2f2f7 !important; border-color: rgba(255, 255, 255, 0.12) !important; }
+.dark .cc-workspace-shell th { background: rgba(255, 255, 255, 0.035); }
+.dark .cc-workspace-shell tbody tr:hover { background: rgba(255, 255, 255, 0.035); }
 
 ::selection { background: color-mix(in srgb, var(--cc-accent) 30%, transparent); }
 
@@ -329,6 +352,12 @@ body {
   .cc-aurora-1, .cc-aurora-2, .cc-aurora-3 {
     animation: none;
   }
+}
+
+@media (max-width: 767px) {
+  .cc-page { width: 100%; }
+  .cc-panel { border-radius: .875rem; }
+  .cc-btn-primary, .cc-btn-ghost { min-height: 2.75rem; }
 }
 
 /* Resume preview HTML content — restore list styles stripped by Tailwind preflight. */
