@@ -38,6 +38,9 @@ from datetime import timezone, timedelta
 import os
 import random
 import string
+import ipaddress
+import socket
+from urllib.parse import urlparse
 from google.cloud import firestore
 import requests as _requests_lib
 import threading as _threading_lib
@@ -60,6 +63,37 @@ def _no_keys_resp(e: Exception = None):
         "message": msg,
         "action": "/candidate/profile"
     }), 402
+
+def _require_recruiter():
+    """Return a 403 response unless the authenticated user is a recruiter or admin."""
+    from firebase_utils import db, firebase_initialized
+    uid = getattr(request, 'uid', None)
+    if not uid or not (firebase_initialized and db):
+        return jsonify({"error": "Recruiter access required"}), 403
+    user_doc = db.collection('users').document(uid).get()
+    user_data = user_doc.to_dict() if user_doc.exists else {}
+    if user_data.get('role') == 'recruiter' or is_admin_user(getattr(request, 'user', {})):
+        return None
+    return jsonify({"error": "Recruiter access required"}), 403
+
+def _validate_webhook_url(url):
+    """Allow only public HTTPS webhook endpoints to prevent SSRF."""
+    if not isinstance(url, str) or len(url) > 2048:
+        return False, "Webhook URL is invalid"
+    parsed = urlparse(url)
+    if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
+        return False, "Webhook URLs must use HTTPS and cannot include credentials"
+    try:
+        addresses = {entry[4][0] for entry in socket.getaddrinfo(parsed.hostname, 443, type=socket.SOCK_STREAM)}
+        if not addresses:
+            return False, "Webhook host could not be resolved"
+        for address in addresses:
+            ip = ipaddress.ip_address(address)
+            if not ip.is_global:
+                return False, "Webhook URL must resolve to a public address"
+    except (OSError, ValueError):
+        return False, "Webhook host could not be resolved"
+    return True, None
 
 @api_bp.before_request
 def configure_dynamic_api_key():
@@ -563,12 +597,18 @@ def _get_all_candidates_helper():
 @api_bp.route('/candidates', methods=['GET'])
 @require_auth
 def get_candidates_route():
+    access_error = _require_recruiter()
+    if access_error:
+        return access_error
     candidates = _get_all_candidates_helper()
     return jsonify(candidates), 200
 
 @api_bp.route('/candidates/<uid>/resume', methods=['GET'])
 @require_auth
 def get_candidate_resume_for_recruiter(uid):
+    access_error = _require_recruiter()
+    if access_error:
+        return access_error
     try:
         from firebase_utils import db, firebase_initialized
         if firebase_initialized and db:
@@ -593,6 +633,9 @@ def get_candidate_resume_for_recruiter(uid):
 @api_bp.route('/candidates/search-copilot', methods=['POST'])
 @require_auth
 def search_candidates_copilot_route():
+    access_error = _require_recruiter()
+    if access_error:
+        return access_error
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
         
@@ -2351,6 +2394,9 @@ def get_salary_stats():
 @api_bp.route('/jobs/crawl', methods=['POST'])
 @require_auth
 def trigger_crawler():
+    access_error = _require_recruiter()
+    if access_error:
+        return access_error
     try:
         count = crawl_jobs_to_db()
         return jsonify({"status": "success", "ingestedCount": count}), 200
@@ -2361,10 +2407,20 @@ def trigger_crawler():
 # --- Phase 4: Webhook Dispatchers & Integrations Endpoints ---
 
 def send_http_post(url, payload):
+    valid, error = _validate_webhook_url(url)
+    if not valid:
+        print(f"[WEBHOOK SYNC ERROR] Blocked webhook URL: {error}")
+        return
     try:
         import requests
         headers = {"Content-Type": "application/json"}
-        response = requests.post(url, json=payload, headers=headers, timeout=5)
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=5,
+            allow_redirects=False,
+        )
         if 200 <= response.status_code < 300:
             print(f"[WEBHOOK SYNC SUCCESS] Event delivered to {url} - Status: {response.status_code}")
         else:
@@ -2412,10 +2468,13 @@ def dispatch_webhook_event(event_type, event_payload):
 @api_bp.route('/webhooks/subscriptions', methods=['GET'])
 @require_auth
 def get_webhook_subscriptions():
+    access_error = _require_recruiter()
+    if access_error:
+        return access_error
     try:
         from firebase_utils import db, firebase_initialized
         if firebase_initialized and db:
-            docs = db.collection('webhooks').stream()
+            docs = db.collection('webhooks').where('creatorId', '==', request.uid).stream()
             subs = []
             for doc in docs:
                 d = doc.to_dict()
@@ -2430,6 +2489,9 @@ def get_webhook_subscriptions():
 @api_bp.route('/webhooks/subscribe', methods=['POST'])
 @require_auth
 def subscribe_webhook_route():
+    access_error = _require_recruiter()
+    if access_error:
+        return access_error
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
     data = request.json
@@ -2438,6 +2500,9 @@ def subscribe_webhook_route():
 
     if not url:
         return jsonify({"error": "Missing URL parameter"}), 400
+    valid, error = _validate_webhook_url(url)
+    if not valid:
+        return jsonify({"error": error}), 400
 
     now_str = datetime.datetime.utcnow().isoformat() + "Z"
     sub_data = {
@@ -2461,6 +2526,9 @@ def subscribe_webhook_route():
 @api_bp.route('/webhooks/test-ping', methods=['POST'])
 @require_auth
 def test_ping_webhook():
+    access_error = _require_recruiter()
+    if access_error:
+        return access_error
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
     data = request.json
@@ -2468,6 +2536,9 @@ def test_ping_webhook():
 
     if not url:
         return jsonify({"error": "Missing URL parameter"}), 400
+    valid, error = _validate_webhook_url(url)
+    if not valid:
+        return jsonify({"error": error}), 400
 
     payload = {
         "event": "webhook.test_ping",
@@ -3068,10 +3139,10 @@ def disable_2fa():
 def auto_apply_solve_questions():
     configure_dynamic_api_key()
     data = request.json or {}
-    candidate_id = data.get('candidateId')
+    candidate_id = request.uid
     questions = data.get('questions', [])
-    if not candidate_id or not questions:
-        return jsonify({"error": "Missing candidateId or questions"}), 400
+    if not questions:
+        return jsonify({"error": "Missing questions"}), 400
     try:
         from auto_apply_ai import solve_questions_with_gemini
         answers = solve_questions_with_gemini(candidate_id, questions)
@@ -3086,12 +3157,10 @@ def auto_apply_solve_questions():
 def auto_apply_log():
     from firebase_utils import db, firebase_initialized
     data = request.json or {}
-    candidate_id = data.get('candidateId')
+    candidate_id = request.uid
     job_title = data.get('jobTitle', '')
     company = data.get('company', '')
     source = data.get('source', '')
-    if not candidate_id:
-        return jsonify({"error": "Missing candidateId"}), 400
     try:
         if firebase_initialized and db:
             db.collection('applications').add({

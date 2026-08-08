@@ -42,7 +42,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
-    const isMockFirebase = !auth.app.options.apiKey || auth.app.options.apiKey.startsWith("your_api_key") || auth.app.options.apiKey.startsWith("mock");
+    const isMockFirebase = process.env.NODE_ENV !== 'production' && (!auth.app.options.apiKey || auth.app.options.apiKey.startsWith("your_api_key") || auth.app.options.apiKey.startsWith("mock"));
 
     if (isMockFirebase) {
       console.warn("Firebase Auth running in Developer Offline Bypass Mode (unconfigured .env.local keys).");
@@ -157,7 +157,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = async () => {
     try {
       localStorage.removeItem('recruitedge_mock_session');
-      const isMockFirebase = !auth.app.options.apiKey || auth.app.options.apiKey.startsWith("your_api_key") || auth.app.options.apiKey.startsWith("mock");
+      const isMockFirebase = process.env.NODE_ENV !== 'production' && (!auth.app.options.apiKey || auth.app.options.apiKey.startsWith("your_api_key") || auth.app.options.apiKey.startsWith("mock"));
       if (!isMockFirebase) {
         await signOut(auth);
       }
@@ -175,8 +175,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const token = await auth.currentUser?.getIdToken();
       if (token) return token;
     } catch {}
-    // Fallback for local dev / mock sessions
-    return user ? `mock_token_for_${user.id}` : '';
+    // Mock tokens are available only during local development.
+    return process.env.NODE_ENV !== 'production' && user ? `mock_token_for_${user.id}` : '';
   };
 
   return (

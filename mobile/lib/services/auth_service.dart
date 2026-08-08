@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthService {
   static bool _firebaseInitialized = false;
@@ -29,13 +30,14 @@ class AuthService {
         print("Firebase sign-in error: $e");
         rethrow;
       }
-    } else {
+    } else if (!kReleaseMode) {
       // Mock auth fallback for seamless testing
       if (email.isNotEmpty && password.isNotEmpty) {
         return "mock_token_for_$email";
       }
       return null;
     }
+    throw StateError('Firebase is not configured. Authentication is unavailable.');
   }
 
   static Future<String?> register(String email, String password) async {
@@ -49,10 +51,11 @@ class AuthService {
         print("Firebase registration error: $e");
         rethrow;
       }
-    } else {
+    } else if (!kReleaseMode) {
       // Mock signup fallback
       return "mock_token_for_$email";
     }
+    throw StateError('Firebase is not configured. Registration is unavailable.');
   }
 
   static Future<String?> getToken() async {
@@ -67,11 +70,12 @@ class AuthService {
         print("Error getting token: $e");
       }
     }
-    return "mock_token";
+    return kReleaseMode ? '' : "mock_token";
   }
 
   static Future<User?> getCurrentUser() async {
     await ensureInitialized();
+    if (!_firebaseInitialized) return null;
     return FirebaseAuth.instance.currentUser;
   }
 

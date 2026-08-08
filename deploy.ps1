@@ -32,7 +32,12 @@ $RESEND       = [System.Environment]::GetEnvironmentVariable('RESEND_API_KEY',  
 $EMAIL_FROM   = [System.Environment]::GetEnvironmentVariable('EMAIL_FROM',                'Process')
 $PLATFORM_URL = [System.Environment]::GetEnvironmentVariable('PLATFORM_URL',             'Process')
 $ADMIN_EMAILS = [System.Environment]::GetEnvironmentVariable('SUPER_ADMIN_EMAILS',        'Process')
+$ALLOWED_ORIGINS = [System.Environment]::GetEnvironmentVariable('ALLOWED_ORIGINS',        'Process')
 if (-not $ADMIN_EMAILS) { $ADMIN_EMAILS = "sreeramvarma8778@gmail.com,sreeramvarma8888@gmail.com" }
+if (-not $ALLOWED_ORIGINS) {
+    Write-Error "ALLOWED_ORIGINS is missing from .env.cloud. Set it to the deployed frontend and extension origins."
+    exit 1
+}
 
 # Base64-encode the Firebase service account JSON so it can be passed as a Cloud Run env var
 # (credentials files are gitignored and excluded from Docker images)
@@ -116,6 +121,7 @@ RESEND_API_KEY: "$RESEND"
 EMAIL_FROM: "$EMAIL_FROM"
 PLATFORM_URL: "$PLATFORM_URL"
 SUPER_ADMIN_EMAILS: "$ADMIN_EMAILS"
+ALLOWED_ORIGINS: "$ALLOWED_ORIGINS"
 "@ | Out-File -FilePath $envYamlPath -Encoding utf8 -NoNewline
 
     & gcloud run deploy $BACKEND_SVC `
@@ -145,6 +151,7 @@ RESEND_API_KEY: "$RESEND"
 EMAIL_FROM: "$EMAIL_FROM"
 PLATFORM_URL: "$PLATFORM_URL"
 SUPER_ADMIN_EMAILS: "$ADMIN_EMAILS"
+ALLOWED_ORIGINS: "$ALLOWED_ORIGINS"
 "@ | Out-File -FilePath $envYamlPath -Encoding utf8 -NoNewline
     & gcloud run services update $BACKEND_SVC `
         --region $REGION `
