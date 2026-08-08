@@ -278,7 +278,7 @@ export default function PamtenMotiveAnimation() {
 
       {/* Header Telemetry bar */}
       <div className="w-full flex justify-between items-center z-10 border-b border-white/5 pb-2">
-        <span className="font-mono text-[9px] tracking-widest text-white/30">// CAREERCRAFT_ENGINE</span>
+        <span className="font-mono text-[9px] tracking-widest text-white/30">{'// CAREERCRAFT_ENGINE'}</span>
         <span className="font-mono text-[9px] text-white/40 tracking-wider">
           LATENCY: {ping}ms // STATE: NOMINAL
         </span>
