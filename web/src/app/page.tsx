@@ -5,10 +5,8 @@ export const dynamic = 'force-dynamic';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import Hero from '@/components/Hero';
 import Footer from '@/components/Footer';
-import FeaturesGrid from '@/components/FeaturesGrid';
-import BuiltForEveryone from '@/components/BuiltForEveryone';
+import LandingPage from '@/components/LandingPage';
 
 export default function Home() {
   const { user, isAuthenticated, loading, needsOnboarding } = useAuth();
@@ -27,11 +25,9 @@ export default function Home() {
   if (!loading && isAuthenticated) return null;
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden" style={{ background: 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124,58,237,0.15) 0%, transparent 70%), #06040f' }}>
-      <main className="relative z-10">
-        <Hero />
-        <FeaturesGrid />
-        <BuiltForEveryone />
+    <div className="min-h-screen overflow-x-hidden bg-white">
+      <main>
+        <LandingPage />
       </main>
       <Footer />
     </div>

@@ -199,19 +199,19 @@ export default function Navbar() {
   const isOnDashboard = pathname.includes('/recruiter/') || pathname.includes('/candidate/');
   // The landing page is a dark-branded marketing surface — keep the navbar dark
   // there regardless of the selected theme so it never clashes with the hero.
-  const forceDark = pathname === '/';
+  const isLanding = pathname === '/';
 
   return (
     <nav
       className={`fixed top-0 left-0 right-0 w-full px-6 py-4 flex justify-between items-center backdrop-blur-md border-b z-[9999] ${
-        forceDark
-          ? 'bg-zinc-950/70 border-white/10'
+        isLanding
+          ? 'bg-white/90 border-slate-200/80'
           : 'bg-white/80 dark:bg-zinc-900/80 border-gray-200/50 dark:border-white/10'
       }`}
     >
       <div
         className={`flex items-center gap-2 text-2xl font-bold cursor-pointer hover:opacity-80 transition-opacity ${
-          forceDark ? 'text-white' : 'text-gray-900 dark:text-white'
+          isLanding ? 'text-slate-900' : 'text-gray-900 dark:text-white'
         }`}
         onClick={handleLogoClick}
       >
@@ -220,7 +220,13 @@ export default function Navbar() {
       </div>
 
       <div className="hidden md:flex flex-grow justify-center">
-        {isAuthenticated && user?.role === 'candidate' && (
+        {isLanding ? (
+          <div className="flex items-center gap-7 text-sm font-medium text-slate-500">
+            <Link href="/#features" className="transition hover:text-slate-900">Features</Link>
+            <Link href="/#how-it-works" className="transition hover:text-slate-900">How it works</Link>
+            <Link href="/signup" className="transition hover:text-slate-900">For recruiters</Link>
+          </div>
+        ) : isAuthenticated && user?.role === 'candidate' && (
           <Link
             href="/candidate/jobs"
             className="text-gray-700 dark:text-white px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -231,7 +237,7 @@ export default function Navbar() {
       </div>
 
       <div className="flex items-center space-x-2">
-        <ThemeToggle />
+        {!isLanding && <ThemeToggle />}
 
         {/* Notification bell — all authenticated users */}
         {isAuthenticated && user?.id && (
@@ -304,15 +310,15 @@ export default function Navbar() {
         ) : (
           <>
             <Link href="/signup">
-              <button className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded text-white hover:opacity-90">
-                Try it Free
+              <button className={`px-4 py-2 text-sm font-semibold text-white transition ${isLanding ? 'rounded-xl bg-slate-900 hover:bg-slate-700' : 'rounded bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90'}`}>
+                {isLanding ? 'Create account' : 'Try it Free'}
               </button>
             </Link>
             <button
               onClick={() => openModal('login')}
               className={`px-4 py-2 bg-transparent border rounded transition ${
-                forceDark
-                  ? 'border-white/40 text-white hover:bg-white hover:text-black'
+                isLanding
+                  ? 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   : 'border-gray-300 dark:border-white text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-white hover:text-black dark:hover:text-black'
               }`}
             >
