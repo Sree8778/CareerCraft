@@ -9,7 +9,7 @@ function AuthSkeleton() {
     <div className="flex min-h-screen w-full animate-pulse" aria-busy="true" aria-label="Loading">
       {/* Sidebar placeholder */}
       <div
-        className="hidden md:flex flex-col gap-3 fixed top-16 left-0 h-full w-60 p-6 border-r"
+        className="hidden md:flex flex-col gap-3 fixed top-20 left-0 h-[calc(100%-5rem)] w-60 p-6 border-r"
         style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
       >
         {Array.from({ length: 9 }).map((_, i) => (

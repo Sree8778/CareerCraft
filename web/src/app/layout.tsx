@@ -28,14 +28,13 @@ export const metadata: Metadata = {
     "CareerCraft automates every stage of hiring — AI resume building, semantic job search, voice interviews, and recruiter copilot tools.",
 };
 
-// Runs before hydration: uses the light product surface by default and respects
-// an explicit dark preference for existing users.
+// Runs before hydration: applies the saved theme (dark by default) so there is no flash.
 const themeInitScript = `
 (function () {
   try {
     var t = localStorage.getItem('theme');
-    if (t === 'dark') document.documentElement.classList.add('dark');
-  } catch (e) {}
+    if (t !== 'light') document.documentElement.classList.add('dark');
+  } catch (e) { document.documentElement.classList.add('dark'); }
 })();
 `;
 
@@ -64,7 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <div className="cc-noise" />
                 </div>
                 <Navbar />
-                <main className="flex-1 pt-16">{children}</main>
+                <main className="flex-1 pt-20">{children}</main>
                 <LoginModal />
               </div>
               <Toaster richColors position="top-right" closeButton />

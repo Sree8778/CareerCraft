@@ -43,6 +43,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const isMockFirebase = process.env.NODE_ENV !== 'production' && (!auth.app.options.apiKey || auth.app.options.apiKey.startsWith("your_api_key") || auth.app.options.apiKey.startsWith("mock"));
+    const useLocalFallback = () => {
+      const fallback: User = { id: 'mock_uid_123', email: 'developer@recruitedge.mock', name: 'Jane Doe', role: 'candidate', avatar: '' };
+      setUser(currentUser => currentUser || fallback);
+      setNeedsOnboarding(!isOnboardingDone(fallback.id));
+      setLoading(false);
+    };
 
     if (isMockFirebase) {
       console.warn("Firebase Auth running in Developer Offline Bypass Mode (unconfigured .env.local keys).");
@@ -67,8 +73,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return () => {}; // Return no-op cleanup
     }
 
+    // A configured Firebase project can still be unreachable on a local
+    // machine (offline, blocked network, or emulator-free development). Do
+    // not leave the whole app on its loading screen in that case. A later
+    // auth callback will still replace this temporary developer session.
+    const localAuthTimeout = process.env.NODE_ENV !== 'production'
+      ? window.setTimeout(useLocalFallback, 6000)
+      : undefined;
+
     // Listen to Firebase Auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (localAuthTimeout) window.clearTimeout(localAuthTimeout);
       if (firebaseUser) {
         try {
           // Fetch additional user profile data from Firestore
@@ -140,12 +155,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setNeedsOnboarding(!isOnboardingDone(u.id));
         }
       } else {
+        // Keep the full candidate workspace available during local development
+        // when a configured Firebase project has no signed-in browser session.
+        if (process.env.NODE_ENV !== 'production') {
+          useLocalFallback();
+          return;
+        }
         setUser(null);
       }
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      if (localAuthTimeout) window.clearTimeout(localAuthTimeout);
+      unsubscribe();
+    };
   }, []);
 
   const login = (userData: User) => {

@@ -203,10 +203,18 @@ export default function Navbar() {
 
   return (
     <nav
-      className="fixed top-0 left-0 right-0 z-[9999] flex w-full items-center justify-between border-b border-slate-200/80 bg-white/90 px-6 py-4 backdrop-blur-md"
+      className={`fixed top-0 left-0 right-0 z-[9999] flex h-20 w-full items-center justify-between border-b px-4 backdrop-blur-xl sm:px-6 ${
+        isLanding
+          ? 'bg-white/90 border-slate-200/80'
+          : isOnDashboard
+            ? 'bg-white/95 border-slate-200/80 shadow-[0_8px_30px_rgba(15,23,42,0.08)] dark:bg-[#0b0b12]/95 dark:border-white/10 dark:shadow-[0_8px_30px_rgba(0,0,0,0.22)]'
+            : 'bg-white/80 dark:bg-zinc-900/80 border-gray-200/50 dark:border-white/10'
+      }`}
     >
       <div
-        className="flex cursor-pointer items-center gap-2 text-2xl font-bold text-slate-900 transition-opacity hover:opacity-80"
+        className={`flex items-center gap-2 text-2xl font-bold cursor-pointer hover:opacity-80 transition-opacity ${
+          isLanding ? 'text-slate-900' : 'text-gray-900 dark:text-white'
+        }`}
         onClick={handleLogoClick}
       >
         <AppLogo width={142} height={40} className="h-9 w-auto" />
@@ -222,7 +230,7 @@ export default function Navbar() {
         ) : isAuthenticated && user?.role === 'candidate' && (
           <Link
             href="/candidate/jobs"
-            className="text-slate-600 px-4 py-2 rounded-md hover:bg-slate-100 transition-colors"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-white dark:hover:bg-white/10"
           >
             Browse Jobs
           </Link>

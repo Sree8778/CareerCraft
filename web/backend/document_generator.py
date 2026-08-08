@@ -7,7 +7,10 @@ from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_PARAGRAPH_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from weasyprint import HTML
+try:
+    from weasyprint import HTML
+except (ImportError, OSError):
+    HTML = None
 from jinja2 import Environment, FileSystemLoader
 import os
 from bs4 import BeautifulSoup
@@ -279,8 +282,83 @@ def generate_pdf_from_data(data):
             skill['skills_list'] = clean_text(skill.get('skills_list', ''))
 
     rendered_html = template.render(**data)
-    
-    pdf_bytes = HTML(string=rendered_html).write_pdf()
+
+    if HTML is None:
+        pdf_bytes = _generate_pdf_with_reportlab(data)
+    else:
+        pdf_bytes = HTML(string=rendered_html).write_pdf()
     if len(PdfReader(io.BytesIO(pdf_bytes)).pages) > 1:
         raise ValueError('Your resume is longer than one page. Shorten the highlighted sections and try again.')
     return pdf_bytes
+
+
+def _generate_pdf_with_reportlab(data: dict) -> bytes:
+    """Portable local-development PDF fallback when WeasyPrint system libraries are absent."""
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+    buffer = io.BytesIO()
+    document = SimpleDocTemplate(
+        buffer, pagesize=A4, leftMargin=0.55 * inch, rightMargin=0.55 * inch,
+        topMargin=0.45 * inch, bottomMargin=0.45 * inch,
+    )
+    styles = getSampleStyleSheet()
+    accent = data.get('styleOptions', {}).get('accentColor', '#34495e')
+    body = ParagraphStyle('ResumeBody', parent=styles['BodyText'], fontName='Helvetica', fontSize=9.5, leading=11.5, spaceAfter=3)
+    heading = ParagraphStyle('ResumeHeading', parent=styles['Heading2'], textColor=colors.HexColor(accent), fontSize=10.5, leading=12, spaceBefore=6, spaceAfter=3)
+    header = ParagraphStyle('ResumeHeader', parent=styles['Title'], textColor=colors.HexColor(accent), alignment=TA_CENTER, fontSize=18, leading=21, spaceAfter=2)
+    contact = ParagraphStyle('ResumeContact', parent=body, alignment=TA_CENTER, spaceAfter=4)
+    story = []
+    personal = data.get('personal', {})
+    story.append(Paragraph(_escape_pdf_text(personal.get('name', '')), header))
+    contact_items = [personal.get(key, '') for key in ('email', 'phone', 'location')]
+    if personal.get('legalStatus') and personal['legalStatus'] != 'Prefer not to say':
+        contact_items.append(personal['legalStatus'])
+    story.append(Paragraph(_escape_pdf_text(' | '.join(item for item in contact_items if item)), contact))
+
+    def add_section(title: str, entries: list[tuple[str, str]]) -> None:
+        entries = [(top, detail) for top, detail in entries if top]
+        if not entries:
+            return
+        story.append(Paragraph(title, heading))
+        for top, detail in entries:
+            text = f'<b>{_escape_pdf_text(top)}</b>'
+            if detail:
+                safe_detail = _escape_pdf_text(detail).replace('\n', '<br/>')
+                text += f'<br/>{safe_detail}'
+            story.append(Paragraph(text, body))
+
+    summary = _html_to_text(data.get('summary', ''))
+    if summary:
+        add_section('Summary', [(summary, '')])
+    add_section('Experience', [
+        (entry.get('jobTitle', ''), ' | '.join(filter(None, [entry.get('company', ''), entry.get('dates', '')])) + (f"\n{_html_to_text(entry.get('description', ''))}" if _html_to_text(entry.get('description', '')) else ''))
+        for entry in data.get('experience', [])
+    ])
+    add_section('Education', [
+        (entry.get('degree', ''), ' | '.join(filter(None, [entry.get('institution', ''), entry.get('graduationYear', ''), f"GPA: {entry.get('gpa')}" if entry.get('gpa') else ''])) + (f"\n{_html_to_text(entry.get('achievements', ''))}" if _html_to_text(entry.get('achievements', '')) else ''))
+        for entry in data.get('education', [])
+    ])
+    add_section('Skills', [(entry.get('category', 'Skills'), entry.get('skills_list', '')) for entry in data.get('skills', []) if entry.get('skills_list')])
+    add_section('Projects', [
+        (entry.get('title', ''), ' | '.join(filter(None, [entry.get('date', ''), _html_to_text(entry.get('description', ''))])))
+        for entry in data.get('projects', [])
+    ])
+    add_section('Certifications', [
+        (entry.get('name', ''), ' | '.join(filter(None, [entry.get('issuer', ''), entry.get('date', '')])))
+        for entry in data.get('certifications', [])
+    ])
+    document.build(story)
+    return buffer.getvalue()
+
+
+def _html_to_text(value: str) -> str:
+    return clean_text(BeautifulSoup(value or '', 'html.parser').get_text(' ', strip=True))
+
+
+def _escape_pdf_text(value: str) -> str:
+    return str(value).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')

@@ -39,9 +39,14 @@ try:
     if cred_obj:
         firebase_admin.initialize_app(cred_obj)
     else:
-        # Option 4: Application Default Credentials (works in Cloud Run if SA has permissions)
-        firebase_admin.initialize_app()
-        print("Firebase: initialized with Application Default Credentials")
+        # Application Default Credentials are available in Cloud Run.  Skipping
+        # them locally avoids a long credential-discovery timeout and lets the
+        # API use its existing mock-auth fallback for local development.
+        if os.environ.get('K_SERVICE'):
+            firebase_admin.initialize_app()
+            print("Firebase: initialized with Application Default Credentials")
+        else:
+            raise RuntimeError("No Firebase credentials configured for local development")
 
     firebase_initialized = True
     db = firestore.client()

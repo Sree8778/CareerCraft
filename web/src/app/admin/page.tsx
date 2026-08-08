@@ -135,7 +135,7 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="cc-workspace min-h-screen max-w-6xl mx-auto px-6 py-8 text-slate-900 space-y-6">
+    <div className="max-w-6xl mx-auto px-6 py-8 text-white space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <ShieldCheck className="w-7 h-7 text-purple-400" />

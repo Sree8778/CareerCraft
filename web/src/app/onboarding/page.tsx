@@ -450,7 +450,7 @@ export default function OnboardingPage() {
   if (loading || !user) return null;
 
   return (
-    <div className="min-h-screen bg-[#080b14] flex items-center justify-center p-4">
+    <div className="cc-onboarding flex items-center justify-center p-4 sm:p-6">
       {/* Invisible reCAPTCHA anchor for Firebase Phone Auth */}
       <div id="recaptcha-container" />
 

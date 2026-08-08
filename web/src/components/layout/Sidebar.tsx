@@ -54,7 +54,7 @@ export default function Sidebar() {
       <button
         onClick={() => setOpen(v => !v)}
         aria-label="Toggle navigation"
-        className="md:hidden fixed bottom-5 left-5 z-50 p-3 rounded-full cc-btn-primary shadow-lg"
+        className="md:hidden fixed top-24 left-4 z-50 p-3 rounded-full cc-btn-primary shadow-lg"
       >
         {open ? <X size={20} /> : <Menu size={20} />}
       </button>
@@ -64,7 +64,7 @@ export default function Sidebar() {
       )}
 
       <aside
-        className={`fixed top-[4rem] left-0 h-[calc(100%-4rem)] w-60 backdrop-blur-xl border-r p-5 flex flex-col justify-between transition-transform duration-300 z-40 text-[var(--cc-text)] ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
+        className={`fixed top-20 left-0 h-[calc(100%-5rem)] w-60 backdrop-blur-xl border-r p-5 flex flex-col justify-between transition-transform duration-300 z-40 text-[var(--cc-text)] ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
         style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
       >
         <div className="space-y-5 overflow-y-auto pb-2">

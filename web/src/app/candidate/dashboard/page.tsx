@@ -244,34 +244,34 @@ export default function CandidateDashboardPage() {
 
   return (
     <CandidateLayout>
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="cc-page space-y-6">
 
         {/* Welcome header */}
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative rounded-3xl p-7 bg-gradient-to-r from-indigo-950/40 to-slate-900/60 border border-white/10 overflow-hidden shadow-2xl"
+          className="relative overflow-hidden rounded-3xl border border-indigo-100 bg-gradient-to-r from-indigo-100 via-white to-slate-100 p-7 shadow-xl shadow-slate-200/50 dark:border-white/10 dark:from-indigo-950/40 dark:via-[#08080d] dark:to-slate-900/60 dark:shadow-2xl"
         >
           <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
           <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-5">
             <div className="space-y-1.5">
-              <span className="text-[10px] font-bold font-mono tracking-widest uppercase bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full border border-indigo-500/30">
+              <span className="rounded-full border border-indigo-200 bg-indigo-100 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/20 dark:text-indigo-300">
                 Candidate Control Center
               </span>
-              <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+              <h1 className="text-3xl font-black text-slate-900 md:text-4xl dark:bg-gradient-to-r dark:from-white dark:to-zinc-400 dark:bg-clip-text dark:text-transparent">
                 Welcome back, {user.name} 👋
               </h1>
-              <p className="text-xs text-zinc-400 max-w-lg leading-relaxed">
+              <p className="max-w-lg text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
                 {total === 0
                   ? 'No applications yet — browse open jobs and apply to get started.'
                   : `${total} applications submitted · ${responseRate}% response rate · ${interviewRate}% interview rate`}
               </p>
             </div>
-            <div className="flex items-center gap-3 bg-zinc-950/80 p-3 rounded-2xl border border-white/5 shrink-0">
+            <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-emerald-100 bg-white/85 p-3 shadow-sm dark:border-white/5 dark:bg-zinc-950/80">
               <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
               <div className="space-y-0.5 text-xs">
-                <span className="text-zinc-500 font-bold block text-[9px] uppercase tracking-wider">BYOK Chain Status</span>
+                <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-500">BYOK Chain Status</span>
                 <span className="font-semibold text-emerald-400 font-mono text-[10px]">✓ Active (Rotating Stack)</span>
               </div>
             </div>
@@ -373,13 +373,13 @@ export default function CandidateDashboardPage() {
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
                           active ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-500/30 scale-110 animate-pulse'
                                  : done  ? 'bg-[#0B0F19] border-cyan-400 text-cyan-300'
-                                         : 'bg-zinc-950 border-zinc-800 text-zinc-600'
+                          : 'bg-zinc-950 border-zinc-700 text-zinc-500'
                         }`}>
                           {done ? '✓' : i + 1}
                         </div>
                         <div>
-                          <span className={`text-[10px] font-bold block ${active ? 'text-indigo-300' : done ? 'text-zinc-200' : 'text-zinc-600'}`}>{node.label}</span>
-                          <span className="text-[8px] text-zinc-600 block">{node.desc}</span>
+                          <span className={`text-[10px] font-bold block ${active ? 'text-indigo-300' : done ? 'text-zinc-200' : 'text-zinc-400'}`}>{node.label}</span>
+                          <span className="text-[8px] text-zinc-500 block">{node.desc}</span>
                         </div>
                       </div>
                     );
@@ -397,7 +397,7 @@ export default function CandidateDashboardPage() {
                 { name: 'AI Practice',     href: '/candidate/interview/practice',icon: <Mic className="w-4 h-4 text-purple-400" />,    color: 'hover:border-purple-500/50' },
               ].map(act => (
                 <Link key={act.name} href={act.href}
-                  className={`bg-slate-900/30 border border-white/8 p-4 rounded-2xl transition flex flex-col gap-3 group ${act.color}`}>
+                  className={`min-h-[128px] justify-between bg-slate-900/30 border border-white/8 p-4 rounded-2xl transition flex flex-col gap-3 group ${act.color}`}>
                   <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">{act.icon}</div>
                   <span className="text-xs font-bold text-white group-hover:text-indigo-300 transition leading-tight">{act.name}</span>
                   <ChevronRight className="w-3.5 h-3.5 text-indigo-400 group-hover:translate-x-0.5 transition-transform" />

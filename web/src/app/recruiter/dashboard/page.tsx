@@ -95,14 +95,14 @@ export default function RecruiterDashboardPage() {
 
   return (
     <RecruiterLayout>
-      <section className="space-y-8 max-w-7xl mx-auto">
+      <section className="cc-page space-y-8">
         
         {/* Welcome Box - High End Hero Banner */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="relative rounded-3xl p-8 bg-gradient-to-r from-purple-950/40 to-slate-900/60 border border-white/10 overflow-hidden shadow-2xl"
+          className="relative overflow-hidden rounded-3xl border border-purple-100 bg-gradient-to-r from-purple-100 via-white to-slate-100 p-8 shadow-xl shadow-slate-200/50 dark:border-white/10 dark:from-purple-950/40 dark:via-[#08080d] dark:to-slate-900/60 dark:shadow-2xl"
         >
           {/* Glass background glowing spots */}
           <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-purple-500/10 blur-3xl pointer-events-none" />
@@ -110,22 +110,22 @@ export default function RecruiterDashboardPage() {
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
             <div className="space-y-2">
-              <span className="text-[10px] font-bold font-mono tracking-widest uppercase bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full border border-purple-500/30">
+              <span className="rounded-full border border-purple-200 bg-purple-100 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-purple-700 dark:border-purple-500/30 dark:bg-purple-500/20 dark:text-purple-300">
                 Talent Pipeline Command
               </span>
-              <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+              <h1 className="text-3xl font-black text-slate-900 md:text-4xl dark:bg-gradient-to-r dark:from-white dark:to-zinc-400 dark:bg-clip-text dark:text-transparent">
                 Welcome back, {name || user.name} 💼
               </h1>
-              <p className="text-xs text-zinc-400 max-w-lg leading-relaxed">
+              <p className="max-w-lg text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
                 Manage your active open requisitions, audit candidate resume parsing pipelines, and inspect scheduled voice screenings.
               </p>
             </div>
             
             {/* Quick stats / live banner */}
-            <div className="flex items-center gap-3 bg-zinc-950/80 p-3 rounded-2xl border border-white/5 shadow-inner shrink-0">
+            <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-purple-100 bg-white/85 p-3 shadow-sm dark:border-white/5 dark:bg-zinc-950/80 dark:shadow-inner">
               <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-ping" />
               <div className="space-y-0.5 text-xs">
-                <span className="text-zinc-500 font-bold block text-[9px] uppercase tracking-wider">Secure Assessment Rule</span>
+                <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Secure Assessment Rule</span>
                 <span className="font-semibold text-purple-400 flex items-center gap-1 font-mono text-[10px]">
                   ✓ Anti-Cheat Proctor Enabled
                 </span>

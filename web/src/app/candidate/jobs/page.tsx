@@ -232,7 +232,7 @@ export default function JobListingsPage() {
 
   return (
     <CandidateLayout>
-      <div className="max-w-6xl mx-auto">
+      <div className="cc-page max-w-6xl">
         <div className="flex items-start justify-between mb-2 gap-4">
           <div className="flex-1">
             <h1 className="text-4xl font-extrabold text-center mb-2 bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
