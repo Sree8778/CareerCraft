@@ -1467,8 +1467,7 @@ export default function ResumeBuilder() {
     const handleResumeFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !user?.id) return;
-        const allowed = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'];
-        if (!allowed.includes(file.type)) { toast.error('Only PDF and DOCX files are supported'); return; }
+        if (!/\.(pdf|docx)$/i.test(file.name)) { toast.error('Please upload a PDF or DOCX resume.'); return; }
 
         setUploadingFile(true);
         const toastId = toast.loading(`Uploading ${file.name}…`);
@@ -1496,8 +1495,14 @@ export default function ResumeBuilder() {
             });
             if (parseRes.ok) {
                 const parsed = await parseRes.json();
+                if (!parsed.parsedData) throw new Error('Resume parsing returned no usable data.');
                 const versionName = file.name.replace(/\.[^.]+$/, '');
-                const newVersion = { id: crypto.randomUUID(), name: versionName, savedAt: new Date().toISOString(), resumeData: parsed };
+                const newVersion = {
+                    id: crypto.randomUUID(),
+                    name: versionName,
+                    savedAt: new Date().toISOString(),
+                    resumeData: normalizeResumeData(parsed.parsedData),
+                };
                 await setDoc(doc(db, 'resumes', user.id), { savedVersions: arrayUnion(newVersion) }, { merge: true });
                 setSavedVersions(prev => [...prev, newVersion]);
                 toast.success(`Parsed & saved as "${versionName}"`, { id: toastId });
@@ -1789,6 +1794,10 @@ export default function ResumeBuilder() {
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
+        if (!/\.(pdf|docx)$/i.test(file.name)) {
+            toast.error('Please upload a PDF or DOCX resume.');
+            return;
+        }
 
         setLoading(true);
         const toastId = "upload";
@@ -2490,7 +2499,7 @@ export default function ResumeBuilder() {
                                <input
                                    ref={fileUploadRef}
                                    type="file"
-                                   accept=".pdf,.doc,.docx"
+                                   accept=".pdf,.docx"
                                    className="hidden"
                                    onChange={handleResumeFileUpload}
                                />
