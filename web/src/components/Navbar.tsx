@@ -82,9 +82,12 @@ function NotificationBell({ userId, role }: { userId: string; role: string }) {
   return (
     <div className="relative" ref={panelRef}>
       <button
+        type="button"
         onClick={handleOpen}
         className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
         aria-label="Notifications"
+        aria-expanded={open}
+        aria-controls="notifications-menu"
       >
         <Bell className="w-5 h-5 text-gray-600 dark:text-gray-300" />
         {unread > 0 && (
@@ -95,7 +98,7 @@ function NotificationBell({ userId, role }: { userId: string; role: string }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 z-[9999] overflow-hidden">
+        <div id="notifications-menu" role="dialog" aria-label="Notifications" className="absolute right-0 mt-2 w-80 bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 z-[9999] overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-white/8">
             <span className="text-sm font-bold text-gray-900 dark:text-white">Notifications</span>
@@ -108,7 +111,7 @@ function NotificationBell({ userId, role }: { userId: string; role: string }) {
                   <CheckCheck className="w-3 h-3" /> Mark all read
                 </button>
               )}
-              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white transition">
+              <button type="button" aria-label="Close notifications" onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white transition">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -211,14 +214,16 @@ export default function Navbar() {
             : 'bg-white/80 dark:bg-zinc-900/80 border-gray-200/50 dark:border-white/10'
       }`}
     >
-      <div
+      <button
+        type="button"
+        aria-label="Go to CareerCraft home"
         className={`flex items-center gap-2 text-2xl font-bold cursor-pointer hover:opacity-80 transition-opacity ${
           isLanding ? 'text-slate-900' : 'text-gray-900 dark:text-white'
         }`}
         onClick={handleLogoClick}
       >
         <AppLogo width={142} height={40} className="h-9 w-auto" />
-      </div>
+      </button>
 
       <div className="hidden md:flex flex-grow justify-center">
         {isLanding ? (
@@ -250,8 +255,13 @@ export default function Navbar() {
         ) : isAuthenticated ? (
           <div className="relative" ref={profileMenuRef}>
             <button
+              type="button"
               onClick={() => setShowProfileMenu(!showProfileMenu)}
               className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              aria-label="Open account menu"
+              aria-expanded={showProfileMenu}
+              aria-haspopup="menu"
+              aria-controls="account-menu"
             >
               <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
                 {user?.avatar ? (
@@ -276,7 +286,7 @@ export default function Navbar() {
             </button>
 
             {showProfileMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-[9999]">
+              <div id="account-menu" role="menu" className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-[9999]">
                 <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">{user?.name}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
@@ -285,6 +295,8 @@ export default function Navbar() {
 
                 {!isOnDashboard && (
                   <button
+                    type="button"
+                    role="menuitem"
                     onClick={handleDashboardClick}
                     className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                   >
@@ -293,6 +305,8 @@ export default function Navbar() {
                 )}
 
                 <button
+                  type="button"
+                  role="menuitem"
                   onClick={handleProfileClick}
                   className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
@@ -300,6 +314,8 @@ export default function Navbar() {
                 </button>
 
                 <button
+                  type="button"
+                  role="menuitem"
                   onClick={handleLogout}
                   className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
@@ -310,10 +326,11 @@ export default function Navbar() {
           </div>
         ) : (
           <>
-            <Link href="/signup">
-              <button className={`px-4 py-2 text-sm font-semibold text-white transition ${isLanding ? 'rounded-xl bg-slate-900 hover:bg-slate-700' : 'rounded bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90'}`}>
-                {isLanding ? 'Create account' : 'Try it Free'}
-              </button>
+            <Link
+              href="/signup"
+              className={`px-4 py-2 text-sm font-semibold text-white transition ${isLanding ? 'rounded-xl bg-slate-900 hover:bg-slate-700' : 'rounded bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90'}`}
+            >
+              {isLanding ? 'Create account' : 'Try it Free'}
             </Link>
             <button
               onClick={() => openModal('login')}

@@ -14,7 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { API_BASE, authHeader } from '@/lib/api';
+import { API_BASE, authHeader, fetchWithTimeout } from '@/lib/api';
 
 export default function RecruiterDashboardPage() {
   const { name } = useRecruiter();
@@ -43,7 +43,7 @@ export default function RecruiterDashboardPage() {
     if (!user?.id) return;
     const fetchStats = async () => {
       try {
-        const res = await fetch(`${API_BASE}/stats/recruiter/${user.id}`, {
+        const res = await fetchWithTimeout(`${API_BASE}/stats/recruiter/${user.id}`, {
           headers: await authHeader(getToken),
         });
         if (res.ok) {
@@ -62,7 +62,7 @@ export default function RecruiterDashboardPage() {
     };
     const fetchCompletion = async () => {
       try {
-        const res = await fetch(`${API_BASE}/users/${user.id}/completion`, {
+        const res = await fetchWithTimeout(`${API_BASE}/users/${user.id}/completion`, {
           headers: await authHeader(getToken),
         });
         if (res.ok) {
@@ -73,7 +73,7 @@ export default function RecruiterDashboardPage() {
     };
     const fetchRecentApps = async () => {
       try {
-        const res = await fetch(`${API_BASE}/applications?recruiterId=${user.id}`, {
+        const res = await fetchWithTimeout(`${API_BASE}/applications?recruiterId=${user.id}`, {
           headers: await authHeader(getToken),
         });
         if (res.ok) {
@@ -87,7 +87,7 @@ export default function RecruiterDashboardPage() {
     setStatsError(false);
     Promise.allSettled([fetchStats(), fetchCompletion(), fetchRecentApps()])
       .then(() => setStatsLoading(false));
-  }, [user?.id]);
+  }, [user?.id, getToken]);
 
   if (!isAuthenticated || user?.role !== 'recruiter') {
     return null;

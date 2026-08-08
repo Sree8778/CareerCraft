@@ -62,8 +62,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <div className="cc-aurora-blob cc-aurora-3" />
                   <div className="cc-noise" />
                 </div>
+                <a className="cc-skip-link" href="#main-content">Skip to main content</a>
                 <Navbar />
-                <main className="flex-1 pt-20">{children}</main>
+                <div id="main-content" tabIndex={-1} className="flex-1 pt-20">{children}</div>
                 <LoginModal />
               </div>
               <Toaster richColors position="top-right" closeButton />

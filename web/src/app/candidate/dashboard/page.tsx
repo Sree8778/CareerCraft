@@ -14,7 +14,7 @@ import {
   FileText, Lightbulb, BarChart2, Activity,
   Mic, Star, Send, Eye, X,
 } from 'lucide-react';
-import { API_BASE, authHeader } from '@/lib/api';
+import { API_BASE, authHeader, fetchWithTimeout } from '@/lib/api';
 import { motion } from 'framer-motion';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -197,36 +197,39 @@ export default function CandidateDashboardPage() {
     if (!user?.id) return;
     setStatsLoading(true);
 
-    const [statsRes, appsRes, completionRes] = await Promise.allSettled([
-      fetch(`${API_BASE}/stats/candidate/${user.id}`, { headers: await authHeader(getToken) }),
-      fetch(`${API_BASE}/applications?candidateId=${user.id}`, { headers: await authHeader(getToken) }),
-      fetch(`${API_BASE}/users/${user.id}/completion`,          { headers: await authHeader(getToken) }),
-    ]);
+    try {
+      const headers = await authHeader(getToken);
+      const [statsRes, appsRes, completionRes] = await Promise.allSettled([
+        fetchWithTimeout(`${API_BASE}/stats/candidate/${user.id}`, { headers }),
+        fetchWithTimeout(`${API_BASE}/applications?candidateId=${user.id}`, { headers }),
+        fetchWithTimeout(`${API_BASE}/users/${user.id}/completion`, { headers }),
+      ]);
 
-    if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
-      const d = await statsRes.value.json();
-      setAtsScore(d.atsScore ?? 0);
-      setInterviewsScheduled(d.interviewsScheduled ?? 0);
+      if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
+        const d = await statsRes.value.json();
+        setAtsScore(d.atsScore ?? 0);
+        setInterviewsScheduled(d.interviewsScheduled ?? 0);
+      }
+
+      if (appsRes.status === 'fulfilled' && appsRes.value.ok) {
+        const d = await appsRes.value.json();
+        const apps: any[] = d.applications || [];
+        setApplications(apps);
+        if (apps.length > 0) setLatestApp(apps[0]);
+        const hasInterview = apps.some(a => ['Interview', 'Offer'].includes(normalizeStatus(a.status)));
+        const hasReview    = apps.some(a => normalizeStatus(a.status) === 'In Review');
+        if (hasInterview) setActivePipelineStep(2);
+        else if (hasReview || apps.length > 0) setActivePipelineStep(1);
+        else setActivePipelineStep(0);
+      }
+
+      if (completionRes.status === 'fulfilled' && completionRes.value.ok) {
+        const d = await completionRes.value.json();
+        setCompletion({ score: d.score ?? 0, missing: d.missing ?? [] });
+      }
+    } finally {
+      setStatsLoading(false);
     }
-
-    if (appsRes.status === 'fulfilled' && appsRes.value.ok) {
-      const d = await appsRes.value.json();
-      const apps: any[] = d.applications || [];
-      setApplications(apps);
-      if (apps.length > 0) setLatestApp(apps[0]);
-      const hasInterview = apps.some(a => ['Interview', 'Offer'].includes(normalizeStatus(a.status)));
-      const hasReview    = apps.some(a => normalizeStatus(a.status) === 'In Review');
-      if (hasInterview) setActivePipelineStep(2);
-      else if (hasReview || apps.length > 0) setActivePipelineStep(1);
-      else setActivePipelineStep(0);
-    }
-
-    if (completionRes.status === 'fulfilled' && completionRes.value.ok) {
-      const d = await completionRes.value.json();
-      setCompletion({ score: d.score ?? 0, missing: d.missing ?? [] });
-    }
-
-    setStatsLoading(false);
   }, [user?.id, getToken]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
@@ -354,12 +357,16 @@ export default function CandidateDashboardPage() {
                 )}
               </div>
               <div className="relative pt-3 pb-1 px-2">
-                <div className="absolute top-[38px] left-8 right-8 h-0.5 bg-zinc-900 rounded-full" />
                 <div
-                  className="absolute top-[38px] left-8 h-0.5 bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-full transition-all duration-1000"
+                  aria-hidden="true"
+                  className="absolute top-[38px] left-8 right-8 h-px rounded-full bg-slate-200 dark:bg-zinc-700 pointer-events-none"
+                />
+                <div
+                  aria-hidden="true"
+                  className="absolute top-[38px] left-8 h-[2px] bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-full transition-all duration-1000 pointer-events-none"
                   style={{ width: `${(activePipelineStep / 3) * 88}%` }}
                 />
-                <div className="flex justify-between items-center">
+                <div className="relative z-10 flex justify-between items-center">
                   {[
                     { label: 'Applied',    desc: 'Resume sent' },
                     { label: 'In Review',  desc: 'ATS aligned' },

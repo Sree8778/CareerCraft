@@ -60,16 +60,20 @@ export default function CandidateSidebar() {
       <button
         onClick={() => setOpen(v => !v)}
         aria-label="Toggle navigation"
+        aria-expanded={open}
+        aria-controls="candidate-navigation"
         className="md:hidden fixed top-24 left-4 z-50 p-3 rounded-full cc-btn-primary shadow-lg"
       >
         {open ? <X size={20} /> : <Menu size={20} />}
       </button>
       {/* Mobile overlay */}
       {open && (
-        <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setOpen(false)} />
+        <button type="button" aria-label="Close navigation" className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setOpen(false)} />
       )}
 
       <aside
+        id="candidate-navigation"
+        aria-label="Candidate navigation"
         className={`fixed top-20 left-0 h-[calc(100%-5rem)] w-60 backdrop-blur-xl border-r p-5 flex flex-col justify-between transition-transform duration-300 z-40 text-[var(--cc-text)] ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
         style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
       >
@@ -97,6 +101,7 @@ export default function CandidateSidebar() {
                     <Link
                       key={link.name}
                       href={link.href}
+                      aria-current={isActive ? 'page' : undefined}
                       className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${
                         isActive
                           ? 'bg-gradient-to-r from-[var(--cc-accent)]/20 to-[var(--cc-accent-2)]/10 border-l-2 border-[var(--cc-accent)] text-[var(--cc-text)] shadow'

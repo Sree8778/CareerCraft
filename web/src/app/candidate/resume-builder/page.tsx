@@ -2277,7 +2277,7 @@ export default function ResumeBuilder() {
                   </div>
                 </header>
 
-                <main className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-y-auto lg:overflow-y-hidden">
+                <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-y-auto lg:overflow-y-hidden">
                     <div className="flex flex-col lg:overflow-y-auto p-4 md:p-6 max-lg:!w-full" style={{ width: `${panelWidth}%` }}>
                         <div className="space-y-6">
                             <Card>
@@ -2613,7 +2613,7 @@ export default function ResumeBuilder() {
                            </div>
                        </div>
                     </div>
-                </main>
+                </div>
             </div>
         </CandidateLayout>
     );
