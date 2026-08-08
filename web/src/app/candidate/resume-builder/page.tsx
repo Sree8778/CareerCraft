@@ -47,6 +47,13 @@ export type ResumeTemplate = 'classic' | 'modern' | 'minimal' | 'executive' | 'c
 
 const DEFAULT_SECTION_ORDER = ['summary','experience','education','skills','projects','certifications','publications','languages','volunteer','awards'];
 
+const plainTextLength = (value: string) => value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim().length;
+const CharacterLimitHint = ({ value, limit }: { value: string; limit: number }) => (
+    <p className={`mt-1 text-right text-[10px] ${plainTextLength(value) >= limit ? 'text-amber-400' : 'text-zinc-500'}`}>
+        {plainTextLength(value)}/{limit} characters
+    </p>
+);
+
 // --- useHistory Hook (Simplified - removed undo/redo functionality) ---
 const useHistory = (initialState: any) => {
     const [history, setHistory] = useState([initialState]);
@@ -113,7 +120,7 @@ function toEditorHtml(value: string): string {
 }
 
 // --- Tiptap Editor Wrapper Component ---
-const TiptapEditor = ({ value, onChange, placeholder }: { value: string; onChange: (html: string) => void; placeholder?: string }) => {
+const TiptapEditor = ({ value, onChange, placeholder, maxLength = 1000 }: { value: string; onChange: (html: string) => void; placeholder?: string; maxLength?: number }) => {
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -142,7 +149,8 @@ const TiptapEditor = ({ value, onChange, placeholder }: { value: string; onChang
         ],
         content: value || '<p></p>',
         onUpdate: ({ editor }) => {
-            onChange(editor.getHTML());
+            const nextValue = editor.getHTML();
+            if (plainTextLength(nextValue) <= maxLength) onChange(nextValue);
         },
         editorProps: {
             attributes: {
@@ -223,21 +231,30 @@ const TiptapEditor = ({ value, onChange, placeholder }: { value: string; onChang
                 </button>
             </div>
             <EditorContent editor={editor} />
+            <CharacterLimitHint value={value || ''} limit={maxLength} />
         </div>
     );
 };
 
 
 // --- Refactored Form Section Components ---
+const LimitedInputField = ({ label, value, onChange, limit, type = 'text', placeholder }: { label: string; value: string; onChange: (value: string) => void; limit: number; type?: string; placeholder?: string }) => (
+    <div>
+        <Label>{label}</Label>
+        <Input type={type} value={value} maxLength={limit} placeholder={placeholder} onChange={e => onChange(e.target.value)} />
+        <CharacterLimitHint value={value} limit={limit} />
+    </div>
+);
+
 const PersonalForm = ({ data, onChange, onPicChange, onPicRemove, picPreview }: any) => (
     <div className="space-y-4">
         <div className="grid md:grid-cols-2 gap-4">
-            <div><Label>Full Name</Label><Input value={data.name || ''} onChange={e => onChange('name', e.target.value)} /></div>
-            <div><Label>Email</Label><Input type="email" value={data.email || ''} onChange={e => onChange('email', e.target.value)} /></div>
-            <div><Label>Phone</Label><Input value={data.phone || ''} onChange={e => onChange('phone', e.target.value)} /></div>
-            <div><Label>Location</Label><Input value={data.location || ''} onChange={e => onChange('location', e.target.value)} /></div>
-            <div><Label>LinkedIn URL (optional)</Label><Input value={data.linkedin || ''} placeholder="linkedin.com/in/username" onChange={e => onChange('linkedin', e.target.value)} /></div>
-            <div><Label>Website / Portfolio (optional)</Label><Input value={data.website || ''} placeholder="yoursite.com" onChange={e => onChange('website', e.target.value)} /></div>
+            <LimitedInputField label="Full Name" value={data.name || ''} limit={80} onChange={value => onChange('name', value)} />
+            <LimitedInputField label="Email" type="email" value={data.email || ''} limit={120} onChange={value => onChange('email', value)} />
+            <LimitedInputField label="Phone" value={data.phone || ''} limit={30} onChange={value => onChange('phone', value)} />
+            <LimitedInputField label="Location" value={data.location || ''} limit={100} onChange={value => onChange('location', value)} />
+            <LimitedInputField label="LinkedIn URL (optional)" value={data.linkedin || ''} limit={200} placeholder="linkedin.com/in/username" onChange={value => onChange('linkedin', value)} />
+            <LimitedInputField label="Website / Portfolio (optional)" value={data.website || ''} limit={200} placeholder="yoursite.com" onChange={value => onChange('website', value)} />
         </div>
         <div><Label>Legal Status</Label><Select value={data.legalStatus || 'Prefer not to say'} onChange={e => onChange('legalStatus', e.target.value)}><option>Prefer not to say</option><option>U.S. Citizen</option><option>Permanent Resident</option><option>Work Visa (H-1B)</option><option>OPT / CPT</option><option>EU Citizen</option></Select></div>
         <div>
@@ -350,6 +367,7 @@ const SummaryForm = ({ value, onChange, onEnhance, loading, suggestions, newBatc
                     value={value || ''}
                     onChange={onChange}
                     placeholder="A concise summary of your professional experience and goals..."
+                    maxLength={600}
                 />
                 <Button size="sm" variant="outline" className="mt-2" onClick={onEnhance} disabled={loading}><Sparkles size={14} className="mr-1.5" />Enhance</Button>
             </div>
@@ -480,13 +498,15 @@ const DynamicSection = ({ sectionKey, data, onChange, onAdd, onRemove, onEnhance
                         const inputProps: any = {
                             value: item[field.key] || '',
                             onChange: (e: any) => onChange(sectionKey, index, field.key, e.target.value),
-                            placeholder: `Enter ${field.label.toLowerCase()}...`
+                            placeholder: `Enter ${field.label.toLowerCase()}...`,
+                            maxLength: field.maxLength,
                         };
 
                         if (field.type === 'textarea' || field.type === 'quill') {
                             InputComponent = TiptapEditor;
                             inputProps.onChange = (val: string) => onChange(sectionKey, index, field.key, val);
                             inputProps.value = item[field.key] || '';
+                            inputProps.maxLength = field.maxLength || 1000;
                         } else if (field.type === 'plain_textarea') {
                             InputComponent = Textarea;
                             inputProps.onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => onChange(sectionKey, index, field.key, e.target.value);
@@ -511,6 +531,9 @@ const DynamicSection = ({ sectionKey, data, onChange, onAdd, onRemove, onEnhance
                             <div key={field.key} className={colSpanClass}>
                                 <Label>{field.label}</Label>
                                 <InputComponent {...inputProps} />
+                                {field.maxLength && field.type !== 'textarea' && field.type !== 'quill' && (
+                                    <CharacterLimitHint value={item[field.key] || ''} limit={field.maxLength} />
+                                )}
                                 {field.enhance && (
                                     <Button size="sm" variant="outline" className="mt-2" onClick={() => onEnhance({ section: sectionKey, index })} disabled={loading}><Sparkles size={14} className="mr-1.5" />Enhance</Button>
                                 )}
@@ -535,7 +558,8 @@ const LanguagesForm = ({ data, onChange, onAdd, onRemove }: any) => (
                 <div className="flex-1 grid grid-cols-2 gap-3">
                     <div>
                         <Label>Language</Label>
-                        <Input value={item.language || ''} placeholder="e.g. Spanish" onChange={e => onChange('languages', index, 'language', e.target.value)} />
+                        <Input value={item.language || ''} maxLength={50} placeholder="e.g. Spanish" onChange={e => onChange('languages', index, 'language', e.target.value)} />
+                        <CharacterLimitHint value={item.language || ''} limit={50} />
                     </div>
                     <div>
                         <Label>Proficiency</Label>
@@ -1289,6 +1313,19 @@ const PitchModal = ({ isOpen, onClose, pitchText, setPitchText, startRecording, 
     );
 };
 
+const CompleteResumeTemplateForm = ({ onApply }: { onApply: () => void }) => (
+    <div className="mt-6 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
+        <h3 className="text-sm font-semibold text-indigo-200">Complete resume content template</h3>
+        <p className="mt-1 text-xs text-zinc-400">Adds an empty entry for every optional section, so you can fill in every relevant detail without replacing what you have already entered.</p>
+        <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-zinc-400">
+            <li>Summary — 600 characters</li><li>Experience — 1,200 per role</li>
+            <li>Education — 600 per entry</li><li>Projects — 1,000 per project</li>
+            <li>Volunteer — 800 per role</li><li>Awards — 500 per award</li>
+        </ul>
+        <Button type="button" size="sm" className="mt-4" onClick={onApply}><FilePlus2 size={14} className="mr-1.5" />Use complete template</Button>
+    </div>
+);
+
 // --- Main App Component ---
 export default function ResumeBuilder() {
     const [activeSection, setActiveSection] = useState<string>('personal');
@@ -1625,6 +1662,22 @@ export default function ResumeBuilder() {
 
     const addDynamicEntry = (section: keyof ResumeData, newEntry: any) => setResumeData((prev: ResumeData) => ({ ...prev, [section]: [...(prev[section] as any[]), { ...newEntry, id: crypto.randomUUID() }] }));
     const removeDynamicEntry = (section: keyof ResumeData, id: string) => setResumeData((prev: ResumeData) => ({ ...prev, [section]: (prev[section] as any[]).filter(item => item.id !== id) }));
+    const applyCompleteTemplate = () => {
+        setResumeData((prev: ResumeData) => ({
+            ...prev,
+            experience: prev.experience.length ? prev.experience : [{ id: crypto.randomUUID(), jobTitle: '', company: '', dates: '', description: '<p></p>' }],
+            education: prev.education.length ? prev.education : [{ id: crypto.randomUUID(), degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }],
+            skills: prev.skills.length ? prev.skills : [{ id: crypto.randomUUID(), category: '', skills_list: '' }],
+            projects: prev.projects.length ? prev.projects : [{ id: crypto.randomUUID(), title: '', date: '', description: '<p></p>' }],
+            certifications: prev.certifications.length ? prev.certifications : [{ id: crypto.randomUUID(), name: '', issuer: '', date: '' }],
+            publications: prev.publications.length ? prev.publications : [{ id: crypto.randomUUID(), title: '', authors: '', journal: '', date: '', link: '' }],
+            languages: prev.languages.length ? prev.languages : [{ id: crypto.randomUUID(), language: '', proficiency: 'Conversational' }],
+            volunteer: prev.volunteer.length ? prev.volunteer : [{ id: crypto.randomUUID(), role: '', organization: '', dates: '', description: '<p></p>' }],
+            awards: prev.awards.length ? prev.awards : [{ id: crypto.randomUUID(), title: '', organization: '', date: '', description: '<p></p>' }],
+        }));
+        setActiveSection('personal');
+        toast.success('Complete resume template is ready. Fill in the sections that apply to you.');
+    };
 
     const moveSectionUp   = (id: string) => setSectionOrder(prev => { const i = prev.indexOf(id); if (i <= 0) return prev; const n = [...prev]; [n[i-1], n[i]] = [n[i], n[i-1]]; return n; });
     const moveSectionDown = (id: string) => setSectionOrder(prev => { const i = prev.indexOf(id); if (i >= prev.length - 1) return prev; const n = [...prev]; [n[i], n[i+1]] = [n[i+1], n[i]]; return n; });
@@ -2359,15 +2412,15 @@ export default function ResumeBuilder() {
                                 <CardContent>
                                     {activeSection === 'personal' && <PersonalForm data={resumeData.personal} onChange={handlePersonalChange} onPicChange={handleProfilePicChange} onPicRemove={handleProfilePicRemove} picPreview={profilePic.preview} />}
                                     {activeSection === 'summary' && <SummaryForm value={resumeData.summary} onChange={(v: string) => { handleSummaryChange(v); if (summarySuggestions.length > 0) setSummarySuggestions([]); }} onEnhance={() => handleEnhance({ section: 'summary'})} loading={loading} suggestions={summarySuggestions} newBatchFrom={newBatchFrom} suggestionsLoading={suggestionsLoading} onGenerateMore={() => fetchSummarySuggestions(undefined, summarySuggestions.length > 0)} onApplySuggestion={(s: string) => { handleSummaryChange(s); setSummarySuggestions([]); setNewBatchFrom(0); toast.success("Summary applied!"); }} onDismissSuggestions={() => { setSummarySuggestions([]); setNewBatchFrom(0); }} />}
-                                    {activeSection === 'experience' && <DynamicSection sectionKey="experience" data={resumeData.experience} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ jobTitle: '', company: '', dates: '', description: '<p></p>' }} fields={[{key: 'jobTitle', label: 'Job Title'}, {key: 'company', label: 'Company'}, {key: 'dates', label: 'Dates'}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2}]} />}
-                                    {activeSection === 'education' && <DynamicSection sectionKey="education" data={resumeData.education} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }} fields={[{key: 'degree', label: 'Degree'}, {key: 'institution', label: 'Institution'}, {key: 'graduationYear', label: 'Graduation Year'}, {key: 'gpa', label: 'GPA (Optional)'}, {key: 'achievements', label: 'Achievements & Coursework', type: 'textarea', enhance: true}]} />}
-                                    {activeSection === 'skills' && <DynamicSection sectionKey="skills" data={resumeData.skills} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ category: '', skills_list: '' }} fields={[{key: 'category', label: 'Category'}, {key: 'skills_list', label: 'Skills', type: 'skill_tags', colSpan: 2}]} />}
-                                    {activeSection === 'projects' && <DynamicSection sectionKey="projects" data={resumeData.projects} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ title: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Project Title'}, {key: 'date', label: 'Date'}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2}]} />}
-                                    {activeSection === 'publications' && <DynamicSection sectionKey="publications" data={resumeData.publications} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ title: '', authors: '', journal: '', date: '', link: '' }} fields={[{key: 'title', label: 'Publication Title'}, {key: 'authors', label: 'Authors'}, {key: 'journal', label: 'Journal or Conference'}, {key: 'date', label: 'Publication Date'}, {key: 'link', label: 'Link (Optional)'}]} />}
-                                    {activeSection === 'certifications' && <DynamicSection sectionKey="certifications" data={resumeData.certifications} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ name: '', issuer: '', date: '' }} fields={[{key: 'name', label: 'Certification Name'}, {key: 'issuer', label: 'Issuing Organization'}, {key: 'date', label: 'Date Received'}]} />}
+                                    {activeSection === 'experience' && <DynamicSection sectionKey="experience" data={resumeData.experience} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ jobTitle: '', company: '', dates: '', description: '<p></p>' }} fields={[{key: 'jobTitle', label: 'Job Title', maxLength: 100}, {key: 'company', label: 'Company', maxLength: 100}, {key: 'dates', label: 'Dates', maxLength: 50}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2, maxLength: 1200}]} />}
+                                    {activeSection === 'education' && <DynamicSection sectionKey="education" data={resumeData.education} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }} fields={[{key: 'degree', label: 'Degree', maxLength: 120}, {key: 'institution', label: 'Institution', maxLength: 120}, {key: 'graduationYear', label: 'Graduation Year', maxLength: 20}, {key: 'gpa', label: 'GPA (Optional)', maxLength: 10}, {key: 'achievements', label: 'Achievements & Coursework', type: 'textarea', enhance: true, maxLength: 600}]} />}
+                                    {activeSection === 'skills' && <DynamicSection sectionKey="skills" data={resumeData.skills} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ category: '', skills_list: '' }} fields={[{key: 'category', label: 'Category', maxLength: 60}, {key: 'skills_list', label: 'Skills', type: 'skill_tags', colSpan: 2}]} />}
+                                    {activeSection === 'projects' && <DynamicSection sectionKey="projects" data={resumeData.projects} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ title: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Project Title', maxLength: 120}, {key: 'date', label: 'Date', maxLength: 50}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2, maxLength: 1000}]} />}
+                                    {activeSection === 'publications' && <DynamicSection sectionKey="publications" data={resumeData.publications} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ title: '', authors: '', journal: '', date: '', link: '' }} fields={[{key: 'title', label: 'Publication Title', maxLength: 180}, {key: 'authors', label: 'Authors', maxLength: 250}, {key: 'journal', label: 'Journal or Conference', maxLength: 180}, {key: 'date', label: 'Publication Date', maxLength: 50}, {key: 'link', label: 'Link (Optional)', maxLength: 300}]} />}
+                                    {activeSection === 'certifications' && <DynamicSection sectionKey="certifications" data={resumeData.certifications} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ name: '', issuer: '', date: '' }} fields={[{key: 'name', label: 'Certification Name', maxLength: 120}, {key: 'issuer', label: 'Issuing Organization', maxLength: 120}, {key: 'date', label: 'Date Received', maxLength: 50}]} />}
                                     {activeSection === 'languages' && <LanguagesForm data={resumeData.languages} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} />}
-                                    {activeSection === 'volunteer' && <DynamicSection sectionKey="volunteer" data={resumeData.volunteer} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ role: '', organization: '', dates: '', description: '<p></p>' }} fields={[{key: 'role', label: 'Role / Title'}, {key: 'organization', label: 'Organization'}, {key: 'dates', label: 'Dates'}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2}]} />}
-                                    {activeSection === 'awards' && <DynamicSection sectionKey="awards" data={resumeData.awards} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ title: '', organization: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Award Title'}, {key: 'organization', label: 'Awarding Organization'}, {key: 'date', label: 'Date'}, {key: 'description', label: 'Description (optional)', type: 'textarea', colSpan: 2}]} />}
+                                    {activeSection === 'volunteer' && <DynamicSection sectionKey="volunteer" data={resumeData.volunteer} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ role: '', organization: '', dates: '', description: '<p></p>' }} fields={[{key: 'role', label: 'Role / Title', maxLength: 100}, {key: 'organization', label: 'Organization', maxLength: 120}, {key: 'dates', label: 'Dates', maxLength: 50}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2, maxLength: 800}]} />}
+                                    {activeSection === 'awards' && <DynamicSection sectionKey="awards" data={resumeData.awards} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ title: '', organization: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Award Title', maxLength: 120}, {key: 'organization', label: 'Awarding Organization', maxLength: 120}, {key: 'date', label: 'Date', maxLength: 50}, {key: 'description', label: 'Description (optional)', type: 'textarea', colSpan: 2, maxLength: 500}]} />}
                                     {activeSection === 'jd-match' && <JDMatchPanel resumeData={resumeData} apiBase={API_BASE_URL} getToken={getToken} />}
                                     {activeSection === 'cover-letter' && <CoverLetterForm resumeData={resumeData} apiBase={API_BASE_URL} getToken={getToken} />}
                                     {activeSection === 'section-order' && (
@@ -2388,7 +2441,7 @@ export default function ResumeBuilder() {
                                             })}
                                         </div>
                                     )}
-                                    {activeSection === 'templates' && <TemplatePickerForm selected={selectedTemplate} onSelect={setSelectedTemplate} />}
+                                    {activeSection === 'templates' && <><TemplatePickerForm selected={selectedTemplate} onSelect={setSelectedTemplate} /><CompleteResumeTemplateForm onApply={applyCompleteTemplate} /></>}
                                     {activeSection === 'design' && <DesignForm options={styleOptions} onChange={handleStyleChange} />}
                                 </CardContent>
                             </Card>
