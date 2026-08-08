@@ -209,8 +209,7 @@ export default function Navbar() {
         className="flex cursor-pointer items-center gap-2 text-2xl font-bold text-slate-900 transition-opacity hover:opacity-80"
         onClick={handleLogoClick}
       >
-        <AppLogo width={80} height={40} className="h-8 w-auto" />
-        CareerCraft
+        <AppLogo width={142} height={40} className="h-9 w-auto" />
       </div>
 
       <div className="hidden md:flex flex-grow justify-center">
