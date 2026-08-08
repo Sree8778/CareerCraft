@@ -2,97 +2,98 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users — owner can read/write their own doc (profile pic, elevator pitch URL, etc.)
+    // ── User profiles ─────────────────────────────────────────────────────────
+    // Owner-only: recruiters/admins access candidate profiles through the
+    // backend API (Admin SDK), which bypasses client-side security rules.
     match /users/{userId} {
-      allow read:  if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Resumes — owner can read/write (savedVersions, uploadedFiles, resumeData, defaultSmartApplyResumeId)
+    // ── Resumes ───────────────────────────────────────────────────────────────
+    // Owner-only: same rationale as users above.
     match /resumes/{userId} {
-      allow read:  if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Resume drafts — owner can read/write (auto-save)
+    // ── Resume drafts ─────────────────────────────────────────────────────────
     match /resumeDrafts/{userId} {
-      allow read:  if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // API keys wallet — read-only for owner (backend Admin SDK handles writes)
-    match /apiKeysWallet/{userId} {
-      allow read:  if request.auth != null && request.auth.uid == userId;
-      allow write: if false;
-    }
-
-    // Jobs — any authenticated user can read; only backend writes
-    match /jobs/{jobId} {
-      allow read:  if request.auth != null;
-      allow write: if false;
-    }
-
-    // Scraped jobs pool — any authenticated user can read; only backend writes
-    match /scraped_jobs/{jobId} {
-      allow read:  if request.auth != null;
-      allow write: if false;
-    }
-
-    // Applications — any authenticated user can read; only backend writes
-    match /applications/{appId} {
-      allow read:  if request.auth != null;
-      allow write: if false;
-    }
-
-    // Interviews — candidate creates and updates their own sessions
+    // ── Interviews ────────────────────────────────────────────────────────────
+    // Only the candidate who owns the session can read or write their results.
     match /interviews/{interviewId} {
-      allow read:  if request.auth != null;
-      allow write: if request.auth != null;
+      allow read: if request.auth != null
+        && resource.data.candidateId == request.auth.uid;
+      allow write: if request.auth != null
+        && (resource == null || resource.data.candidateId == request.auth.uid)
+        && (request.resource == null || request.resource.data.candidateId == request.auth.uid);
     }
 
-    // Messages — participants can read; only backend writes
-    match /messages/{msgId} {
-      allow read:  if request.auth != null;
+    // ── API keys wallet ───────────────────────────────────────────────────────
+    // Read-only for owner; writes only via backend Admin SDK.
+    match /apiKeysWallet/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if false;
     }
 
-    // Conversations / chats — participants can read and write (messaging)
-    match /conversations/{convId} {
-      allow read, write: if request.auth != null;
+    // ── Jobs ──────────────────────────────────────────────────────────────────
+    // Any authenticated user can browse jobs; writes are backend-only.
+    match /jobs/{jobId} {
+      allow read: if request.auth != null;
+      allow write: if false;
     }
+
+    // ── Applications ──────────────────────────────────────────────────────────
+    // Candidates can only read their own applications; writes via backend only.
+    match /applications/{appId} {
+      allow read: if request.auth != null
+        && resource.data.candidateId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // ── Messages ──────────────────────────────────────────────────────────────
+    // Only sender or recipient can read a message; writes via backend only.
+    match /messages/{msgId} {
+      allow read: if request.auth != null
+        && (resource.data.senderId == request.auth.uid
+            || resource.data.recipientId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // ── Smart Apply — scraped job pool ────────────────────────────────────────
+    // Shared read-only pool for all authenticated users.
+    match /scraped_jobs/{jobId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // ── Apply sessions ────────────────────────────────────────────────────────
+    // Each user's own queue — strictly owner-only.
+    match /apply_sessions/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ── Chats ─────────────────────────────────────────────────────────────────
+    // Only participants listed in the chat document can read/write.
+    // participantIds is an array of UIDs written by the backend at chat creation.
     match /chats/{chatId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null
+        && resource.data.participantIds.hasAny([request.auth.uid]);
       match /messages/{msgId} {
-        allow read, write: if request.auth != null;
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/chats/$(chatId))
+               .data.participantIds.hasAny([request.auth.uid]);
       }
     }
 
-    // Apply sessions — backend Admin SDK only (no client access)
-    match /apply_sessions/{userId} {
+    // ── Email OTP store ───────────────────────────────────────────────────────
+    // Backend-write only; no client reads allowed.
+    match /email_otps/{docId} {
       allow read, write: if false;
     }
 
-    // Connections — participants can read their own edges; backend writes.
-    // (Was missing entirely: the deny-all default silently blocked every
-    // client listener, so connection counts always showed zero.)
-    match /connections/{connId} {
-      allow read: if request.auth != null &&
-        (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
-      allow write: if false;
-    }
-
-    // Notifications — recipient can read and mark-as-read; backend creates.
-    // (Also missing: the navbar bell listener was silently denied on every page.)
-    match /notifications/{notifId} {
-      allow read: if request.auth != null &&
-        (resource.data.candidateId == request.auth.uid || resource.data.recruiterId == request.auth.uid);
-      allow update: if request.auth != null &&
-        (resource.data.candidateId == request.auth.uid || resource.data.recruiterId == request.auth.uid) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-      allow create, delete: if false;
-    }
-
-    // Everything else — deny
+    // ── Everything else — deny ────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

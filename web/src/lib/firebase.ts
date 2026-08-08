@@ -21,13 +21,13 @@ const firebaseConfig = {
 // force-dynamic, so these stubs are never exercised at runtime.
 const isBrowser = typeof window !== 'undefined';
 
-// @ts-expect-error — intentional lazy init; value assigned below
+// @ts-expect-error — intentional lazy init: null assigned here, overwritten in the isBrowser block below
 let app: FirebaseApp = null;
-// @ts-expect-error
+// @ts-expect-error — intentional lazy init: null assigned here, overwritten in the isBrowser block below
 let auth: Auth = null;
-// @ts-expect-error
+// @ts-expect-error — intentional lazy init: null assigned here, overwritten in the isBrowser block below
 let db: Firestore = null;
-// @ts-expect-error
+// @ts-expect-error — intentional lazy init: null assigned here, overwritten in the isBrowser block below
 let storage: FirebaseStorage = null;
 
 if (isBrowser) {

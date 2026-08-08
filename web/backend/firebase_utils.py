@@ -95,13 +95,23 @@ def require_auth(f):
 
 
 # ── Super Admin ───────────────────────────────────────────────────────────────
-# Admins are designated by an email allowlist (env SUPER_ADMIN_EMAILS,
-# comma-separated). An allowlist can't be self-granted through the database,
-# unlike a role field. Falls back to the platform owner.
+# Admins are designated by an email allowlist stored in the environment variable
+# SUPER_ADMIN_EMAILS (comma-separated).  This approach is safer than a role
+# field in the database because it cannot be self-granted by a database write.
+#
+# REQUIRED: set SUPER_ADMIN_EMAILS in your .env / Cloud Run environment.
+# If the variable is absent, ALL admin endpoints return 403 — there is no
+# hard-coded fallback email to avoid accidental privileged access in production.
 import os as _os
 
 def get_admin_emails():
-    raw = _os.environ.get('SUPER_ADMIN_EMAILS', 'sreeramvarma8778@gmail.com,sreeramvarma8888@gmail.com')
+    raw = _os.environ.get('SUPER_ADMIN_EMAILS', '').strip()
+    if not raw:
+        print(
+            "WARNING: SUPER_ADMIN_EMAILS env var is not set. "
+            "All admin endpoints will deny access until it is configured."
+        )
+        return set()
     return {e.strip().lower() for e in raw.split(',') if e.strip()}
 
 def is_admin_user(user_claims) -> bool:

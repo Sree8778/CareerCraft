@@ -1,4 +1,4 @@
-﻿# backend/routes.py
+# backend/routes.py
 from flask import request, jsonify, send_file, Blueprint
 import io
 
@@ -3061,82 +3061,6 @@ def disable_2fa():
         return jsonify({'status': 'disabled'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
-# â”€â”€â”€ Email OTP verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-@api_bp.route('/auth/send-email-otp', methods=['POST'])
-def send_email_otp():
-    """Generate a 6-digit OTP, store it in Firestore, and email it to the user."""
-    from firebase_utils import db, firebase_initialized
-    data = request.json or {}
-    email = data.get('email', '').strip().lower()
-    name  = data.get('name',  'User').strip()
-    if not email:
-        return jsonify({'error': 'Email is required'}), 400
-
-    otp    = ''.join(random.choices(string.digits, k=6))
-    expiry = datetime.datetime.now(timezone.utc) + timedelta(minutes=10)
-
-    if firebase_initialized and db:
-        try:
-            db.collection('_otps').document(email).set({
-                'otp': otp,
-                'expiry': expiry,
-                'attempts': 0,
-            })
-        except Exception as e:
-            return jsonify({'error': f'Could not store OTP: {e}'}), 500
-    else:
-        _otp_store[email] = {'otp': otp, 'expiry': expiry}
-
-    try:
-        send_2fa_otp_email(email, name, otp)
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'error': f'Failed to send email: {e}'}), 500
-
-
-@api_bp.route('/auth/verify-email-otp', methods=['POST'])
-def verify_email_otp():
-    """Verify a 6-digit email OTP. Deletes the record on success."""
-    from firebase_utils import db, firebase_initialized
-    data  = request.json or {}
-    email = data.get('email', '').strip().lower()
-    otp   = data.get('otp',   '').strip()
-    if not email or not otp:
-        return jsonify({'error': 'Email and OTP are required'}), 400
-
-    now = datetime.datetime.now(timezone.utc)
-
-    if firebase_initialized and db:
-        try:
-            ref = db.collection('_otps').document(email)
-            doc = ref.get()
-            if not doc.exists:
-                return jsonify({'error': 'No code found â€” please request a new one'}), 400
-            stored = doc.to_dict()
-            expiry = stored.get('expiry')
-            if expiry and expiry < now:
-                ref.delete()
-                return jsonify({'error': 'Code expired â€” please request a new one'}), 400
-            if stored.get('otp') != otp:
-                return jsonify({'error': 'Incorrect code â€” please try again'}), 400
-            ref.delete()
-            return jsonify({'verified': True})
-        except Exception as e:
-            return jsonify({'error': f'Verification error: {e}'}), 500
-    else:
-        stored = _otp_store.get(email)
-        if not stored:
-            return jsonify({'error': 'No code found'}), 400
-        if stored['otp'] != otp:
-            return jsonify({'error': 'Incorrect code'}), 400
-        if stored['expiry'] < now:
-            return jsonify({'error': 'Code expired'}), 400
-        del _otp_store[email]
-        return jsonify({'verified': True})
-
 
 
 @api_bp.route('/auto-apply/solve-questions', methods=['POST'])

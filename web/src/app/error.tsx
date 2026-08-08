@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 
 export default function GlobalError({
   error,
@@ -22,7 +23,7 @@ export default function GlobalError({
       </p>
       <div className="flex gap-3">
         <button onClick={reset} className="cc-btn-primary">Try again</button>
-        <a href="/" className="cc-btn-ghost">Go home</a>
+        <Link href="/" className="cc-btn-ghost">Go home</Link>
       </div>
     </div>
   );

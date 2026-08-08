@@ -1,6 +1,23 @@
 // src/lib/crypto.ts
+//
+// ⚠️  SECURITY NOTICE — DEPRECATED CLIENT-SIDE ENCRYPTION
+// ──────────────────────────────────────────────────────────────────────────────
+// The functions below derive an AES-GCM key from the user's Firebase UID.
+// Because the UID is a *public* identifier (visible in Firestore rules, auth
+// tokens, URLs, etc.), any attacker who can read localStorage can also derive
+// the key and decrypt the stored API key — this is *not* meaningful encryption.
+//
+// The correct approach is to store API keys exclusively in the server-side
+// Firestore vault (collection: apiKeysWallet) and retrieve/use them only from
+// the backend via the Admin SDK.  The frontend should NEVER hold or transmit
+// a plaintext API key.
+//
+// These functions are retained only to avoid breaking any legacy import paths.
+// DO NOT add new callers.  The resume-builder no longer calls decryptApiKey.
+// ──────────────────────────────────────────────────────────────────────────────
 
 /**
+ * @deprecated — See security notice above.
  * Derives a cryptographic key from the user's Firebase UID using SHA-256 hash.
  */
 async function deriveKey(uid: string): Promise<CryptoKey> {

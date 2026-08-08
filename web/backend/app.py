@@ -14,8 +14,18 @@ except ImportError:
 
 app = Flask(__name__)
 
-# This allows your React app (e.g., from localhost:5173) to make requests to your Flask app (at localhost:5000)
-CORS(app) 
+# Restrict CORS to an explicit origin allowlist.
+# In production set ALLOWED_ORIGINS to a comma-separated list of your actual
+# frontend and extension origins, e.g.:
+#   ALLOWED_ORIGINS=https://careercraft.example.com,chrome-extension://abcdefg
+# Falls back to localhost dev origins when the var is absent.
+_raw_origins = os.environ.get(
+    'ALLOWED_ORIGINS',
+    'http://localhost:3000,http://localhost:5173'
+)
+_allowed_origins = [o.strip() for o in _raw_origins.split(',') if o.strip()]
+CORS(app, origins=_allowed_origins, supports_credentials=True)
+
 
 # Register the blueprint
 app.register_blueprint(api_bp, url_prefix='/api')
