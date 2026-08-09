@@ -26,7 +26,7 @@ export default function AppLogo({ className = '', width = 80, height = 40 }: App
 
   return (
     <span
-      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-white ${className}`}
+      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-white transition-colors dark:bg-[#0b1124] ${className}`}
       style={{ width, height }}
     >
       <img
@@ -34,8 +34,15 @@ export default function AppLogo({ className = '', width = 80, height = 40 }: App
         alt="CareerCraft"
         width={width}
         height={height}
-        className="absolute max-w-none"
+        className="absolute max-w-none dark:hidden"
         style={{ width: imageWidth, height: imageHeight, left: imageLeft, top: imageTop }}
+      />
+      <img
+        src="/careercraft-logo-dark.png"
+        alt=""
+        aria-hidden="true"
+        className="absolute hidden object-contain dark:block"
+        style={{ width: Math.max(0, width - padding * 2), height: Math.max(0, height - padding * 2) }}
       />
     </span>
   );
