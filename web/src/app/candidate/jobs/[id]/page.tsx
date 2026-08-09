@@ -30,14 +30,15 @@ function ScoreDial({ score }: { score: number }) {
   return (
     <div className="relative w-28 h-28 shrink-0">
       <svg className="w-28 h-28 -rotate-90" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r={r} stroke="#1e293b" strokeWidth="8" fill="none" />
+        <circle cx="50" cy="50" r={r} strokeWidth="8" fill="none"
+          style={{ stroke: 'color-mix(in srgb, var(--cc-text-muted) 22%, transparent)' }} />
         <circle cx="50" cy="50" r={r} stroke={color} strokeWidth="8" fill="none"
           strokeDasharray={circ} strokeDashoffset={circ * (1 - score / 100)}
           strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease' }} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-2xl font-black text-white">{score}%</span>
-        <span className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Match</span>
+        <span className="text-[9px] text-zinc-400 uppercase tracking-wider font-bold">Match</span>
       </div>
     </div>
   );
@@ -49,7 +50,8 @@ function SmallDial({ score }: { score: number }) {
   return (
     <div className="relative w-12 h-12 shrink-0">
       <svg className="w-12 h-12 -rotate-90" viewBox="0 0 40 40">
-        <circle cx="20" cy="20" r={r} stroke="#1e293b" strokeWidth="4" fill="none" />
+        <circle cx="20" cy="20" r={r} strokeWidth="4" fill="none"
+          style={{ stroke: 'color-mix(in srgb, var(--cc-text-muted) 22%, transparent)' }} />
         <circle cx="20" cy="20" r={r} stroke={color} strokeWidth="4" fill="none"
           strokeDasharray={circ} strokeDashoffset={circ * (1 - score / 100)}
           strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
@@ -364,7 +366,7 @@ export default function JobDetailPage() {
       });
       setResumeData(editResume);
       setDrawerOpen(false);
-      setCoverLetter(''); // clear so re-analysis generates a fresh one for the tailored resume
+      setCoverLetter('');
       setAnalyzed(false);
       toast.success('Resume saved! Regenerating your match score and cover letter…', { id: toastId });
     } catch (err: any) {
@@ -383,7 +385,7 @@ export default function JobDetailPage() {
     hint?: string,
     rows = 4
   ) => (
-    <div className="space-y-2.5 border border-white/8 rounded-xl p-4 bg-white/2">
+    <div className="space-y-2.5 border border-white/10 rounded-xl p-4 bg-white/[0.02]">
       <div className="flex items-center justify-between">
         <label className="text-sm font-semibold text-zinc-200">{label}</label>
         <button type="button" onClick={() => rewriteSection(key, value)}
@@ -423,7 +425,7 @@ export default function JobDetailPage() {
   if (loading) {
     return (
       <CandidateLayout>
-        <div className="flex items-center justify-center h-64 text-slate-400 text-sm animate-pulse">Loading job…</div>
+        <div className="flex items-center justify-center h-64 text-zinc-400 text-sm animate-pulse">Loading job…</div>
       </CandidateLayout>
     );
   }
@@ -443,7 +445,7 @@ export default function JobDetailPage() {
     <CandidateLayout>
 
       {/* Back */}
-      <Link href="/candidate/jobs" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-300 mb-5 transition">
+      <Link href="/candidate/jobs" className="inline-flex items-center gap-1 text-sm text-muted hover:text-zinc-300 mb-5 transition">
         <ChevronLeft className="w-4 h-4" /> Back to Jobs
       </Link>
 
@@ -453,15 +455,15 @@ export default function JobDetailPage() {
         <div className="flex-1 min-w-0 space-y-5">
 
           {/* Job header */}
-          <div className="bg-[#1C2333] border border-[#2A3347] rounded-xl p-6">
+          <div className="cc-card rounded-xl p-6">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl bg-[#252D3D] border border-[#2A3347] flex items-center justify-center text-3xl shrink-0">
+                <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-3xl shrink-0">
                   {job.emoji}
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-white">{job.title}</h1>
-                  <p className="text-base text-slate-400 mt-0.5">{job.company}</p>
+                  <p className="text-base text-zinc-400 mt-0.5">{job.company}</p>
                 </div>
               </div>
               {job.salary && (
@@ -470,7 +472,7 @@ export default function JobDetailPage() {
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-slate-400">
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-zinc-400">
               <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4" />{job.location}</span>
               <span className="flex items-center gap-1.5"><Briefcase className="w-4 h-4" />{job.employmentType}</span>
               {job.postedDate && <span className="flex items-center gap-1.5"><Clock className="w-4 h-4" />Posted {job.postedDate}</span>}
@@ -478,10 +480,10 @@ export default function JobDetailPage() {
           </div>
 
           {/* Description */}
-          <div className="bg-[#1C2333] border border-[#2A3347] rounded-xl p-6 space-y-5">
+          <div className="cc-card rounded-xl p-6 space-y-5">
             <div>
               <h2 className="text-base font-bold text-white mb-3">Job Description</h2>
-              <p className="text-sm text-slate-400 leading-relaxed">{job.description}</p>
+              <p className="text-sm text-zinc-400 leading-relaxed">{job.description}</p>
             </div>
 
             {job.requirements.length > 0 && (
@@ -496,16 +498,16 @@ export default function JobDetailPage() {
                         {analyzed
                           ? matched ? <Check className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
                             : missing ? <X className="w-4 h-4 text-rose-400 mt-0.5 shrink-0" />
-                            : <span className="w-4 h-4 mt-0.5 shrink-0 flex items-center justify-center"><span className="w-1.5 h-1.5 rounded-full bg-slate-600" /></span>
-                          : <span className="w-4 h-4 mt-0.5 shrink-0 flex items-center justify-center"><span className="w-1.5 h-1.5 rounded-full bg-slate-600" /></span>
+                            : <span className="w-4 h-4 mt-0.5 shrink-0 flex items-center justify-center"><span className="w-1.5 h-1.5 rounded-full bg-zinc-400 opacity-40" /></span>
+                          : <span className="w-4 h-4 mt-0.5 shrink-0 flex items-center justify-center"><span className="w-1.5 h-1.5 rounded-full bg-zinc-400 opacity-40" /></span>
                         }
-                        <span className={matched ? 'text-slate-200' : missing ? 'text-slate-500' : 'text-slate-400'}>{req}</span>
+                        <span className={matched ? 'text-zinc-200' : missing ? 'text-muted' : 'text-zinc-400'}>{req}</span>
                       </li>
                     );
                   })}
                 </ul>
                 {analyzed && (
-                  <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
+                  <p className="text-xs text-zinc-400 mt-2 flex items-center gap-1">
                     <Check className="w-3 h-3 text-emerald-500" /> = matched &nbsp;
                     <X className="w-3 h-3 text-rose-500" /> = gap
                   </p>
@@ -518,7 +520,7 @@ export default function JobDetailPage() {
                 <h2 className="text-base font-bold text-white mb-3">Benefits</h2>
                 <ul className="space-y-1.5">
                   {job.benefits.map((b, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-slate-400">
+                    <li key={i} className="flex items-center gap-2 text-sm text-zinc-400">
                       <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" /> {b}
                     </li>
                   ))}
@@ -529,9 +531,9 @@ export default function JobDetailPage() {
 
           {/* Learning path */}
           {analyzed && (tutorials.length > 0 || learningProjects.length > 0) && (
-            <div className="bg-[#1C2333] border border-[#2A3347] rounded-xl p-6 space-y-5">
+            <div className="cc-card rounded-xl p-6 space-y-5">
               <h2 className="text-base font-bold text-white">Close the Skills Gap</h2>
-              <p className="text-sm text-slate-400">Based on your resume vs this job&apos;s requirements:</p>
+              <p className="text-sm text-zinc-400">Based on your resume vs this job&apos;s requirements:</p>
 
               {tutorials.length > 0 && (
                 <div className="space-y-3">
@@ -539,7 +541,7 @@ export default function JobDetailPage() {
                     <BookOpen className="w-4 h-4" /> Recommended Courses
                   </h3>
                   {tutorials.map((t: any, i: number) => (
-                    <div key={i} className="bg-[#252D3D] border border-[#2A3347] rounded-lg p-3.5">
+                    <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-3.5">
                       <div className="flex justify-between items-start gap-2">
                         <div>
                           <p className="text-sm font-semibold text-white">{t.title}</p>
@@ -547,7 +549,7 @@ export default function JobDetailPage() {
                         </div>
                         <span className="text-[10px] bg-cyan-500/15 text-cyan-300 px-2 py-0.5 rounded font-mono shrink-0">{t.skill}</span>
                       </div>
-                      {t.why && <p className="text-xs text-slate-400 mt-2 leading-relaxed">{t.why}</p>}
+                      {t.why && <p className="text-xs text-zinc-400 mt-2 leading-relaxed">{t.why}</p>}
                     </div>
                   ))}
                 </div>
@@ -559,7 +561,7 @@ export default function JobDetailPage() {
                     <Code2 className="w-4 h-4" /> Portfolio Projects to Build
                   </h3>
                   {learningProjects.map((p: any, i: number) => (
-                    <div key={i} className="bg-[#252D3D] border border-[#2A3347] rounded-lg p-3.5">
+                    <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-3.5">
                       <div className="flex justify-between items-start gap-2">
                         <p className="text-sm font-semibold text-white">{p.title}</p>
                         <span className={`text-[10px] px-2 py-0.5 rounded font-mono shrink-0 ${
@@ -568,11 +570,11 @@ export default function JobDetailPage() {
                           : 'bg-yellow-500/15 text-yellow-300'
                         }`}>{p.difficulty}</span>
                       </div>
-                      <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">{p.description}</p>
+                      <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">{p.description}</p>
                       {p.skills?.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {p.skills.map((s: string) => (
-                            <span key={s} className="text-[10px] bg-white/5 text-slate-400 px-2 py-0.5 rounded font-mono">{s}</span>
+                            <span key={s} className="text-[10px] bg-white/5 text-zinc-400 px-2 py-0.5 rounded font-mono">{s}</span>
                           ))}
                         </div>
                       )}
@@ -588,16 +590,16 @@ export default function JobDetailPage() {
         <div className="w-[380px] shrink-0 space-y-3 sticky top-6">
 
           {existingApp ? (
-            <div className="bg-[#1C2333] border border-[#2A3347] rounded-xl p-6 space-y-4">
+            <div className="cc-card rounded-xl p-6 space-y-4">
               <div className="flex items-center gap-3">
                 <CheckCircle className="w-6 h-6 text-emerald-400 shrink-0" />
                 <div>
                   <p className="text-base font-bold text-white">Application Submitted</p>
-                  <p className="text-xs text-slate-400">{existingApp.appliedDate || 'Applied recently'}</p>
+                  <p className="text-xs text-zinc-400">{existingApp.appliedDate || 'Applied recently'}</p>
                 </div>
               </div>
-              <div className="flex items-center justify-between bg-[#252D3D] border border-[#2A3347] rounded-lg px-4 py-3">
-                <span className="text-sm text-slate-300">Status</span>
+              <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-lg px-4 py-3">
+                <span className="text-sm text-zinc-300">Status</span>
                 <span className={`text-xs font-bold px-3 py-1 rounded-full ${
                   existingApp.status === 'Hired' ? 'bg-emerald-500/20 text-emerald-300'
                   : existingApp.status === 'Rejected' ? 'bg-rose-500/20 text-rose-300'
@@ -606,17 +608,17 @@ export default function JobDetailPage() {
                 }`}>{existingApp.status}</span>
               </div>
               {existingApp.recruiterNotes && (
-                <div className="bg-[#252D3D] border border-[#2A3347] rounded-lg px-4 py-3">
-                  <p className="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Recruiter Note</p>
-                  <p className="text-sm text-slate-300 italic">&quot;{existingApp.recruiterNotes}&quot;</p>
+                <div className="bg-white/5 border border-white/10 rounded-lg px-4 py-3">
+                  <p className="text-xs text-muted mb-1 uppercase tracking-wider font-bold">Recruiter Note</p>
+                  <p className="text-sm text-zinc-300 italic">&quot;{existingApp.recruiterNotes}&quot;</p>
                 </div>
               )}
             </div>
           ) : submitted ? (
-            <div className="bg-[#1C2333] border border-emerald-500/30 rounded-xl p-6 text-center space-y-3">
+            <div className="cc-card border border-emerald-500/30 rounded-xl p-6 text-center space-y-3">
               <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto" />
               <p className="text-base font-bold text-white">Application Submitted!</p>
-              <p className="text-sm text-slate-400">The recruiter will be notified. Check your Applications page for status updates.</p>
+              <p className="text-sm text-zinc-400">The recruiter will be notified. Check your Applications page for status updates.</p>
               <Link href="/candidate/jobs" className="block text-sm font-semibold text-[#0A66C2] hover:underline mt-2">
                 Browse more jobs →
               </Link>
@@ -624,11 +626,11 @@ export default function JobDetailPage() {
           ) : (
             <>
               {/* ATS Match Score */}
-              <div className={`bg-[#1C2333] border rounded-xl p-5 ${analyzing ? 'border-[#2A3347]' : scoreBorder || 'border-[#2A3347]'}`}>
+              <div className={`cc-card rounded-xl p-5 ${!analyzing && scoreBorder ? scoreBorder : ''}`}>
                 <h3 className="text-sm font-bold text-white mb-4">Resume Match</h3>
 
                 {analyzing ? (
-                  <div className="flex items-center gap-3 py-2 text-sm text-slate-400">
+                  <div className="flex items-center gap-3 py-2 text-sm text-zinc-400">
                     <RefreshCw className="w-4 h-4 animate-spin text-indigo-400 shrink-0" />
                     Analyzing your resume against this job…
                   </div>
@@ -649,7 +651,7 @@ export default function JobDetailPage() {
                       <ScoreDial score={atsScore} />
                       <div className="space-y-1">
                         <p className="text-base font-bold text-white">{scoreLabel}</p>
-                        <p className="text-xs text-slate-400 leading-relaxed">
+                        <p className="text-xs text-zinc-400 leading-relaxed">
                           {atsScore >= 80 ? 'Your profile is a strong fit. Apply now!'
                           : atsScore >= 60 ? 'Good fit with some gaps. Tailor your resume to improve your chances.'
                           : 'Notable gaps detected. Use the tailor tool to boost your score before applying.'}
@@ -666,7 +668,7 @@ export default function JobDetailPage() {
                       <div className="space-y-2">
                         {matchedSkills.length > 0 && (
                           <div>
-                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Matched</p>
+                            <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">Matched</p>
                             <div className="flex flex-wrap gap-1.5">
                               {matchedSkills.map(s => <Pill key={s} text={s} matched />)}
                             </div>
@@ -674,7 +676,7 @@ export default function JobDetailPage() {
                         )}
                         {missingSkills.length > 0 && (
                           <div>
-                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Gaps</p>
+                            <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1.5">Gaps</p>
                             <div className="flex flex-wrap gap-1.5">
                               {missingSkills.map(s => <Pill key={s} text={s} matched={false} />)}
                             </div>
@@ -684,13 +686,13 @@ export default function JobDetailPage() {
                     )}
 
                     {optimizationTips.length > 0 && (
-                      <div className="bg-[#252D3D] border border-[#2A3347] rounded-lg p-3.5 space-y-2">
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <div className="bg-white/5 border border-white/10 rounded-lg p-3.5 space-y-2">
+                        <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                           <TrendingUp className="w-3.5 h-3.5 text-amber-400" /> Tips to improve
                         </p>
                         <ul className="space-y-1.5">
                           {optimizationTips.slice(0, 3).map((tip, i) => (
-                            <li key={i} className="text-xs text-slate-400 leading-relaxed flex gap-2">
+                            <li key={i} className="text-xs text-zinc-400 leading-relaxed flex gap-2">
                               <span className="text-amber-400 shrink-0 mt-0.5">›</span>{tip}
                             </li>
                           ))}
@@ -699,7 +701,7 @@ export default function JobDetailPage() {
                     )}
 
                     <button onClick={runAnalysis} disabled={analyzing}
-                      className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition">
+                      className="text-xs text-muted hover:text-zinc-300 flex items-center gap-1 transition">
                       <RefreshCw className="w-3 h-3" /> Re-run analysis
                     </button>
                   </div>
@@ -708,15 +710,15 @@ export default function JobDetailPage() {
 
               {/* Apply panel */}
               {hasResume && (
-                <div className="bg-[#1C2333] border border-[#2A3347] rounded-xl p-5 space-y-4">
+                <div className="cc-card rounded-xl p-5 space-y-4">
                   <h3 className="text-sm font-bold text-white">Apply for this job</h3>
 
-                  {/* Resume source + Tailor button */}
-                  <div className="flex items-center gap-2 bg-[#252D3D] border border-[#2A3347] rounded-lg px-3 py-2.5">
+                  {/* Resume source */}
+                  <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5">
                     <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-slate-200">Applying with saved profile</p>
-                      <p className="text-[11px] text-slate-500 truncate">Your resume from Resume Builder will be used</p>
+                      <p className="text-xs font-semibold text-zinc-200">Applying with saved profile</p>
+                      <p className="text-[11px] text-muted truncate">Your resume from Resume Builder will be used</p>
                     </div>
                   </div>
 
@@ -735,7 +737,7 @@ export default function JobDetailPage() {
 
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-px bg-white/10" />
-                    <span className="text-[11px] text-slate-600">or quick apply</span>
+                    <span className="text-[11px] text-muted">or quick apply</span>
                     <div className="flex-1 h-px bg-white/10" />
                   </div>
 
@@ -743,7 +745,7 @@ export default function JobDetailPage() {
                   <form onSubmit={handleApply} className="space-y-3">
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs font-semibold text-slate-300">Cover Letter</label>
+                        <label className="text-xs font-semibold text-zinc-300">Cover Letter</label>
                         <button type="button" onClick={generateCoverLetter} disabled={generatingLetter || analyzing}
                           className="flex items-center gap-1 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 disabled:opacity-50 transition">
                           {generatingLetter
@@ -753,25 +755,25 @@ export default function JobDetailPage() {
                       </div>
                       <textarea rows={6} value={coverLetter} onChange={e => setCoverLetter(e.target.value)}
                         placeholder="Write a cover letter or click 'Generate with AI'…"
-                        className="w-full bg-[#252D3D] border border-[#2A3347] focus:border-indigo-500/60 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder-slate-600 resize-none focus:outline-none transition" />
+                        className="w-full bg-white/5 border border-white/10 focus:border-indigo-500/60 rounded-lg px-3 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 resize-none focus:outline-none transition" />
                       {coverLetter && (
                         <div className="flex gap-2 mt-1.5">
                           <button type="button" onClick={() => { navigator.clipboard.writeText(coverLetter); toast.success('Copied!'); }}
-                            className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition">
+                            className="flex items-center gap-1 text-[11px] text-muted hover:text-zinc-300 transition">
                             <Copy className="w-3 h-3" /> Copy
                           </button>
                           <button type="button" onClick={() => {
                             const a = document.createElement('a');
                             a.href = URL.createObjectURL(new Blob([coverLetter], { type: 'text/plain' }));
                             a.download = `${job.company}_Cover_Letter.txt`; a.click();
-                          }} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition">
+                          }} className="flex items-center gap-1 text-[11px] text-muted hover:text-zinc-300 transition">
                             <Download className="w-3 h-3" /> Download
                           </button>
                         </div>
                       )}
                     </div>
                     <button type="submit" disabled={isSubmitting}
-                      className="w-full py-2.5 bg-[#252D3D] hover:bg-[#2A3347] border border-[#2A3347] disabled:opacity-50 text-slate-300 text-sm font-semibold rounded-full transition flex items-center justify-center gap-2">
+                      className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-50 text-zinc-300 text-sm font-semibold rounded-full transition flex items-center justify-center gap-2">
                       {isSubmitting ? <><RefreshCw className="w-4 h-4 animate-spin" /> Submitting…</> : 'Quick Apply (no resume changes)'}
                     </button>
                   </form>
@@ -790,7 +792,7 @@ export default function JobDetailPage() {
           {/* Backdrop */}
           <div className="flex-1 bg-black/70 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
 
-          {/* Drawer panel */}
+          {/* Drawer panel — bg-[#0B0F19] is caught by cc-workspace-shell for light mode */}
           <div className="w-[92vw] max-w-[1100px] bg-[#0B0F19] border-l border-white/10 flex flex-col h-full overflow-hidden shadow-2xl">
 
             {/* Drawer header */}
@@ -838,7 +840,7 @@ export default function JobDetailPage() {
             <div className="flex flex-1 overflow-hidden">
 
               {/* Left: AI Analysis panel */}
-              <div className="w-64 shrink-0 border-r border-white/10 p-5 overflow-y-auto space-y-6 bg-black/20">
+              <div className="w-64 shrink-0 border-r border-white/10 p-5 overflow-y-auto space-y-6 bg-white/[0.03]">
 
                 {/* Score */}
                 {atsScore !== null && (
@@ -927,7 +929,7 @@ export default function JobDetailPage() {
                     )}
 
                     {/* Skills */}
-                    <div className="border border-white/8 rounded-xl p-4 bg-white/2 space-y-3">
+                    <div className="border border-white/10 rounded-xl p-4 bg-white/[0.02] space-y-3">
                       <p className="text-sm font-semibold text-zinc-200">Skills</p>
                       {(editResume.skills || []).map((sg: any, idx: number) => (
                         <div key={idx} className="space-y-1">
@@ -966,7 +968,7 @@ export default function JobDetailPage() {
                     </div>
 
                     {/* Personal info */}
-                    <div className="border border-white/8 rounded-xl p-4 bg-white/2 space-y-3">
+                    <div className="border border-white/10 rounded-xl p-4 bg-white/[0.02] space-y-3">
                       <p className="text-sm font-semibold text-zinc-200">Personal Info</p>
                       <div className="grid grid-cols-2 gap-3">
                         {(['name', 'email', 'phone', 'location'] as const).map(field => (
@@ -991,7 +993,7 @@ export default function JobDetailPage() {
                     )}
 
                     {/* Skills */}
-                    <div className="border border-white/8 rounded-xl p-4 bg-white/2 space-y-3">
+                    <div className="border border-white/10 rounded-xl p-4 bg-white/[0.02] space-y-3">
                       <p className="text-sm font-semibold text-zinc-200">Skills</p>
                       {(editResume.skills || []).map((sg: any, idx: number) => (
                         <div key={idx} className="space-y-1">
@@ -1025,7 +1027,7 @@ export default function JobDetailPage() {
                       <div className="space-y-3">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Education</p>
                         {(editResume.education || []).map((edu: any, idx: number) => (
-                          <div key={idx} className="border border-white/8 rounded-xl p-4 bg-white/2 space-y-2">
+                          <div key={idx} className="border border-white/10 rounded-xl p-4 bg-white/[0.02] space-y-2">
                             <p className="text-sm font-semibold text-zinc-200">{edu.degree} @ {edu.institution}</p>
                             <div className="grid grid-cols-2 gap-2">
                               <div>
@@ -1055,7 +1057,7 @@ export default function JobDetailPage() {
                       <div className="space-y-3">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Certifications</p>
                         {(editResume.certifications || []).map((cert: any, idx: number) => (
-                          <div key={idx} className="border border-white/8 rounded-xl p-3 bg-white/2">
+                          <div key={idx} className="border border-white/10 rounded-xl p-3 bg-white/[0.02]">
                             <div className="grid grid-cols-2 gap-2">
                               <input value={cert.name || ''} placeholder="Certification name"
                                 onChange={e => updateCertField(idx, 'name', e.target.value)}
