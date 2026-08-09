@@ -693,8 +693,10 @@ def generate_cover_letter_route():
 def grade_resume_route():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
-        
-    data = request.json
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request must contain valid JSON"}), 400
     resume_data = data.get('resumeData')
     job_details = data.get('jobDetails')
     
@@ -715,7 +717,12 @@ def grade_resume_route():
 @api_bp.route('/resume/tailor-to-jd', methods=['POST'])
 @require_auth
 def tailor_resume_to_jd_route():
-    data = request.json or {}
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request must contain valid JSON"}), 400
     resume_data = data.get('resumeData')
     job_description = data.get('jobDescription', '')
     missing_keywords = data.get('missingKeywords', [])

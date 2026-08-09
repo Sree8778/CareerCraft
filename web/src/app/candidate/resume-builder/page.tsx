@@ -19,6 +19,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { decryptApiKey } from '@/lib/crypto';
 import DOMPurify from 'dompurify';
+import { buildLatexResumeSource } from '@/lib/resume-latex';
 
 // Sanitize HTML from user/AI input before rendering with dangerouslySetInnerHTML.
 // Allows only safe formatting tags; strips all attributes and scripts.
@@ -30,7 +31,7 @@ const sanitize = (html: string): string => {
 
 
 // --- Type Definitions ---
-export interface PersonalInfo { name: string; email: string; phone: string; location: string; legalStatus: string; website?: string; linkedin?: string; }
+export interface PersonalInfo { name: string; email: string; phone: string; location: string; legalStatus: string; website?: string; linkedin?: string; github?: string; }
 export interface ExperienceEntry { id: string; jobTitle: string; company: string; dates: string; description: string; }
 export interface EducationEntry { id: string; degree: string; institution: string; graduationYear: string; gpa: string; achievements: string; }
 export interface SkillCategory { id: string; category: string; skills_list: string; }
@@ -40,7 +41,7 @@ export interface ProjectEntry { id: string; title: string; date: string; descrip
 export interface LanguageEntry { id: string; language: string; proficiency: string; }
 export interface VolunteerEntry { id: string; role: string; organization: string; dates: string; description: string; }
 export interface AwardEntry { id: string; title: string; organization: string; date: string; description: string; }
-export interface ResumeData { personal: PersonalInfo; summary: string; experience: ExperienceEntry[]; education: EducationEntry[]; skills: SkillCategory[]; certifications: CertificationEntry[]; publications: PublicationEntry[]; projects: ProjectEntry[]; languages: LanguageEntry[]; volunteer: VolunteerEntry[]; awards: AwardEntry[]; }
+export interface ResumeData { personal: PersonalInfo; summary: string; experience: ExperienceEntry[]; education: EducationEntry[]; skills: SkillCategory[]; certifications: CertificationEntry[]; publications: PublicationEntry[]; projects: ProjectEntry[]; researchProjects: ProjectEntry[]; languages: LanguageEntry[]; volunteer: VolunteerEntry[]; awards: AwardEntry[]; }
 type EnhancementContext = | { section: 'summary' } | { section: 'experience'; index: number } | { section: 'education'; index: number } | { section: 'projects'; index: number } | { section: 'volunteer'; index: number };
 export interface StyleOptions { fontFamily: string; fontSize: number; accentColor: string; lineSpacing: number; pageMargin: 'narrow' | 'normal' | 'wide'; }
 export type ResumeTemplate = 'classic' | 'modern' | 'minimal' | 'executive' | 'creative' | 'compact';
@@ -60,7 +61,7 @@ const ONE_PAGE_LIMITS = {
 };
 const MAX_SKILL_TAG_CHARACTERS = 40;
 const RESUME_TEXT_LIMITS: Record<string, Record<string, number>> = {
-    personal: { name: 80, email: 120, phone: 30, location: 100, linkedin: 200, website: 200 },
+    personal: { name: 80, email: 120, phone: 30, location: 100, linkedin: 200, website: 200, github: 200 },
     experience: { jobTitle: 80, company: 80, dates: 35, description: ONE_PAGE_LIMITS.experienceDescription },
     education: { degree: 90, institution: 90, graduationYear: 12, gpa: 10, achievements: ONE_PAGE_LIMITS.educationDetails },
     skills: { category: 40 },
@@ -77,6 +78,27 @@ const getResumeFileError = (file: File): string | null => {
     if (!/\.(pdf|docx)$/i.test(file.name)) return 'Please upload a PDF or DOCX resume.';
     if (file.size > MAX_RESUME_FILE_BYTES) return 'Resume files must be 10 MB or smaller.';
     return null;
+};
+
+// API errors can occasionally arrive as an HTML error page (for example, when a
+// local backend is stopped). Reading the body first prevents a raw JSON parsing
+// error from reaching the user and gives the upload flows a useful message.
+const readApiJson = async <T,>(response: Response, serviceName: string): Promise<T> => {
+    const body = await response.text();
+
+    if (!body.trim()) {
+        throw new Error(`${serviceName} returned an empty response (HTTP ${response.status}). Please try again.`);
+    }
+
+    try {
+        return JSON.parse(body) as T;
+    } catch {
+        const contentType = response.headers.get('content-type') || '';
+        const responseKind = contentType.includes('text/html') || /^\s*<!doctype|^\s*<html/i.test(body)
+            ? 'an HTML page'
+            : 'an invalid response';
+        throw new Error(`${serviceName} returned ${responseKind} instead of data (HTTP ${response.status}). Make sure the local backend is running on port 5000, then try again.`);
+    }
 };
 
 const plainTextLength = (value: string) => value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim().length;
@@ -347,6 +369,7 @@ const PersonalForm = ({ data, onChange, onPicChange, onPicRemove, picPreview }: 
             <LimitedInputField label="Phone" value={data.phone || ''} limit={30} onChange={value => onChange('phone', value)} />
             <LimitedInputField label="Location" value={data.location || ''} limit={100} onChange={value => onChange('location', value)} />
             <LimitedInputField label="LinkedIn URL (optional)" value={data.linkedin || ''} limit={200} placeholder="linkedin.com/in/username" onChange={value => onChange('linkedin', value)} />
+            <LimitedInputField label="GitHub URL (optional)" value={data.github || ''} limit={200} placeholder="github.com/username" onChange={value => onChange('github', value)} />
             <LimitedInputField label="Website / Portfolio (optional)" value={data.website || ''} limit={200} placeholder="yoursite.com" onChange={value => onChange('website', value)} />
         </div>
         <div><Label>Legal Status</Label><Select value={data.legalStatus || 'Prefer not to say'} onChange={e => onChange('legalStatus', e.target.value)}><option>Prefer not to say</option><option>U.S. Citizen</option><option>Permanent Resident</option><option>Work Visa (H-1B)</option><option>OPT / CPT</option><option>EU Citizen</option></Select></div>
@@ -639,7 +662,7 @@ const DynamicSection = ({ sectionKey, data, onChange, onAdd, onRemove, onEnhance
                  </div>
             </div>
         ))}
-        <Button variant="outline" disabled={(data || []).length >= maxEntries} onClick={() => onAdd(sectionKey, addPayload)}>+ Add {sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1)}{Number.isFinite(maxEntries) ? ` (${(data || []).length}/${maxEntries})` : ''}</Button>
+        <Button variant="outline" disabled={(data || []).length >= maxEntries} onClick={() => onAdd(sectionKey, addPayload)}>+ Add {sectionKey.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (letter: string) => letter.toUpperCase())}{Number.isFinite(maxEntries) ? ` (${(data || []).length}/${maxEntries})` : ''}</Button>
     </div>
 );
 
@@ -672,7 +695,7 @@ const LanguagesForm = ({ data, onChange, onAdd, onRemove }: any) => (
 );
 
 // ─── JD Match Panel ────────────────────────────────────────────────────────
-const JDMatchPanel = ({ resumeData, apiBase, getToken, onApplyTailored }: { resumeData: ResumeData; apiBase: string; getToken: () => Promise<string | null>; onApplyTailored: (data: ResumeData) => void; }) => {
+const JDMatchPanel = ({ resumeData, apiBase, getToken, onApplyTailored, onDownloadTailoredLatex }: { resumeData: ResumeData; apiBase: string; getToken: () => Promise<string | null>; onApplyTailored: (data: ResumeData) => void; onDownloadTailoredLatex: (data: ResumeData) => void; }) => {
     const [jdText, setJdText] = useState('');
     const [jobTitle, setJobTitle] = useState('');
     const [company, setCompany] = useState('');
@@ -680,12 +703,15 @@ const JDMatchPanel = ({ resumeData, apiBase, getToken, onApplyTailored }: { resu
     const [analyzing, setAnalyzing] = useState(false);
     const [tailoring, setTailoring] = useState(false);
     const [tailored, setTailored] = useState(false);
+    const [tailoredResume, setTailoredResume] = useState<ResumeData | null>(null);
     const { toast } = { toast: (v: any) => {} }; // toast is called via sonner below
 
     const analyze = async () => {
         if (!jdText.trim()) { import('sonner').then(m => m.toast.warning('Paste a job description first')); return; }
         setAnalyzing(true);
         setResult(null);
+        setTailored(false);
+        setTailoredResume(null);
         try {
             const token = await getToken();
             const res = await fetch(`${apiBase}/grade-resume`, {
@@ -705,18 +731,24 @@ const JDMatchPanel = ({ resumeData, apiBase, getToken, onApplyTailored }: { resu
         setTailoring(true);
         try {
             const token = await getToken();
+            const targetJob = [
+                jobTitle.trim() && `Target role: ${jobTitle.trim()}`,
+                company.trim() && `Target company: ${company.trim()}`,
+                jdText.trim(),
+            ].filter(Boolean).join('\n\n');
             const res = await fetch(`${apiBase}/resume/tailor-to-jd`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ resumeData, jobDescription: jdText, missingKeywords: result.missingKeywords }),
+                body: JSON.stringify({ resumeData, jobDescription: targetJob, missingKeywords: result.missingKeywords }),
             });
-            if (res.ok) {
-                const data = await res.json();
-                onApplyTailored(data.resumeData);
-                setTailored(true);
-                import('sonner').then(m => m.toast.success('Tailored content has been applied. Re-run analysis to check the new score.'));
-            } else { import('sonner').then(m => m.toast.error('Tailoring failed. Try again.')); }
-        } catch { import('sonner').then(m => m.toast.error('Tailoring failed.')); }
+            const data = await readApiJson<{ resumeData?: ResumeData; error?: string; message?: string }>(res, 'Resume tailoring service');
+            if (!res.ok || !data.resumeData) throw new Error(data.message || data.error || 'Tailoring failed. Try again.');
+
+            onApplyTailored(data.resumeData);
+            setTailoredResume(data.resumeData);
+            setTailored(true);
+            import('sonner').then(m => m.toast.success('Tailored content is ready. Download the tailored LaTeX source below.'));
+        } catch (error: unknown) { import('sonner').then(m => m.toast.error(error instanceof Error ? error.message : 'Tailoring failed.')); }
         finally { setTailoring(false); }
     };
 
@@ -765,14 +797,20 @@ const JDMatchPanel = ({ resumeData, apiBase, getToken, onApplyTailored }: { resu
                             <p className="text-zinc-400 text-xs mt-1">
                                 {result.score >= 80 ? 'Your resume aligns well with this role.' : `Add ${100 - result.score} pts to reach 100 — tailor below.`}
                             </p>
-                            {result.missingKeywords.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
                                 <Button onClick={autoTailor} disabled={tailoring || tailored} size="sm"
-                                    className="mt-3 bg-violet-600 hover:bg-violet-700 text-white text-xs">
+                                    className="bg-violet-600 hover:bg-violet-700 text-white text-xs">
                                     {tailoring ? <><Loader2 size={12} className="mr-1.5 animate-spin" />Tailoring…</>
                                         : tailored ? <><CheckCircle2 size={12} className="mr-1.5" />Tailored!</>
                                         : <><Sparkles size={12} className="mr-1.5" />Auto-tailor with AI</>}
                                 </Button>
-                            )}
+                                {tailoredResume && (
+                                    <Button onClick={() => onDownloadTailoredLatex(tailoredResume)} size="sm" variant="outline"
+                                        className="border-indigo-400/40 text-indigo-300 hover:bg-indigo-500/10 text-xs">
+                                        <FileText size={12} className="mr-1.5" />Download tailored LaTeX
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -1411,7 +1449,7 @@ export default function ResumeBuilder() {
     const [activeSection, setActiveSection] = useState<string>('personal');
     const [atsExpanded, setAtsExpanded] = useState(false);
     const [resumeData, setResumeDataState] = useState<ResumeData>({
-        personal: { name: '', email: '', phone: '', location: '', legalStatus: 'Prefer not to say', website: '', linkedin: '' },
+        personal: { name: '', email: '', phone: '', location: '', legalStatus: 'Prefer not to say', website: '', linkedin: '', github: '' },
         summary: '<p></p>',
         experience: [{ id: crypto.randomUUID(), jobTitle: '', company: '', dates: '', description: '<p></p>' }],
         education: [{ id: crypto.randomUUID(), degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }],
@@ -1419,6 +1457,7 @@ export default function ResumeBuilder() {
         certifications: [{ id: crypto.randomUUID(), name: '', issuer: '', date: '' }],
         publications: [{ id: crypto.randomUUID(), title: '', authors: '', journal: '', date: '', link: '' }],
         projects: [{ id: crypto.randomUUID(), title: '', date: '', description: '<p></p>' }],
+        researchProjects: [],
         languages: [],
         volunteer: [],
         awards: [],
@@ -1576,22 +1615,22 @@ export default function ResumeBuilder() {
                 headers: { Authorization: `Bearer ${token}` },
                 body: formData,
             });
-            if (parseRes.ok) {
-                const parsed = await parseRes.json();
-                if (!parsed.parsedData) throw new Error('Resume parsing returned no usable data.');
-                const versionName = file.name.replace(/\.[^.]+$/, '');
-                const newVersion = {
-                    id: crypto.randomUUID(),
-                    name: versionName,
-                    savedAt: new Date().toISOString(),
-                    resumeData: normalizeResumeData(parsed.parsedData),
-                };
-                await setDoc(doc(db, 'resumes', user.id), { savedVersions: arrayUnion(newVersion) }, { merge: true });
-                setSavedVersions(prev => [...prev, newVersion]);
-                toast.success(`Parsed & saved as "${versionName}"`, { id: toastId });
-            } else {
-                toast.success('File uploaded to cloud storage', { id: toastId });
+            const parsed = await readApiJson<{ parsedData?: unknown; error?: string }>(parseRes, 'Resume parser');
+            if (!parseRes.ok || parsed.error) {
+                throw new Error(parsed.error || 'Resume parser could not process this file.');
             }
+            if (!parsed.parsedData) throw new Error('Resume parsing returned no usable data.');
+
+            const versionName = file.name.replace(/\.[^.]+$/, '');
+            const newVersion = {
+                id: crypto.randomUUID(),
+                name: versionName,
+                savedAt: new Date().toISOString(),
+                resumeData: normalizeResumeData(parsed.parsedData),
+            };
+            await setDoc(doc(db, 'resumes', user.id), { savedVersions: arrayUnion(newVersion) }, { merge: true });
+            setSavedVersions(prev => [...prev, newVersion]);
+            toast.success(`Parsed & saved as "${versionName}"`, { id: toastId });
         } catch (err: any) {
             toast.error(`Upload failed: ${err.message}`, { id: toastId });
         } finally {
@@ -1635,7 +1674,7 @@ export default function ResumeBuilder() {
 
     const handleClearResume = () => {
         setResumeDataState({
-            personal: { name: '', email: '', phone: '', location: '', legalStatus: 'Prefer not to say', website: '', linkedin: '' },
+            personal: { name: '', email: '', phone: '', location: '', legalStatus: 'Prefer not to say', website: '', linkedin: '', github: '' },
             summary: '<p></p>',
             experience: [{ id: crypto.randomUUID(), jobTitle: '', company: '', dates: '', description: '<p></p>' }],
             education: [{ id: crypto.randomUUID(), degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }],
@@ -1643,6 +1682,7 @@ export default function ResumeBuilder() {
             certifications: [{ id: crypto.randomUUID(), name: '', issuer: '', date: '' }],
             publications: [{ id: crypto.randomUUID(), title: '', authors: '', journal: '', date: '', link: '' }],
             projects: [{ id: crypto.randomUUID(), title: '', date: '', description: '<p></p>' }],
+            researchProjects: [],
             languages: [], volunteer: [], awards: [],
         });
         setUploadedFileName('');
@@ -1793,6 +1833,12 @@ export default function ResumeBuilder() {
         normalized.certifications = Array.isArray(normalized.certifications) ? normalized.certifications : [];
         normalized.publications = Array.isArray(normalized.publications) ? normalized.publications : [];
         normalized.projects = Array.isArray(normalized.projects) ? normalized.projects : [];
+        // `researchProjects` is an archive of imported research content. Keep
+        // every entry even when the standard one-page Projects section is
+        // limited to two items. Accept the legacy parser name on old drafts.
+        normalized.researchProjects = Array.isArray(normalized.researchProjects)
+            ? normalized.researchProjects
+            : (Array.isArray(normalized.research) ? normalized.research : []);
 
 
         normalized.languages = Array.isArray(normalized.languages) ? normalized.languages : [];
@@ -1807,6 +1853,7 @@ export default function ResumeBuilder() {
             legalStatus: typeof normalized.personal?.legalStatus === 'string' ? normalized.personal.legalStatus : 'Prefer not to say',
             website: typeof normalized.personal?.website === 'string' ? limitResumeValue('personal', 'website', normalized.personal.website) : '',
             linkedin: typeof normalized.personal?.linkedin === 'string' ? limitResumeValue('personal', 'linkedin', normalized.personal.linkedin) : '',
+            github: typeof normalized.personal?.github === 'string' ? limitResumeValue('personal', 'github', normalized.personal.github) : '',
         };
 
         normalized.summary = limitResumeValue('summary', 'summary', toEditorHtml(typeof normalized.summary === 'string' ? normalized.summary : ''));
@@ -1836,6 +1883,12 @@ export default function ResumeBuilder() {
             title: typeof item.title === 'string' ? limitResumeValue('projects', 'title', item.title) : '',
             date: typeof item.date === 'string' ? limitResumeValue('projects', 'date', item.date) : '',
             description: limitResumeValue('projects', 'description', toEditorHtml(typeof item.description === 'string' ? item.description : '')),
+        }));
+        normalized.researchProjects = normalized.researchProjects.map((item: any) => ({
+            id: item.id || crypto.randomUUID(),
+            title: typeof item.title === 'string' ? item.title : '',
+            date: typeof item.date === 'string' ? item.date : '',
+            description: toEditorHtml(typeof item.description === 'string' ? item.description : ''),
         }));
         normalized.publications = normalized.publications.map( (item: any) => ({
             id: item.id || crypto.randomUUID(),
@@ -1908,7 +1961,7 @@ export default function ResumeBuilder() {
                 body: formData
             });
 
-            const result = await response.json();
+            const result = await readApiJson<{ parsedData?: Record<string, unknown>; error?: string }>(response, 'Resume parser');
 
             if (!response.ok || result.error) {
                 throw new Error(result.error || 'Server responded with an error');
@@ -1953,9 +2006,13 @@ export default function ResumeBuilder() {
                 toast.info("No summary found — generating suggestions…", { id: 'summary-suggest', duration: 8000 });
                 fetchSummarySuggestions(normalizedData, false);
             }
-        } catch (error: any) {
-            toast.error(error.message || 'Failed to parse resume.', { id: toastId });
-            console.error("Frontend file upload error:", error);
+        } catch (error: unknown) {
+            const isNetworkError = error instanceof TypeError && /failed to fetch|networkerror/i.test(error.message);
+            const message = isNetworkError
+                ? 'Resume parser is unavailable. Start the local backend on port 5000, then try again.'
+                : error instanceof Error ? error.message : 'Failed to parse resume.';
+            toast.error(message, { id: toastId });
+            console.warn('Resume upload failed:', error);
         } finally {
             setLoading(false);
         }
@@ -2091,18 +2148,18 @@ export default function ResumeBuilder() {
     };
 
 
-    const exceedsOnePageLimits = () => {
+    const exceedsOnePageLimits = (data: ResumeData = resumeData) => {
         const overTextLimit = (value: string, limit: number) => plainTextLength(value || '') > limit;
-        return overTextLimit(resumeData.summary, ONE_PAGE_LIMITS.summary) ||
-            resumeData.experience.length > ONE_PAGE_LIMITS.experienceEntries ||
-            resumeData.education.length > ONE_PAGE_LIMITS.educationEntries ||
-            resumeData.skills.length > ONE_PAGE_LIMITS.skillCategories ||
-            resumeData.projects.length > ONE_PAGE_LIMITS.projectEntries ||
-            resumeData.certifications.length > ONE_PAGE_LIMITS.certificationEntries ||
-            resumeData.experience.some(item => overTextLimit(item.description, ONE_PAGE_LIMITS.experienceDescription)) ||
-            resumeData.education.some(item => overTextLimit(item.achievements, ONE_PAGE_LIMITS.educationDetails)) ||
-            resumeData.projects.some(item => overTextLimit(item.description, ONE_PAGE_LIMITS.projectDescription)) ||
-            resumeData.skills.some(item => item.skills_list.split(',').filter(Boolean).length > ONE_PAGE_LIMITS.skillsPerCategory);
+        return overTextLimit(data.summary, ONE_PAGE_LIMITS.summary) ||
+            data.experience.length > ONE_PAGE_LIMITS.experienceEntries ||
+            data.education.length > ONE_PAGE_LIMITS.educationEntries ||
+            data.skills.length > ONE_PAGE_LIMITS.skillCategories ||
+            data.projects.length > ONE_PAGE_LIMITS.projectEntries ||
+            data.certifications.length > ONE_PAGE_LIMITS.certificationEntries ||
+            data.experience.some(item => overTextLimit(item.description, ONE_PAGE_LIMITS.experienceDescription)) ||
+            data.education.some(item => overTextLimit(item.achievements, ONE_PAGE_LIMITS.educationDetails)) ||
+            data.projects.some(item => overTextLimit(item.description, ONE_PAGE_LIMITS.projectDescription)) ||
+            data.skills.some(item => item.skills_list.split(',').filter(Boolean).length > ONE_PAGE_LIMITS.skillsPerCategory);
     };
 
     // --- FULLY INTEGRATED DOWNLOAD HANDLER ---
@@ -2152,9 +2209,36 @@ export default function ResumeBuilder() {
             setLoading(false);
         }
     };
+
+    // Mirrors AIApply's focused LaTeX export: generate source from the current
+    // CareerCraft resume data, then let the user compile or customize the .tex file.
+    const handleDownloadLatex = (data: ResumeData = resumeData, tailored = false) => {
+        const normalizedData = normalizeResumeData(data);
+        if (exceedsOnePageLimits(normalizedData)) {
+            toast.error('Shorten the content highlighted by the character limits before downloading the one-page resume.');
+            return;
+        }
+        if (isResumeEmpty(normalizedData)) {
+            toast.error('Add your resume details before downloading LaTeX source.');
+            return;
+        }
+
+        const source = buildLatexResumeSource(normalizedData, { sectionOrder, hiddenSections });
+        const fileName = `${(normalizedData.personal.name || 'Candidate').trim().replace(/\s+/g, '_')}${tailored ? '_Tailored' : ''}_Resume.tex`;
+        const blob = new Blob([source], { type: 'application/x-tex;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        toast.success(`${tailored ? 'Tailored ' : ''}LaTeX source downloaded. Compile the .tex file with a LaTeX editor to create the PDF.`);
+    };
     
-    const isResumeEmpty = (): boolean => {
-        const { personal, summary, experience, education } = resumeData;
+    const isResumeEmpty = (data: ResumeData = resumeData): boolean => {
+        const { personal, summary, experience, education } = data;
         const tempDiv = typeof document !== 'undefined' ? document.createElement('div') : null;
         if (tempDiv) tempDiv.innerHTML = summary || '';
         const summaryText = tempDiv?.textContent?.trim() || '';
@@ -2300,7 +2384,7 @@ export default function ResumeBuilder() {
                     <div>
                         <h2 style={{ fontSize: '26pt', fontWeight: 800, color: ac, marginBottom: '4px' }}>{personal.name || 'Your Name'}</h2>
                         <p style={{ color: '#64748b', fontSize: '9pt' }}>
-                            {[personal.email, personal.phone, personal.location, personal.website, personal.linkedin].filter(Boolean).join(' · ')}
+                            {[personal.email, personal.phone, personal.location, personal.website, personal.linkedin, personal.github].filter(Boolean).join(' · ')}
                         </p>
                     </div>
                     {profilePic.preview && <img src={profilePic.preview} alt="Profile" style={{ width: '72px', height: '72px', borderRadius: '50%', objectFit: 'cover', border: `2px solid ${ac}` }} />}
@@ -2320,6 +2404,7 @@ export default function ResumeBuilder() {
             { id: 'education',      name: 'Education',      icon: <GraduationCap size={16} /> },
             { id: 'skills',         name: 'Skills',         icon: <Award size={16} /> },
             { id: 'projects',       name: 'Projects',       icon: <FolderGit2 size={16} /> },
+            { id: 'researchProjects', name: 'Research projects', icon: <BookOpen size={16} /> },
             { id: 'certifications', name: 'Certifications', icon: <Award size={16} /> },
         ]},
         { label: 'AI Tools', items: [
@@ -2541,12 +2626,13 @@ export default function ResumeBuilder() {
                                     {activeSection === 'education' && <DynamicSection sectionKey="education" data={resumeData.education} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} maxEntries={ONE_PAGE_LIMITS.educationEntries} addPayload={{ degree: '', institution: '', graduationYear: '', gpa: '', achievements: '<p></p>' }} fields={[{key: 'degree', label: 'Degree', maxLength: 90}, {key: 'institution', label: 'Institution', maxLength: 90}, {key: 'graduationYear', label: 'Graduation Year', maxLength: 12}, {key: 'gpa', label: 'GPA (Optional)', maxLength: 10}, {key: 'achievements', label: 'Achievements & Coursework', type: 'textarea', enhance: true, maxLength: ONE_PAGE_LIMITS.educationDetails}]} />}
                                     {activeSection === 'skills' && <DynamicSection sectionKey="skills" data={resumeData.skills} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} maxEntries={ONE_PAGE_LIMITS.skillCategories} addPayload={{ category: '', skills_list: '' }} fields={[{key: 'category', label: 'Category', maxLength: 40}, {key: 'skills_list', label: 'Skills', type: 'skill_tags', colSpan: 2, maxTags: ONE_PAGE_LIMITS.skillsPerCategory}]} />}
                                     {activeSection === 'projects' && <DynamicSection sectionKey="projects" data={resumeData.projects} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} maxEntries={ONE_PAGE_LIMITS.projectEntries} addPayload={{ title: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Project Title', maxLength: 90}, {key: 'date', label: 'Date', maxLength: 35}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2, maxLength: ONE_PAGE_LIMITS.projectDescription}]} />}
+                                    {activeSection === 'researchProjects' && <div className="space-y-4"><div className="rounded-xl border border-indigo-500/25 bg-indigo-500/5 p-3 text-xs leading-relaxed text-[var(--cc-text-muted)]">All imported research projects are preserved here, including projects under different research-section names. This separate library is not restricted by the standard one-page Projects limit.</div><DynamicSection sectionKey="researchProjects" data={resumeData.researchProjects} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ title: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Research Project Title'}, {key: 'date', label: 'Date'}, {key: 'description', label: 'Description', type: 'textarea', colSpan: 2}]} /></div>}
                                     {activeSection === 'publications' && <DynamicSection sectionKey="publications" data={resumeData.publications} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ title: '', authors: '', journal: '', date: '', link: '' }} fields={[{key: 'title', label: 'Publication Title', maxLength: 180}, {key: 'authors', label: 'Authors', maxLength: 250}, {key: 'journal', label: 'Journal or Conference', maxLength: 180}, {key: 'date', label: 'Publication Date', maxLength: 50}, {key: 'link', label: 'Link (Optional)', maxLength: 300}]} />}
                                     {activeSection === 'certifications' && <DynamicSection sectionKey="certifications" data={resumeData.certifications} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} maxEntries={ONE_PAGE_LIMITS.certificationEntries} addPayload={{ name: '', issuer: '', date: '' }} fields={[{key: 'name', label: 'Certification Name', maxLength: 90}, {key: 'issuer', label: 'Issuing Organization', maxLength: 90}, {key: 'date', label: 'Date Received', maxLength: 25}]} />}
                                     {activeSection === 'languages' && <LanguagesForm data={resumeData.languages} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} />}
                                     {activeSection === 'volunteer' && <DynamicSection sectionKey="volunteer" data={resumeData.volunteer} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} onEnhance={handleEnhance} loading={loading} addPayload={{ role: '', organization: '', dates: '', description: '<p></p>' }} fields={[{key: 'role', label: 'Role / Title', maxLength: 100}, {key: 'organization', label: 'Organization', maxLength: 120}, {key: 'dates', label: 'Dates', maxLength: 50}, {key: 'description', label: 'Description', type: 'textarea', enhance: true, colSpan: 2, maxLength: 800}]} />}
                                     {activeSection === 'awards' && <DynamicSection sectionKey="awards" data={resumeData.awards} onChange={handleDynamicChange} onAdd={addDynamicEntry} onRemove={removeDynamicEntry} loading={loading} addPayload={{ title: '', organization: '', date: '', description: '<p></p>' }} fields={[{key: 'title', label: 'Award Title', maxLength: 120}, {key: 'organization', label: 'Awarding Organization', maxLength: 120}, {key: 'date', label: 'Date', maxLength: 50}, {key: 'description', label: 'Description (optional)', type: 'textarea', colSpan: 2, maxLength: 500}]} />}
-                                    {activeSection === 'jd-match' && <JDMatchPanel resumeData={resumeData} apiBase={API_BASE_URL} getToken={getToken} onApplyTailored={(data) => setResumeDataState(normalizeResumeData(data))} />}
+                                    {activeSection === 'jd-match' && <JDMatchPanel resumeData={resumeData} apiBase={API_BASE_URL} getToken={getToken} onApplyTailored={(data) => setResumeDataState(normalizeResumeData(data))} onDownloadTailoredLatex={(data) => handleDownloadLatex(data, true)} />}
                                     {activeSection === 'cover-letter' && <CoverLetterForm resumeData={resumeData} apiBase={API_BASE_URL} getToken={getToken} />}
                                     {activeSection === 'section-order' && (
                                         <div className="space-y-2">
@@ -2588,6 +2674,7 @@ export default function ResumeBuilder() {
                                <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" onClick={handleSaveResume} disabled={loading}><Upload size={15} className="mr-2" />Save & Publish</Button>
                                <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleDownload('PDF')} disabled={loading}><Download size={15} className="mr-2" />Download PDF</Button>
                                <Button variant="outline" className="w-full text-[var(--cc-text)] hover:bg-[var(--cc-surface)]" onClick={() => handleDownload('DOCX')} disabled={loading}><Download size={15} className="mr-2" />Download DOCX</Button>
+                               <Button variant="outline" className="col-span-2 w-full border-indigo-400/40 text-indigo-600 hover:bg-indigo-500/10 dark:text-indigo-200" onClick={() => handleDownloadLatex()} disabled={loading}><FileText size={15} className="mr-2" />Download LaTeX (.tex)</Button>
                            </div>
 
                            {/* ── Upload Resume File ───────────────────────────── */}
@@ -2705,4 +2792,5 @@ export default function ResumeBuilder() {
             </div>
         </CandidateLayout>
     );
+
 }

@@ -1,7 +1,6 @@
 # backend/face_verification.py
 import json
 import io
-import google.generativeai as genai
 from PIL import Image
 
 def verify_face_similarity(state_id_bytes: bytes, selfie_bytes: bytes) -> dict:
@@ -23,6 +22,10 @@ def verify_face_similarity(state_id_bytes: bytes, selfie_bytes: bytes) -> dict:
         - "fraudDetails": string (optional details if fraud is flagged)
     """
     try:
+        # This feature is optional for the local parser/API runtime. Import the
+        # legacy Gemini SDK only when biometric verification is requested so a
+        # missing SDK cannot prevent resume parsing from starting.
+        import google.generativeai as genai
         # Load images into PIL
         state_id_img = Image.open(io.BytesIO(state_id_bytes))
         selfie_img = Image.open(io.BytesIO(selfie_bytes))

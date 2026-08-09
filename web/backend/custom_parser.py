@@ -320,7 +320,7 @@ _SECTION_MAP: dict[str, re.Pattern] = {
         r"|research(?: papers?)?|research articles?"
         r"|papers?|journal papers?|conference papers?"
         r"|articles?|journal articles?"
-        r"|research work|scholarly work"
+        r"|scholarly work"
         r"|books?|book chapters?"
         r"|technical reports?"
         r")$",
@@ -425,11 +425,14 @@ _SECTION_MAP: dict[str, re.Pattern] = {
     "research": re.compile(
         r"^(?:"
         r"research|research experience"
-        r"|research projects?|research work"
+        r"|research projects?|research project highlights?|research work"
+        r"|selected research projects?|featured research projects?"
         r"|research interests?|research areas?"
         r"|academic research"
         r"|thesis|dissertation"
-        r"|research\s*[&/]\s*publications?"
+        r"|research\s*(?:&|and|/)\s*publications?"
+        r"|research\s*(?:&|and|/)\s*development(?: projects?)?"
+        r"|r\s*&\s*d(?: projects?)?"
         r")$",
         re.I,
     ),
@@ -700,6 +703,15 @@ def _parse_edu_block(block: list) -> Optional[dict]:
         if not line:
             continue
 
+        # A city/state or city/country line belongs to the education header,
+        # but the builder has no location field for education.  Do not turn it
+        # into an achievement or coursework item.
+        if (
+            re.match(r"^[A-Z][A-Za-z .'-]+,\s*(?:[A-Z]{2}|[A-Z][A-Za-z .'-]+)$", line.strip())
+            and not _RE_DEGREE.search(line)
+        ):
+            continue
+
         deg_m = _RE_DEGREE.search(line)
         if deg_m:
             if "|" in line:
@@ -931,6 +943,16 @@ def _parse_exp_block(block: list) -> Optional[dict]:
 
     # If only company found, swap (company is usually listed second)
     if entry["company"] and not entry["jobTitle"]:
+        entry["jobTitle"], entry["company"] = entry["company"], entry["jobTitle"]
+
+    # Some PDFs put company then title on consecutive lines.  If the first
+    # value does not look like a role while the second one does, preserve both
+    # values but place them in the correct fields.
+    if (
+        entry["jobTitle"] and entry["company"]
+        and not _RE_JOB_TITLE_WORDS.search(entry["jobTitle"])
+        and _RE_JOB_TITLE_WORDS.search(entry["company"])
+    ):
         entry["jobTitle"], entry["company"] = entry["company"], entry["jobTitle"]
 
     # Build description — handle both bullets and paragraphs
@@ -1266,19 +1288,37 @@ def _extract_certifications(sections: dict) -> list:
 # ── Publications ──────────────────────────────────────────────────────────────
 
 def _extract_publications(sections: dict) -> list:
-    blocks = _to_blocks(sections.get("publications", []))
-    results = []
-    for block in blocks:
-        if block:
-            results.append({
-                "id": str(uuid.uuid4()),
-                "title": block[0],
-                "authors": block[1] if len(block) > 1 else "",
-                "journal": block[2] if len(block) > 2 else "",
-                "date": "",
-                "link": "",
-            })
-    return results
+    # PDF extraction frequently loses blank lines between citations. Treat a
+    # bullet as a new citation while retaining wrapped citation lines.
+    blocks: list[list[str]] = []
+    current: list[str] = []
+    for raw_line in sections.get("publications", []):
+        line = raw_line.strip()
+        if not line:
+            if current:
+                blocks.append(current)
+                current = []
+            continue
+
+        starts_bullet = bool(_RE_BULLET.match(line))
+        clean = re.sub(r"^[\sâ€¢â—�â–ªâ—¦Â·*\-]+", "", line).strip()
+        if starts_bullet and current:
+            blocks.append(current)
+            current = []
+        if clean:
+            current.append(clean)
+
+    if current:
+        blocks.append(current)
+
+    return [{
+        "id": str(uuid.uuid4()),
+        "title": " ".join(block),
+        "authors": "",
+        "journal": "",
+        "date": "",
+        "link": "",
+    } for block in blocks if block]
 
 
 # ── Fallback: heuristic parse when no sections found ──────────────────────────
@@ -1508,15 +1548,60 @@ def _extract_activities(sections: dict) -> list:
 
 def _extract_research(sections: dict) -> list:
     """Parse Research section into project-style entries."""
-    all_lines = [l.strip() for l in sections.get("research", []) if l.strip()]
-    if not all_lines:
+    research_lines = sections.get("research", [])
+    if not any(line.strip() for line in research_lines):
         return []
     # Reuse the project block parser — research entries look identical
-    blocks = _to_blocks(sections.get("research", []))
-    if len(blocks) > 1:
-        return [p for b in blocks for p in [_parse_project_block(b)] if p]
-    p = _parse_project_block(all_lines)
-    return [p] if p else []
+    projects: list[dict] = []
+    current: Optional[dict] = None
+
+    for raw_line in research_lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        is_bullet = bool(_RE_BULLET.match(line))
+        clean = re.sub(r"^[^A-Za-z0-9]+", "", line).strip()
+        if not clean:
+            continue
+
+        # Research project names are normally title-cased and do not end in
+        # sentence punctuation. A non-bullet sentence is therefore a wrapped
+        # detail line, not a new project. This retains names and descriptions
+        # even when PDF extraction wraps a bullet across two lines.
+        looks_like_title = (
+            not is_bullet
+            and not re.search(r"[.!?]$", clean)
+            and len(clean) <= 160
+            and bool(re.match(r"[A-Z0-9]", clean))
+        )
+
+        if current is None or looks_like_title:
+            if current:
+                projects.append(current)
+            date_str, title = _extract_date_range(clean)
+            current = {
+                "id": str(uuid.uuid4()),
+                "title": title.strip() or clean,
+                "date": date_str,
+                "descriptionLines": [],
+            }
+            continue
+
+        current["descriptionLines"].append(clean)
+
+    if current:
+        projects.append(current)
+
+    results = []
+    for project in projects:
+        description_lines = project.pop("descriptionLines", [])
+        project["description"] = (
+            "<ul>" + "".join(f"<li>{line}</li>" for line in description_lines) + "</ul>"
+            if description_lines else ""
+        )
+        results.append(project)
+    return results
 
 
 # ── Patents ───────────────────────────────────────────────────────────────────
@@ -1558,6 +1643,7 @@ def parse_resume_text(text: str) -> dict:
         return _heuristic_parse(text, lines)
 
     personal = _extract_personal(text, header_lines)
+    research_projects = _extract_research(sections)
     return {
         "personal":        personal,
         "summary":         _extract_summary(sections, personal),
@@ -1573,7 +1659,10 @@ def parse_resume_text(text: str) -> dict:
         # ── New sections ──────────────────────────────────────────────────────
         "leadership":      _extract_leadership(sections),
         "activities":      _extract_activities(sections),
-        "research":        _extract_research(sections),
+        # Preserve research entries in a builder-ready field and retain the
+        # legacy alias for integrations that still consume `research`.
+        "researchProjects": research_projects,
+        "research":        research_projects,
         "patents":         _extract_patents(sections),
     }
 
