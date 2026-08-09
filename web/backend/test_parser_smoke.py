@@ -1,4 +1,8 @@
+import io
+import zipfile
+
 from custom_parser import parse_resume_text
+from file_parser import MAX_RESUME_FILE_BYTES, _validate_resume_upload
 
 # Test 1: structured resume with ALL-CAPS headers
 text1 = """
@@ -30,6 +34,13 @@ Databases: PostgreSQL, Redis, MongoDB
 """
 
 r1 = parse_resume_text(text1)
+assert r1["personal"]["name"] == "John Doe"
+assert r1["personal"]["email"] == "johndoe@email.com"
+assert r1["personal"]["location"] == "New York, NY"
+assert len(r1["experience"]) == 2
+assert r1["experience"][0]["description"]
+assert len(r1["education"]) == 1
+assert len(r1["skills"]) == 3
 print("[TEST 1: Structured ALL-CAPS headers]")
 p = r1["personal"]
 print(f"  Name:       {p['name']}")
@@ -64,6 +75,12 @@ Python, SQL, Google Analytics, Tableau, HubSpot, Salesforce
 """
 
 r2 = parse_resume_text(text2)
+assert r2["personal"]["name"] == "Jane Smith"
+assert r2["personal"]["email"] == "jane.smith@gmail.com"
+assert not r2["personal"]["location"]
+assert len(r2["experience"]) == 2
+assert r2["experience"][0]["description"]
+assert len(r2["education"]) == 1
 print()
 print("[TEST 2: No section headers (heuristic fallback)]")
 p2 = r2["personal"]
@@ -99,6 +116,12 @@ Cloud: AWS (EC2, S3, Lambda), GCP, Azure
 """
 
 r3 = parse_resume_text(text3)
+assert r3["personal"]["name"] == "ALEX JOHNSON"
+assert r3["personal"]["phone"] == "+44 7700 900123"
+assert len(r3["experience"]) == 2
+assert r3["experience"][0]["description"]
+assert len(r3["education"]) == 2
+assert len(r3["skills"]) == 3
 print()
 print("[TEST 3: Decorated headers + month/year dates]")
 p3 = r3["personal"]
@@ -112,3 +135,16 @@ for e in r3["experience"]:
 
 print()
 print("[OK] All smoke tests passed")
+
+# Upload validation — these are enforced before any parsing work begins.
+assert _validate_resume_upload(b"%PDF-1.7\n", "resume.pdf") is None
+assert "valid PDF" in _validate_resume_upload(b"not a PDF", "resume.pdf")
+assert "Legacy .doc" in _validate_resume_upload(b"legacy", "resume.doc")
+assert "10 MB" in _validate_resume_upload(b"x" * (MAX_RESUME_FILE_BYTES + 1), "resume.pdf")
+
+docx_bytes = io.BytesIO()
+with zipfile.ZipFile(docx_bytes, "w") as archive:
+    archive.writestr("[Content_Types].xml", "<Types />")
+assert _validate_resume_upload(docx_bytes.getvalue(), "resume.docx") is None
+assert "valid DOCX" in _validate_resume_upload(b"not a DOCX", "resume.docx")
+print("[OK] Upload validation tests passed")

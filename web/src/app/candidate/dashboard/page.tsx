@@ -14,7 +14,7 @@ import {
   FileText, Lightbulb, BarChart2, Activity,
   Mic, Star, Send, Eye, X,
 } from 'lucide-react';
-import { API_BASE, authHeader } from '@/lib/api';
+import { API_BASE, authHeader, fetchWithTimeout } from '@/lib/api';
 import { motion } from 'framer-motion';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -38,11 +38,20 @@ function getDateMs(appliedAt: any): number {
 
 const FUNNEL_COLS = [
   { id: 'Applied',   color: 'bg-blue-500',    label: 'Applied',   icon: <Send className="w-3 h-3" /> },
-  { id: 'In Review', color: 'bg-yellow-500',   label: 'In Review', icon: <Eye className="w-3 h-3" /> },
-  { id: 'Interview', color: 'bg-indigo-500',   label: 'Interview', icon: <Mic className="w-3 h-3" /> },
-  { id: 'Offer',     color: 'bg-emerald-500',  label: 'Offer',     icon: <Star className="w-3 h-3" /> },
+  { id: 'In Review', color: 'bg-indigo-500',  label: 'In Review', icon: <Eye className="w-3 h-3" /> },
+  { id: 'Interview', color: 'bg-violet-500',  label: 'Interview', icon: <Mic className="w-3 h-3" /> },
+  { id: 'Offer',     color: 'bg-purple-500',  label: 'Offer',     icon: <Star className="w-3 h-3" /> },
   { id: 'Rejected',  color: 'bg-red-500',      label: 'Rejected',  icon: <X className="w-3 h-3" /> },
 ];
+
+// A single blue-to-violet progression keeps the candidate journey readable
+// while giving every stage a distinct place in the pipeline.
+const PIPELINE_STAGES = [
+  { label: 'Applied',   desc: 'Resume sent', color: 'from-sky-500 to-blue-600',     icon: Send },
+  { label: 'In Review', desc: 'ATS aligned', color: 'from-blue-600 to-indigo-600',  icon: Eye },
+  { label: 'Interview', desc: 'Slot booked', color: 'from-indigo-600 to-violet-600', icon: Mic },
+  { label: 'Offer',     desc: 'Accepted',    color: 'from-violet-600 to-purple-700', icon: Star },
+] as const;
 
 function FunnelChart({ applications }: { applications: any[] }) {
   const counts = FUNNEL_COLS.reduce<Record<string, number>>((acc, c) => {
@@ -59,10 +68,10 @@ function FunnelChart({ applications }: { applications: any[] }) {
         return (
           <div key={col.id} className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 w-24 shrink-0">
-              <span className="text-zinc-400">{col.icon}</span>
-              <span className="text-[11px] text-zinc-400 font-medium truncate">{col.label}</span>
+              <span className="text-slate-500 dark:text-zinc-400">{col.icon}</span>
+              <span className="text-[11px] text-slate-600 dark:text-zinc-400 font-medium truncate">{col.label}</span>
             </div>
-            <div className="flex-1 h-5 bg-zinc-900 rounded-full overflow-hidden">
+            <div className="flex-1 h-5 rounded-full overflow-hidden bg-slate-100 dark:bg-indigo-950/70">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${pct}%` }}
@@ -70,7 +79,7 @@ function FunnelChart({ applications }: { applications: any[] }) {
                 className={`h-full rounded-full ${col.color} opacity-80`}
               />
             </div>
-            <span className="text-xs font-bold text-white w-6 text-right shrink-0">{n}</span>
+            <span className="text-xs font-bold text-slate-800 dark:text-white w-6 text-right shrink-0">{n}</span>
           </div>
         );
       })}
@@ -197,36 +206,39 @@ export default function CandidateDashboardPage() {
     if (!user?.id) return;
     setStatsLoading(true);
 
-    const [statsRes, appsRes, completionRes] = await Promise.allSettled([
-      fetch(`${API_BASE}/stats/candidate/${user.id}`, { headers: await authHeader(getToken) }),
-      fetch(`${API_BASE}/applications?candidateId=${user.id}`, { headers: await authHeader(getToken) }),
-      fetch(`${API_BASE}/users/${user.id}/completion`,          { headers: await authHeader(getToken) }),
-    ]);
+    try {
+      const headers = await authHeader(getToken);
+      const [statsRes, appsRes, completionRes] = await Promise.allSettled([
+        fetchWithTimeout(`${API_BASE}/stats/candidate/${user.id}`, { headers }),
+        fetchWithTimeout(`${API_BASE}/applications?candidateId=${user.id}`, { headers }),
+        fetchWithTimeout(`${API_BASE}/users/${user.id}/completion`, { headers }),
+      ]);
 
-    if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
-      const d = await statsRes.value.json();
-      setAtsScore(d.atsScore ?? 0);
-      setInterviewsScheduled(d.interviewsScheduled ?? 0);
+      if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
+        const d = await statsRes.value.json();
+        setAtsScore(d.atsScore ?? 0);
+        setInterviewsScheduled(d.interviewsScheduled ?? 0);
+      }
+
+      if (appsRes.status === 'fulfilled' && appsRes.value.ok) {
+        const d = await appsRes.value.json();
+        const apps: any[] = d.applications || [];
+        setApplications(apps);
+        if (apps.length > 0) setLatestApp(apps[0]);
+        const hasInterview = apps.some(a => ['Interview', 'Offer'].includes(normalizeStatus(a.status)));
+        const hasReview    = apps.some(a => normalizeStatus(a.status) === 'In Review');
+        if (hasInterview) setActivePipelineStep(2);
+        else if (hasReview || apps.length > 0) setActivePipelineStep(1);
+        else setActivePipelineStep(0);
+      }
+
+      if (completionRes.status === 'fulfilled' && completionRes.value.ok) {
+        const d = await completionRes.value.json();
+        setCompletion({ score: d.score ?? 0, missing: d.missing ?? [] });
+      }
+    } finally {
+      setStatsLoading(false);
     }
-
-    if (appsRes.status === 'fulfilled' && appsRes.value.ok) {
-      const d = await appsRes.value.json();
-      const apps: any[] = d.applications || [];
-      setApplications(apps);
-      if (apps.length > 0) setLatestApp(apps[0]);
-      const hasInterview = apps.some(a => ['Interview', 'Offer'].includes(normalizeStatus(a.status)));
-      const hasReview    = apps.some(a => normalizeStatus(a.status) === 'In Review');
-      if (hasInterview) setActivePipelineStep(2);
-      else if (hasReview || apps.length > 0) setActivePipelineStep(1);
-      else setActivePipelineStep(0);
-    }
-
-    if (completionRes.status === 'fulfilled' && completionRes.value.ok) {
-      const d = await completionRes.value.json();
-      setCompletion({ score: d.score ?? 0, missing: d.missing ?? [] });
-    }
-
-    setStatsLoading(false);
   }, [user?.id, getToken]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
@@ -244,34 +256,34 @@ export default function CandidateDashboardPage() {
 
   return (
     <CandidateLayout>
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="cc-page space-y-6">
 
         {/* Welcome header */}
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative rounded-3xl p-7 bg-gradient-to-r from-indigo-950/40 to-slate-900/60 border border-white/10 overflow-hidden shadow-2xl"
+          className="relative overflow-hidden rounded-3xl border border-indigo-100 bg-gradient-to-r from-indigo-100 via-white to-slate-100 p-7 shadow-xl shadow-slate-200/50 dark:border-indigo-300/15 dark:from-indigo-950/60 dark:via-[#0e1630] dark:to-violet-950/50 dark:shadow-2xl"
         >
           <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
           <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-5">
             <div className="space-y-1.5">
-              <span className="text-[10px] font-bold font-mono tracking-widest uppercase bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full border border-indigo-500/30">
+              <span className="rounded-full border border-indigo-200 bg-indigo-100 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/20 dark:text-indigo-300">
                 Candidate Control Center
               </span>
-              <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+              <h1 className="text-3xl font-black text-slate-900 md:text-4xl dark:bg-gradient-to-r dark:from-white dark:to-zinc-400 dark:bg-clip-text dark:text-transparent">
                 Welcome back, {user.name} 👋
               </h1>
-              <p className="text-xs text-zinc-400 max-w-lg leading-relaxed">
+              <p className="max-w-lg text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
                 {total === 0
                   ? 'No applications yet — browse open jobs and apply to get started.'
                   : `${total} applications submitted · ${responseRate}% response rate · ${interviewRate}% interview rate`}
               </p>
             </div>
-            <div className="flex items-center gap-3 bg-zinc-950/80 p-3 rounded-2xl border border-white/5 shrink-0">
+            <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-emerald-100 bg-white/85 p-3 shadow-sm dark:border-white/5 dark:bg-zinc-950/80">
               <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
               <div className="space-y-0.5 text-xs">
-                <span className="text-zinc-500 font-bold block text-[9px] uppercase tracking-wider">BYOK Chain Status</span>
+                <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-500">BYOK Chain Status</span>
                 <span className="font-semibold text-emerald-400 font-mono text-[10px]">✓ Active (Rotating Stack)</span>
               </div>
             </div>
@@ -353,34 +365,42 @@ export default function CandidateDashboardPage() {
                   </span>
                 )}
               </div>
-              <div className="relative pt-3 pb-1 px-2">
-                <div className="absolute top-[38px] left-8 right-8 h-0.5 bg-zinc-900 rounded-full" />
-                <div
-                  className="absolute top-[38px] left-8 h-0.5 bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-full transition-all duration-1000"
-                  style={{ width: `${(activePipelineStep / 3) * 88}%` }}
+              <div className="relative px-2 pb-1 pt-2">
+                <div aria-hidden="true" className="absolute left-6 right-6 top-5 h-2 overflow-hidden rounded-full border border-indigo-100 bg-indigo-50/80 dark:border-indigo-400/20 dark:bg-indigo-950/70" />
+                <motion.div
+                  aria-hidden="true"
+                  initial={{ scaleX: 0 }}
+                  animate={{ scaleX: activePipelineStep / 3 }}
+                  transition={{ duration: 0.7, ease: 'easeOut' }}
+                  className="cc-liquid-flow absolute left-6 right-6 top-5 h-2 origin-left rounded-full bg-gradient-to-r from-sky-400 via-indigo-500 to-violet-500 shadow-[0_0_12px_rgba(99,102,241,0.42)]"
                 />
-                <div className="flex justify-between items-center">
-                  {[
-                    { label: 'Applied',    desc: 'Resume sent' },
-                    { label: 'In Review',  desc: 'ATS aligned' },
-                    { label: 'Interview',  desc: 'Slot booked' },
-                    { label: 'Offer',      desc: 'Accepted' },
-                  ].map((node, i) => {
-                    const done   = i < activePipelineStep;
+                <div className="relative z-10 flex justify-between">
+                  {PIPELINE_STAGES.map((node, i) => {
+                    const done = i < activePipelineStep;
                     const active = i === activePipelineStep;
+                    const fillHeight = done ? '100%' : active ? '56%' : '0%';
+
                     return (
-                      <div key={node.label} className="flex flex-col items-center text-center gap-2">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
-                          active ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-500/30 scale-110 animate-pulse'
-                                 : done  ? 'bg-[#0B0F19] border-cyan-400 text-cyan-300'
-                                         : 'bg-zinc-950 border-zinc-800 text-zinc-600'
+                      <div key={node.label} className="flex w-20 flex-col items-center text-center sm:w-24">
+                        <div className={`relative flex h-8 w-8 overflow-hidden rounded-full border-2 text-xs font-bold transition-all ${
+                          active || done ? 'border-indigo-300 bg-indigo-50 shadow-lg shadow-indigo-500/20 dark:border-indigo-400/60 dark:bg-indigo-950'
+                                         : 'border-slate-200 bg-white dark:border-indigo-300/25 dark:bg-[#151f3b]'
                         }`}>
-                          {done ? '✓' : i + 1}
+                          <motion.div
+                            aria-hidden="true"
+                            initial={{ height: 0 }}
+                            animate={{ height: fillHeight }}
+                            transition={{ duration: 0.65, ease: 'easeOut' }}
+                            className="cc-liquid-flow absolute inset-x-0 bottom-0 bg-gradient-to-r from-sky-400 via-indigo-500 to-violet-500"
+                          >
+                            <span className="absolute -top-px left-0 h-1 w-full bg-white/40" />
+                          </motion.div>
+                          <span className={`relative z-10 flex h-full w-full items-center justify-center ${active || done ? 'text-white' : 'text-slate-500 dark:text-indigo-200/70'}`}>
+                            {done ? <CheckCircle aria-label="Completed" className="h-4 w-4" /> : i + 1}
+                          </span>
                         </div>
-                        <div>
-                          <span className={`text-[10px] font-bold block ${active ? 'text-indigo-300' : done ? 'text-zinc-200' : 'text-zinc-600'}`}>{node.label}</span>
-                          <span className="text-[8px] text-zinc-600 block">{node.desc}</span>
-                        </div>
+                        <p className={`mt-2 text-[10px] font-bold ${active ? 'text-indigo-600 dark:text-indigo-300' : done ? 'text-slate-700 dark:text-indigo-100' : 'text-slate-500 dark:text-indigo-200/70'}`}>{node.label}</p>
+                        <p className="mt-0.5 text-[8px] text-slate-500 dark:text-indigo-200/55">{node.desc}</p>
                       </div>
                     );
                   })}
@@ -397,9 +417,9 @@ export default function CandidateDashboardPage() {
                 { name: 'AI Practice',     href: '/candidate/interview/practice',icon: <Mic className="w-4 h-4 text-purple-400" />,    color: 'hover:border-purple-500/50' },
               ].map(act => (
                 <Link key={act.name} href={act.href}
-                  className={`bg-slate-900/30 border border-white/8 p-4 rounded-2xl transition flex flex-col gap-3 group ${act.color}`}>
-                  <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">{act.icon}</div>
-                  <span className="text-xs font-bold text-white group-hover:text-indigo-300 transition leading-tight">{act.name}</span>
+                  className={`min-h-[128px] justify-between bg-white/85 border border-slate-200 p-4 rounded-2xl transition flex flex-col gap-3 group dark:bg-indigo-950/30 dark:border-indigo-300/15 ${act.color}`}>
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 dark:bg-white/5 dark:border-white/10 flex items-center justify-center">{act.icon}</div>
+                  <span className="text-xs font-bold text-slate-800 dark:text-white group-hover:text-indigo-500 transition leading-tight">{act.name}</span>
                   <ChevronRight className="w-3.5 h-3.5 text-indigo-400 group-hover:translate-x-0.5 transition-transform" />
                 </Link>
               ))}
@@ -420,7 +440,7 @@ export default function CandidateDashboardPage() {
                   {completion.score}%
                 </span>
               </div>
-              <div className="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden">
+              <div className="w-full bg-slate-100 dark:bg-indigo-950/70 rounded-full h-1.5 overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${completion.score}%` }}
@@ -432,7 +452,7 @@ export default function CandidateDashboardPage() {
                 <div className="space-y-1.5 pt-1">
                   {completion.missing.slice(0, 3).map(item => (
                     <div key={item} className="flex items-center gap-2 text-[11px] text-zinc-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-300 dark:bg-indigo-400 shrink-0" />
                       {item}
                     </div>
                   ))}
@@ -453,7 +473,7 @@ export default function CandidateDashboardPage() {
               <div className="flex flex-col items-center gap-3">
                 <div className="relative w-28 h-28">
                   <svg className="w-28 h-28 -rotate-90">
-                    <circle cx="56" cy="56" r="48" className="stroke-slate-900" strokeWidth="7" fill="transparent" />
+                    <circle cx="56" cy="56" r="48" className="stroke-slate-100 dark:stroke-indigo-900" strokeWidth="7" fill="transparent" />
                     <circle cx="56" cy="56" r="48"
                       className={`transition-all duration-1000 ${getAtsGlow(atsScore)}`}
                       strokeWidth="7" fill="transparent"
@@ -509,9 +529,9 @@ export default function CandidateDashboardPage() {
                   };
                   return (
                     <Link href="/candidate/applications" key={app.id}
-                      className="flex items-center justify-between p-2.5 bg-zinc-950/40 border border-white/5 rounded-xl hover:border-indigo-500/20 transition">
+                      className="flex items-center justify-between p-2.5 bg-white/80 border border-slate-100 rounded-xl hover:border-indigo-500/30 transition dark:bg-indigo-950/30 dark:border-indigo-300/10">
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{app.jobTitle}</p>
+                        <p className="text-xs font-bold text-slate-800 dark:text-white truncate">{app.jobTitle}</p>
                         <p className="text-[9px] text-zinc-500 truncate">{app.company}</p>
                       </div>
                       <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full border shrink-0 ml-2 ${sc[ns] ?? sc['Applied']}`}>

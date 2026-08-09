@@ -9,7 +9,9 @@ export default function ThemeToggle() {
     <button
       onClick={toggleTheme}
       className="p-2 rounded-lg bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 transition-all duration-200"
-      aria-label="Toggle theme"
+      aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+      aria-pressed={theme === 'dark'}
+      title={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
     >
       {theme === 'light' ? (
         <Moon className="w-5 h-5 text-gray-700" />

@@ -22,17 +22,17 @@
 }
 
 .dark {
-  /* Dark theme (default) */
-  --cc-bg: #08080d;
-  --cc-surface: rgba(20, 20, 30, 0.55);
-  --cc-surface-solid: #14141e;
-  --cc-border: rgba(255, 255, 255, 0.09);
-  --cc-text: #f2f2f7;
-  --cc-text-muted: #9b9bad;
-  --cc-accent: #8b7bff;
-  --cc-accent-2: #c96bff;
-  --cc-accent-3: #ff6cb5;
-  --cc-glow: rgba(139, 123, 255, 0.35);
+  /* Ink-navy, rather than black: a calm professional dark surface. */
+  --cc-bg: #0c1226;
+  --cc-surface: rgba(20, 31, 59, 0.78);
+  --cc-surface-solid: #151f3b;
+  --cc-border: rgba(145, 158, 223, 0.18);
+  --cc-text: #eef2ff;
+  --cc-text-muted: #a9b5d6;
+  --cc-accent: #8392ff;
+  --cc-accent-2: #ad82ff;
+  --cc-accent-3: #ec8bd2;
+  --cc-glow: rgba(118, 137, 255, 0.3);
 }
 
 /* Global body styles */
@@ -41,58 +41,118 @@ body {
   color: var(--cc-text);
   font-family: var(--font-geist-sans, 'Inter'), sans-serif;
   font-feature-settings: 'ss01' on, 'cv11' on;
+  text-rendering: optimizeLegibility;
 }
 
-/* Shared workspace system: candidate, recruiter, and admin routes use the
-   same clear editorial surface as the public site without changing their data
-   flows or route-specific components. */
-.cc-workspace {
-  --cc-bg: #f7f9fc;
-  --cc-surface: rgba(255, 255, 255, 0.92);
+/* Authenticated workspaces share the theme selected in the global toggle.
+   The light version is deliberately crisp and high-contrast; the dark version
+   is deep and calm rather than merely an inverted light page. */
+.cc-workspace-shell {
+  --cc-bg: #f4f7fb;
+  --cc-surface: rgba(255, 255, 255, 0.94);
   --cc-surface-solid: #ffffff;
-  --cc-border: #e3e9f2;
-  --cc-text: #16223a;
-  --cc-text-muted: #6d7b91;
-  --cc-accent: #7057e8;
-  --cc-accent-2: #477df4;
-  --cc-accent-3: #e878b3;
-  --cc-glow: rgba(112, 87, 232, 0.16);
-  background: #f7f9fc;
-  color: #16223a;
+  --cc-border: #dfe7f1;
+  --cc-text: #13213a;
+  --cc-text-muted: #65758b;
+  --cc-accent: #6657e8;
+  --cc-accent-2: #2877e8;
+  --cc-accent-3: #d8549b;
+  --cc-glow: rgba(102, 87, 232, 0.18);
+  background: var(--cc-bg);
+  color: var(--cc-text);
 }
-.cc-workspace .cc-card,
-.cc-workspace [class*="bg-slate-950"],
-.cc-workspace [class*="bg-zinc-950"],
-.cc-workspace [class*="bg-[#0B0F19"] {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border-color: #e3e9f2 !important;
-  box-shadow: 0 10px 28px rgba(34, 53, 83, 0.06);
+.cc-workspace-shell > div > main { max-width: 100%; }
+.dark .cc-workspace-shell {
+  --cc-bg: #0c1226;
+  --cc-surface: rgba(20, 31, 59, 0.78);
+  --cc-surface-solid: #151f3b;
+  --cc-border: rgba(145, 158, 223, 0.18);
+  --cc-text: #eef2ff;
+  --cc-text-muted: #a9b5d6;
+  --cc-accent: #8392ff;
+  --cc-accent-2: #ad82ff;
+  --cc-accent-3: #ec8bd2;
+  --cc-glow: rgba(118, 137, 255, 0.3);
 }
-.cc-workspace [class*="border-white/"] { border-color: #e3e9f2 !important; }
-.cc-workspace [class*="divide-white/"] > :not([hidden]) ~ :not([hidden]) { border-color: #edf1f7 !important; }
-.cc-workspace [class*="text-white"],
-.cc-workspace [class*="text-zinc-200"],
-.cc-workspace [class*="text-zinc-300"] { color: #16223a !important; }
-.cc-workspace [class*="text-zinc-400"] { color: #6d7b91 !important; }
-.cc-workspace [class*="text-zinc-500"],
-.cc-workspace [class*="text-zinc-600"] { color: #8794a8 !important; }
-.cc-workspace input,
-.cc-workspace select,
-.cc-workspace textarea {
+.cc-workspace-shell [class*="bg-slate-950"],
+.cc-workspace-shell [class*="bg-zinc-950"],
+.cc-workspace-shell [class*="bg-[#0B0F19"] {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-color: var(--cc-border) !important;
+  box-shadow: 0 10px 28px rgba(29, 50, 82, 0.07);
+}
+.cc-workspace-shell [class*="border-white/"] { border-color: var(--cc-border) !important; }
+.cc-workspace-shell [class*="text-white"],
+.cc-workspace-shell [class*="text-zinc-200"],
+.cc-workspace-shell [class*="text-zinc-300"] { color: var(--cc-text) !important; }
+.cc-workspace-shell [class*="text-zinc-400"] { color: var(--cc-text-muted) !important; }
+.cc-workspace-shell [class~="bg-white/5"],
+.cc-workspace-shell [class~="bg-white/[0.03]"],
+.cc-workspace-shell [class~="bg-white/[0.02]"],
+.cc-workspace-shell [class~="bg-black/30"] { background-color: rgba(148, 163, 184, 0.08) !important; }
+.cc-workspace-shell [class*="bg-indigo-"][class*="text-white"],
+.cc-workspace-shell [class*="bg-purple-"][class*="text-white"],
+.cc-workspace-shell [class*="bg-blue-"][class*="text-white"],
+.cc-workspace-shell [class*="bg-emerald-"][class*="text-white"],
+.cc-workspace-shell [class*="bg-red-"][class*="text-white"],
+.cc-workspace-shell [class*="bg-gradient-"][class*="text-white"] { color: #ffffff !important; }
+.cc-workspace-shell input,
+.cc-workspace-shell select,
+.cc-workspace-shell textarea {
   background: #fff !important;
-  color: #16223a !important;
-  border-color: #dce4f0 !important;
+  color: var(--cc-text) !important;
+  border-color: var(--cc-border) !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
-.cc-workspace aside {
-  background: #ffffff !important;
-  border-color: #e3e9f2 !important;
-  box-shadow: 10px 0 30px rgba(28, 47, 77, 0.035);
+.cc-workspace-shell input:focus,
+.cc-workspace-shell select:focus,
+.cc-workspace-shell textarea:focus {
+  border-color: color-mix(in srgb, var(--cc-accent) 60%, var(--cc-border)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cc-accent) 14%, transparent);
+  outline: none;
 }
-.cc-workspace aside strong { color: #16223a !important; }
-.cc-workspace aside [class*="text-muted"] { color: #728099 !important; }
-.cc-workspace aside [class*="hover:bg-white"]:hover { background: #f4f6fb !important; }
-.cc-workspace table thead { background: #f8faff; }
-.cc-workspace table tbody tr:hover { background: #fbfcff; }
+.cc-workspace-shell table { border-collapse: separate; border-spacing: 0; }
+.cc-workspace-shell th {
+  background: color-mix(in srgb, var(--cc-surface-solid) 72%, var(--cc-bg));
+  color: var(--cc-text-muted);
+  font-size: .6875rem;
+  letter-spacing: .08em;
+}
+.cc-workspace-shell tbody tr { transition: background-color 150ms ease; }
+.cc-workspace-shell tbody tr:hover { background: color-mix(in srgb, var(--cc-accent) 4%, transparent); }
+.dark .cc-workspace-shell [class*="bg-slate-950"],
+.dark .cc-workspace-shell [class*="bg-zinc-950"],
+.dark .cc-workspace-shell [class*="bg-[#0B0F19"] { background-color: rgba(18, 29, 57, 0.82) !important; border-color: rgba(145, 158, 223, 0.18) !important; box-shadow: none; }
+.dark .cc-workspace-shell [class*="border-white/"] { border-color: rgba(145, 158, 223, 0.18) !important; }
+.dark .cc-workspace-shell [class*="text-white"],
+.dark .cc-workspace-shell [class*="text-zinc-200"],
+.dark .cc-workspace-shell [class*="text-zinc-300"] { color: #f2f2f7 !important; }
+.dark .cc-workspace-shell [class*="text-zinc-400"] { color: #9b9bad !important; }
+.dark .cc-workspace-shell [class~="bg-white/5"],
+.dark .cc-workspace-shell [class~="bg-white/[0.03]"],
+.dark .cc-workspace-shell [class~="bg-white/[0.02]"],
+.dark .cc-workspace-shell [class~="bg-black/30"] { background-color: rgba(120, 136, 214, 0.08) !important; }
+.dark .cc-workspace-shell input,
+.dark .cc-workspace-shell select,
+.dark .cc-workspace-shell textarea { background: rgba(14, 23, 47, 0.88) !important; color: #eef2ff !important; border-color: rgba(145, 158, 223, 0.24) !important; }
+.dark .cc-workspace-shell th { background: rgba(120, 136, 214, 0.09); }
+.dark .cc-workspace-shell tbody tr:hover { background: rgba(120, 136, 214, 0.09); }
+
+::selection { background: color-mix(in srgb, var(--cc-accent) 30%, transparent); }
+
+/* Shared primitives keep data-heavy pages coherent even when their content
+   differs. These are intentionally opt-in so existing product behaviour and
+   page-specific layouts remain intact. */
+.cc-page { width: min(100%, 80rem); margin-inline: auto; }
+.cc-panel {
+  background: color-mix(in srgb, var(--cc-surface-solid) 84%, transparent);
+  border: 1px solid var(--cc-border);
+  border-radius: 1rem;
+  box-shadow: 0 12px 32px rgba(35, 53, 83, 0.08);
+}
+.cc-panel:hover { border-color: color-mix(in srgb, var(--cc-accent) 32%, var(--cc-border)); }
+.dark .cc-panel { box-shadow: 0 14px 38px rgba(0, 0, 0, 0.2); }
+.cc-eyebrow { color: var(--cc-accent); font-size: .6875rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 
 /* ── Aurora ambient background ─────────────────────────────── */
 .cc-aurora-blob {
@@ -163,8 +223,9 @@ body {
 }
 .cc-card:hover {
   border-color: color-mix(in srgb, var(--cc-accent) 30%, var(--cc-border));
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18), 0 0 20px var(--cc-glow);
+  box-shadow: 0 8px 30px rgba(35, 53, 83, 0.1), 0 0 20px var(--cc-glow);
 }
+.dark .cc-card:hover { box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18), 0 0 20px var(--cc-glow); }
 
 /* ── Buttons ───────────────────────────────────────────────── */
 .cc-btn-primary {
@@ -192,6 +253,42 @@ body {
   background: var(--cc-surface);
   border-color: color-mix(in srgb, var(--cc-accent) 40%, var(--cc-border));
 }
+
+/* Public flows use the same polished system as the dashboards. */
+.cc-onboarding {
+  min-height: calc(100vh - 5rem);
+  background:
+    radial-gradient(circle at 12% 10%, color-mix(in srgb, var(--cc-accent) 12%, transparent), transparent 32rem),
+    radial-gradient(circle at 88% 88%, color-mix(in srgb, var(--cc-accent-2) 10%, transparent), transparent 28rem),
+    var(--cc-bg);
+  color: var(--cc-text);
+}
+.cc-onboarding [class~="bg-[#111827]"] {
+  background: color-mix(in srgb, var(--cc-surface-solid) 94%, transparent) !important;
+  border-color: var(--cc-border) !important;
+  box-shadow: 0 18px 55px rgba(35, 53, 83, 0.12) !important;
+}
+.cc-onboarding [class*="text-white"] { color: var(--cc-text) !important; }
+.cc-onboarding [class*="text-zinc-400"],
+.cc-onboarding [class*="text-zinc-500"],
+.cc-onboarding [class*="text-zinc-600"] { color: var(--cc-text-muted) !important; }
+.cc-onboarding [class~="bg-white/5"],
+.cc-onboarding [class~="bg-black/30"] { background-color: rgba(148, 163, 184, 0.09) !important; }
+.cc-onboarding input,
+.cc-onboarding select,
+.cc-onboarding textarea { background-color: transparent !important; color: var(--cc-text) !important; border-color: var(--cc-border) !important; }
+.cc-onboarding [class*="bg-gradient-"][class*="text-white"] { color: #ffffff !important; }
+.dark .cc-onboarding [class~="bg-[#111827]"] {
+  background: rgba(17, 24, 39, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.36) !important;
+}
+.dark .cc-onboarding [class*="text-white"] { color: #ffffff !important; }
+.dark .cc-onboarding [class*="text-zinc-400"],
+.dark .cc-onboarding [class*="text-zinc-500"],
+.dark .cc-onboarding [class*="text-zinc-600"] { color: #a1a1aa !important; }
+.dark .cc-onboarding [class~="bg-white/5"],
+.dark .cc-onboarding [class~="bg-black/30"] { background-color: rgba(255, 255, 255, 0.05) !important; }
 
 /* ── Text helpers ──────────────────────────────────────────── */
 .text-muted { color: var(--cc-text-muted); }
@@ -249,12 +346,45 @@ body {
   border-radius: 4px;
 }
 
+.cc-skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 10000;
+  transform: translateY(-160%);
+  border-radius: 0.625rem;
+  background: var(--cc-surface-solid);
+  color: var(--cc-text);
+  border: 1px solid var(--cc-border);
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: transform 160ms ease;
+}
+.cc-skip-link:focus { transform: translateY(0); }
+
+/* Subtle moving highlight used by the application-stage liquid progress flow. */
+.cc-liquid-flow {
+  background-size: 180% 100%;
+  animation: cc-liquid-flow 2.4s linear infinite;
+}
+@keyframes cc-liquid-flow {
+  from { background-position: 100% 50%; }
+  to { background-position: -80% 50%; }
+}
+
 /* ── Reduced motion ────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .animate-blob1, .animate-blob2,
   .cc-aurora-1, .cc-aurora-2, .cc-aurora-3 {
     animation: none;
   }
+}
+
+@media (max-width: 767px) {
+  .cc-page { width: 100%; }
+  .cc-panel { border-radius: .875rem; }
+  .cc-btn-primary, .cc-btn-ghost { min-height: 2.75rem; }
 }
 
 /* Resume preview HTML content — restore list styles stripped by Tailwind preflight. */

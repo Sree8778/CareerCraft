@@ -15,6 +15,44 @@ export async function jsonHeaders(getToken: () => Promise<string>): Promise<Reco
   return { ...await authHeader(getToken), 'Content-Type': 'application/json' };
 }
 
+/** An API response that completed but did not succeed. */
+export class ApiRequestError extends Error {
+  constructor(message: string, public readonly status: number, public readonly payload?: unknown) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
+/**
+ * Fetch with a bounded wait time so a sleeping or unavailable API never leaves
+ * an interface loading indefinitely. Callers can still handle the thrown error
+ * in the normal way.
+ */
+export async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = 15_000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+
+  if (init.signal) {
+    if (init.signal.aborted) controller.abort();
+    else init.signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('The request took too long. Please check your connection and try again.');
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
 /** Shape of the 402 "no API keys" response from the backend. */
 export interface NoApiKeysPayload {
   error: 'no_api_keys';
@@ -54,11 +92,22 @@ export async function fetchAi<T = unknown>(
   toastFn: (message: string, opts?: any) => void,
   router?: { push: (path: string) => void }
 ): Promise<T | null> {
-  const res = await fetch(url, options);
-  const body = await res.json();
+  const res = await fetchWithTimeout(url, options);
+  const rawBody = await res.text();
+  let body: unknown = null;
+  if (rawBody) {
+    try { body = JSON.parse(rawBody); }
+    catch { body = { message: rawBody }; }
+  }
   if (isNoApiKeysError(res.status, body)) {
     showNoApiKeysToast(toastFn, router);
     return null;
+  }
+  if (!res.ok) {
+    const message = (body as { message?: string; error?: string } | null)?.message
+      ?? (body as { error?: string } | null)?.error
+      ?? `Request failed (${res.status}).`;
+    throw new ApiRequestError(message, res.status, body);
   }
   return body as T;
 }

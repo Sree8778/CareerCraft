@@ -8,7 +8,34 @@ Priority:
      If no user keys are available or the AI call fails, rule-based result is returned.
 """
 
+import io
+import os
+import zipfile
+
 from custom_parser import parse_resume_text, extract_text
+
+
+MAX_RESUME_FILE_BYTES = 10 * 1024 * 1024
+SUPPORTED_RESUME_EXTENSIONS = {".pdf", ".docx"}
+
+
+def _validate_resume_upload(raw_bytes: bytes, filename: str) -> str | None:
+    """Return a safe, user-facing validation message or None for valid input."""
+    extension = os.path.splitext(filename.lower())[1]
+    if extension not in SUPPORTED_RESUME_EXTENSIONS:
+        return "Upload a PDF or DOCX resume. Legacy .doc files are not supported."
+    if len(raw_bytes) > MAX_RESUME_FILE_BYTES:
+        return "The resume is larger than 10 MB. Please upload a smaller PDF or DOCX file."
+    if extension == ".pdf" and not raw_bytes.startswith(b"%PDF-"):
+        return "This file is not a valid PDF. Please export your resume as a PDF and try again."
+    if extension == ".docx":
+        try:
+            with zipfile.ZipFile(io.BytesIO(raw_bytes)) as package:
+                if "[Content_Types].xml" not in package.namelist():
+                    return "This file is not a valid DOCX document."
+        except zipfile.BadZipFile:
+            return "This file is not a valid DOCX document."
+    return None
 
 
 def _try_ai_enhance(raw_text: str) -> dict | None:
@@ -58,6 +85,10 @@ def parse_resume_file(file_storage) -> dict:
         raw_bytes = file_storage.read()
         if not raw_bytes:
             return {"error": "Uploaded file is empty."}
+
+        validation_error = _validate_resume_upload(raw_bytes, filename)
+        if validation_error:
+            return {"error": validation_error}
 
         # Step 1: extract text
         try:

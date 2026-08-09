@@ -30,6 +30,12 @@ interface ExperienceItem { title: string; company: string; startDate: string; en
 interface EducationItem  { degree: string; institution: string; year: string; }
 interface ProjectItem    { name: string; description: string; technologies: string; link: string; }
 interface CertItem       { name: string; issuer: string; date: string; }
+const MAX_RESUME_FILE_BYTES = 10 * 1024 * 1024;
+const getResumeFileError = (file: File): string | null => {
+  if (!/\.(pdf|docx)$/i.test(file.name)) return 'Please upload a PDF or DOCX resume.';
+  if (file.size > MAX_RESUME_FILE_BYTES) return 'Resume files must be 10 MB or smaller.';
+  return null;
+};
 
 // ─── Provider config ──────────────────────────────────────────────────────────
 const PROVIDERS = [
@@ -205,6 +211,11 @@ export default function OnboardingPage() {
   // ── Resume parse ──
   const parseResume = async (skip = false): Promise<boolean> => {
     if (skip || !resumeFile) { setStep(4); return false; }
+    const fileError = getResumeFileError(resumeFile);
+    if (fileError) {
+      setParseError(fileError);
+      return false;
+    }
     setParsing(true);
     setParseError(null);
 
@@ -450,7 +461,7 @@ export default function OnboardingPage() {
   if (loading || !user) return null;
 
   return (
-    <div className="min-h-screen bg-[#080b14] flex items-center justify-center p-4">
+    <div className="cc-onboarding flex items-center justify-center p-4 sm:p-6">
       {/* Invisible reCAPTCHA anchor for Firebase Phone Auth */}
       <div id="recaptcha-container" />
 
@@ -549,7 +560,16 @@ export default function OnboardingPage() {
               <div
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
-                onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) { setResumeFile(f); setParseError(null); } }}
+                onDrop={e => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  const f = e.dataTransfer.files[0];
+                  if (!f) return;
+                  const fileError = getResumeFileError(f);
+                  if (fileError) { setParseError(fileError); return; }
+                  setResumeFile(f);
+                  setParseError(null);
+                }}
                 onClick={() => fileRef.current?.click()}
                 className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all ${
                   dragOver ? 'border-indigo-500 bg-indigo-500/10'
@@ -557,8 +577,15 @@ export default function OnboardingPage() {
                     : 'border-white/10 hover:border-indigo-500/40 hover:bg-white/[0.03]'
                 }`}
               >
-                <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) { setResumeFile(f); setParseError(null); } }} />
+                <input ref={fileRef} type="file" accept=".pdf,.docx" className="hidden"
+                  onChange={e => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    const fileError = getResumeFileError(f);
+                    if (fileError) { setParseError(fileError); return; }
+                    setResumeFile(f);
+                    setParseError(null);
+                  }} />
                 {resumeFile ? (
                   <div className="space-y-2">
                     <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
@@ -570,7 +597,7 @@ export default function OnboardingPage() {
                     <FileText className="w-10 h-10 text-zinc-600 mx-auto" />
                     <div>
                       <p className="text-white font-semibold text-sm">Drop your resume here</p>
-                      <p className="text-zinc-500 text-xs mt-1">PDF, DOC, DOCX — up to 10 MB</p>
+                      <p className="text-zinc-500 text-xs mt-1">PDF or DOCX — up to 10 MB</p>
                     </div>
                     <span className="inline-block text-xs font-semibold text-indigo-400 border border-indigo-500/40 rounded-lg px-4 py-1.5">Choose File</span>
                   </div>

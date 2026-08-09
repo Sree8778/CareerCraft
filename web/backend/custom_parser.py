@@ -59,8 +59,10 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
     name = filename.lower()
     if name.endswith(".pdf"):
         return _text_from_pdf(file_bytes)
-    if name.endswith((".docx", ".doc")):
+    if name.endswith(".docx"):
         return _text_from_docx(file_bytes)
+    if name.endswith(".doc"):
+        raise ValueError("Legacy .doc files are not supported. Please save the file as PDF or DOCX and try again.")
     raise ValueError(f"Unsupported file type: {filename}")
 
 
@@ -93,6 +95,13 @@ def _normalise(text: str) -> str:
     text = re.sub(
         r"(?<=[a-zA-Z,;])\n(?=[a-z](?![ \t]*[•\-\*▸▪‣◦]))",
         " ",
+        text,
+    )
+    # Do not let line-wrap repair merge a name with a lowercase email address.
+    # A common header is "Jane Doe" followed by "jane@example.com".
+    text = re.sub(
+        r"(?m)^([A-Z][A-Za-z .'-]{1,59}?)\s+([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b)",
+        r"\1\n\2",
         text,
     )
     return text
@@ -518,9 +527,21 @@ def _extract_personal(raw_text: str, header_lines: list) -> dict:
     linkedin = m.group() if (m := _RE_LINKEDIN.search(raw_text)) else ""
     github   = m.group() if (m := _RE_GITHUB.search(raw_text)) else ""
 
+    # In heuristic mode callers provide the first several resume lines. Only
+    # the initial non-empty block is the contact header; later blocks can be
+    # job headings such as "Marketing Manager, Acme Corp".
+    header_block: list[str] = []
+    started_header = False
+    for raw_line in header_lines[:25]:
+        if raw_line.strip():
+            header_block.append(raw_line)
+            started_header = True
+        elif started_header:
+            break
+
     # Name: first non-contact non-sentence line near the top
     name = ""
-    for line in header_lines[:15]:
+    for line in header_block[:15]:
         line = line.strip()
         if not line or len(line) > 80:
             continue
@@ -549,10 +570,12 @@ def _extract_personal(raw_text: str, header_lines: list) -> dict:
     loc_re = re.compile(
         r"\b([A-Z][a-zA-Z]+(?:[\s\-][A-Z][a-zA-Z]+)*),\s*([A-Z]{2,3}|[A-Z][a-zA-Z]+(?:[\s\-][A-Z][a-zA-Z]+)*)\b"
     )
-    for line in header_lines[:25]:
-        if _RE_EMAIL.search(line) or _RE_PHONE.search(line):
-            continue
-        m = loc_re.search(line)
+    for line in header_block:
+        # Contact details and location commonly share a single header line.
+        # Remove the contact values instead of dropping the whole line.
+        location_line = _RE_EMAIL.sub(" ", line)
+        location_line = _RE_PHONE.sub(" ", location_line)
+        m = loc_re.search(location_line)
         if m:
             location = m.group()
             break
@@ -748,11 +771,17 @@ def _extract_education(sections: dict) -> list:
         return start
 
     raw_starts = sorted(set(_edu_start(i) for i in anchor_indices))
+    # Two adjacent degree lines are separate education entries. A date line
+    # immediately after a degree belongs to that same entry instead.
+    degree_starts = {
+        _edu_start(i) for i in anchor_indices
+        if _RE_DEGREE.search(all_lines[i])
+    }
 
     # Merge starts that are within 2 lines of each other (belong to same entry)
     merged: list[int] = [raw_starts[0]]
     for s in raw_starts[1:]:
-        if s - merged[-1] >= 2:
+        if s in degree_starts or s - merged[-1] >= 2:
             merged.append(s)
 
     if merged[0] > 0:
@@ -839,15 +868,16 @@ def _parse_exp_block(block: list) -> Optional[dict]:
         if is_bullet:
             header_done = True
 
-        if header_done or (i >= 4 and not entry["dates"]):
+        if header_done:
             desc_lines.append(re.sub(r"^[\s]*[•\-\*▸▪‣◦✓→✦◆▶»·]\s*", "", stripped))
         else:
             header_lines.append(stripped)
-            # If we have a date in the first 4 lines we consider header done after 4 lines
+            # A date closes the job heading. Following lines are the job
+            # description, including plain paragraphs without bullet points.
             date_str, _ = _extract_date_range(stripped)
             if date_str:
                 entry["dates"] = _normalise_date_str(date_str)
-                header_done = len(header_lines) >= 3
+                header_done = True
 
     # Parse the header lines for title, company, location
     for line in header_lines:
@@ -865,7 +895,7 @@ def _parse_exp_block(block: list) -> Optional[dict]:
 
         # Location heuristic
         loc_m = re.match(r"^([A-Z][a-zA-Z]+(?:[\s\-][A-Z][a-zA-Z]+)*),\s*([A-Z]{2}|[A-Z][a-zA-Z]+)$", line)
-        if loc_m and not entry["location"]:
+        if loc_m and not entry["location"] and not _RE_JOB_TITLE_WORDS.search(line):
             entry["location"] = line
             continue
 

@@ -5,7 +5,7 @@ dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 
 os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 try:
     from .routes import api_bp
@@ -13,6 +13,15 @@ except ImportError:
     from routes import api_bp
 
 app = Flask(__name__)
+# Resume uploads are limited to 10 MB by the parser. Keep a small amount of
+# multipart overhead here and return a useful JSON response before Flask reads
+# a much larger request into memory.
+app.config['MAX_CONTENT_LENGTH'] = 11 * 1024 * 1024
+
+
+@app.errorhandler(413)
+def request_too_large(_error):
+    return jsonify({"error": "Upload is too large. Resume files must be 10 MB or smaller."}), 413
 
 # Restrict CORS to an explicit origin allowlist.
 # In production set ALLOWED_ORIGINS to a comma-separated list of your actual
