@@ -23,6 +23,18 @@ app.config['MAX_CONTENT_LENGTH'] = 11 * 1024 * 1024
 def request_too_large(_error):
     return jsonify({"error": "Upload is too large. Resume files must be 10 MB or smaller."}), 413
 
+@app.errorhandler(404)
+def not_found(_error):
+    return jsonify({"error": "Not found"}), 404
+
+@app.errorhandler(405)
+def method_not_allowed(_error):
+    return jsonify({"error": "Method not allowed"}), 405
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({"error": "Internal server error", "detail": str(error)}), 500
+
 # Restrict CORS to an explicit origin allowlist.
 # In production set ALLOWED_ORIGINS to a comma-separated list of your actual
 # frontend and extension origins, e.g.:
