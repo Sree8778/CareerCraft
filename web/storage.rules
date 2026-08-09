@@ -28,6 +28,12 @@ service firebase.storage {
       allow write: if isOwner(userId);
     }
 
+    // Company logos — recruiter uploads on job post; candidates read publicly.
+    match /company-logos/{userId}/{allPaths=**} {
+      allow read:  if true;           // logos are public
+      allow write: if isOwner(userId);
+    }
+
     // Identity-check media is intentionally not stored in Firebase Storage.
     // If a future feature needs retained interview media, expose it only through
     // a reviewed backend endpoint with an explicit retention policy.

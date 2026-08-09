@@ -144,6 +144,7 @@ export default function JobDetailPage() {
           benefits: d.benefits || [], postedDate: d.postedDate || '',
           employmentType: d.jobType || d.employmentType || 'Full-time',
           emoji: d.emoji || '💼',
+          companyLogo: d.companyLogo || '',
         });
       } catch { toast.error('Failed to load job.'); }
       finally { setLoading(false); }
@@ -479,8 +480,11 @@ export default function JobDetailPage() {
           <div className="cc-card rounded-xl p-6">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-3xl shrink-0">
-                  {job.emoji}
+                <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                  {(job as any).companyLogo
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={(job as any).companyLogo} alt={job.company} className="w-full h-full object-contain p-1" />
+                    : <span className="text-3xl">{job.emoji}</span>}
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-white">{job.title}</h1>

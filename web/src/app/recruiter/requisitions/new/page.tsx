@@ -14,10 +14,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 import {
   ArrowLeft, ArrowRight, RefreshCw, Briefcase, Sparkles, Plus, X, Eye,
-  MapPin, Clock, CheckCircle2, FileText, ListChecks, Rocket, Save,
+  MapPin, Clock, CheckCircle2, FileText, ListChecks, Rocket, Save, Upload, ImageIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE as API } from '@/lib/api';
+import { storage } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 type Step = 0 | 1 | 2 | 3;
 const STEPS = [
@@ -65,7 +67,7 @@ function NewRequisitionContent() {
   const editId  = searchParams.get('edit');
   const cloneId = searchParams.get('clone');
   const isEditing = !!editId;
-  const { getToken } = useAuth();
+  const { getToken, user } = useAuth();
 
   const [step, setStep] = useState<Step>(0);
   const [formData, setFormData] = useState({
@@ -73,8 +75,10 @@ function NewRequisitionContent() {
     description: '', company: '', skills: '',
     workMode: 'Remote', experienceLevel: 'Mid',
     salaryMin: '', salaryMax: '', salaryVisible: true,
-    visaSponsorship: false,
+    visaSponsorship: false, companyLogo: '',
   });
+  const [logoPreview,   setLogoPreview]   = useState('');
+  const [logoUploading, setLogoUploading] = useState(false);
   const [requirements, setRequirements] = useState<string[]>([]);
   const [benefits, setBenefits] = useState<string[]>([]);
   const [questions, setQuestions] = useState<ScreeningQ[]>([]);
@@ -88,6 +92,38 @@ function NewRequisitionContent() {
 
   const getAuthHeader = async () => ({ 'Authorization': `Bearer ${await getToken()}` });
 
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Please select an image file.'); return; }
+    if (file.size > 2 * 1024 * 1024) { toast.error('Logo must be 2 MB or smaller.'); return; }
+
+    const reader = new FileReader();
+    reader.onload = ev => setLogoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+
+    if (!storage || !user?.id) { toast.error('Storage not available.'); return; }
+    setLogoUploading(true);
+    try {
+      const ext = file.name.split('.').pop() || 'png';
+      const storageRef = ref(storage, `company-logos/${user.id}/${Date.now()}.${ext}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      setFormData(prev => ({ ...prev, companyLogo: url }));
+      toast.success('Logo uploaded successfully.');
+    } catch {
+      toast.error('Failed to upload logo — try again.');
+      setLogoPreview('');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const removeLogo = () => {
+    setLogoPreview('');
+    setFormData(prev => ({ ...prev, companyLogo: '' }));
+  };
+
   // Load for edit or clone
   useEffect(() => {
     const srcId = editId || cloneId;
@@ -98,6 +134,7 @@ function NewRequisitionContent() {
         const res = await fetch(`${API}/jobs/${srcId}`, { headers: await getAuthHeader() });
         if (!res.ok) { toast.error('Job not found.'); router.push('/recruiter/requisitions'); return; }
         const job = await res.json();
+        const logo = cloneId ? '' : (job.companyLogo || '');
         setFormData({
           title: cloneId ? `${job.title || ''} (Copy)` : (job.title || ''),
           department: job.department || '',
@@ -109,7 +146,9 @@ function NewRequisitionContent() {
           salaryMin: job.salaryMin || '', salaryMax: job.salaryMax || '',
           salaryVisible: job.salaryVisible !== false,
           visaSponsorship: !!job.visaSponsorship,
+          companyLogo: logo,
         });
+        if (logo) setLogoPreview(logo);
         setRequirements(job.requirements || []);
         setBenefits(job.benefits || []);
         setQuestions(job.screeningQuestions || []);
@@ -188,6 +227,7 @@ function NewRequisitionContent() {
     visaSponsorship: formData.visaSponsorship,
     requirements, benefits,
     screeningQuestions: questions,
+    companyLogo: formData.companyLogo,
     ...(status ? { status } : {}),
   });
 
@@ -286,6 +326,38 @@ function NewRequisitionContent() {
                   placeholder="e.g. Engineering" className={inputCls} />
               </Field>
             </div>
+
+            <Field label="Company Logo" hint="PNG, JPG or SVG · max 2 MB · shown to candidates on the job listing.">
+              <div className="flex items-center gap-4">
+                {logoPreview ? (
+                  <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-white/10 bg-white/5 shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={logoPreview} alt="Company logo" className="w-full h-full object-contain p-1" />
+                    <button type="button" onClick={removeLogo}
+                      className="absolute top-0.5 right-0.5 bg-black/60 hover:bg-red-500/80 rounded-full p-0.5 text-white transition">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 rounded-xl border border-dashed border-white/20 bg-white/5 flex items-center justify-center text-zinc-600 shrink-0">
+                    <ImageIcon className="w-6 h-6" />
+                  </div>
+                )}
+                <div>
+                  <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-zinc-300 hover:bg-white/10 transition">
+                    {logoUploading
+                      ? <><RefreshCw className="w-4 h-4 animate-spin" /> Uploading…</>
+                      : <><Upload className="w-4 h-4" /> {logoPreview ? 'Change logo' : 'Upload logo'}</>}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoChange} disabled={logoUploading} />
+                  </label>
+                  {formData.companyLogo && !logoUploading && (
+                    <p className="text-xs text-emerald-400 mt-1.5 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Logo saved
+                    </p>
+                  )}
+                </div>
+              </div>
+            </Field>
 
             <Field label="Work Mode">
               <div className="flex gap-2">
@@ -488,9 +560,15 @@ function NewRequisitionContent() {
             <p className="text-xs text-zinc-500 flex items-center gap-2"><Eye className="w-3.5 h-3.5" /> This is what candidates will see.</p>
             <div className="cc-card rounded-2xl p-7 space-y-5 border border-white/10">
               <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-bold">{formData.title || 'Untitled role'}</h2>
-                  <p className="text-sm text-zinc-400 mt-0.5">{formData.company || 'Confidential Employer'}{formData.department ? ` · ${formData.department}` : ''}</p>
+                <div className="flex items-center gap-3">
+                  {logoPreview && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoPreview} alt="logo" className="w-12 h-12 rounded-xl object-contain border border-white/10 bg-white/5 p-1 shrink-0" />
+                  )}
+                  <div>
+                    <h2 className="text-2xl font-bold">{formData.title || 'Untitled role'}</h2>
+                    <p className="text-sm text-zinc-400 mt-0.5">{formData.company || 'Confidential Employer'}{formData.department ? ` · ${formData.department}` : ''}</p>
+                  </div>
                 </div>
                 <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shrink-0">
                   {formData.salaryVisible ? salaryLabel : 'Competitive'}

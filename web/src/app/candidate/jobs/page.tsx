@@ -123,6 +123,7 @@ export default function JobListingsPage() {
           postedDate:     job.postedDate || new Date().toISOString().split('T')[0],
           employmentType: job.jobType || job.employmentType || 'Full-time',
           emoji:          job.emoji || '💼',
+          companyLogo:    job.companyLogo || '',
         }));
         setAllJobs(normalized);
         setApplications(appsData.applications || []);
@@ -439,7 +440,12 @@ export default function JobListingsPage() {
                     )}
 
                     <div className="flex items-center gap-4 mb-4 text-white">
-                      <span className="text-3xl p-2 bg-white/5 rounded-xl border border-white/10 shadow-inner">{job.emoji}</span>
+                      <div className="w-12 h-12 rounded-xl border border-white/10 bg-white/5 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                        {job.companyLogo
+                          // eslint-disable-next-line @next/next/no-img-element
+                          ? <img src={job.companyLogo} alt={job.company} className="w-full h-full object-contain p-1" />
+                          : <span className="text-2xl">{job.emoji}</span>}
+                      </div>
                       <div className="min-w-0">
                         <h3 className="text-lg font-bold leading-tight line-clamp-1">{job.title}</h3>
                         <p className="text-xs text-zinc-400 mt-0.5">{job.company}</p>

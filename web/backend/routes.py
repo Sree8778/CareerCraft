@@ -1399,7 +1399,8 @@ def update_job(job_id):
     data = request.json
     allowed = {'title', 'description', 'jobType', 'department', 'location', 'status', 'company',
                'requirements', 'benefits', 'skills', 'workMode', 'experienceLevel',
-               'salaryMin', 'salaryMax', 'salaryVisible', 'visaSponsorship', 'screeningQuestions'}
+               'salaryMin', 'salaryMax', 'salaryVisible', 'visaSponsorship', 'screeningQuestions',
+               'companyLogo'}
     update_data = {k: v for k, v in data.items() if k in allowed and v is not None}
     valid_statuses = {'Draft', 'Open', 'Paused', 'In Review', 'Closed', 'Archived'}
     if 'status' in update_data and update_data['status'] not in valid_statuses:
@@ -1470,6 +1471,7 @@ def post_job_v1():
             "salaryVisible": bool(data.get('salaryVisible', True)),
             "visaSponsorship": bool(data.get('visaSponsorship', False)),
             "screeningQuestions": data.get('screeningQuestions', []),
+            "companyLogo": data.get('companyLogo', ''),
         }
         if db:
             doc_ref = db.collection('jobs').add(new_job)
