@@ -17,6 +17,16 @@ import { API_BASE, authHeader, jsonHeaders } from '@/lib/api';
 
 const JOBS_PER_PAGE = 9;
 
+function buildSalaryLabel(job: any): string {
+  if (job.salaryVisible === false) return 'Competitive';
+  const min = Number(job.salaryMin || 0);
+  const max = Number(job.salaryMax || 0);
+  if (min && max) return `$${min.toLocaleString()} – $${max.toLocaleString()}`;
+  if (min) return `$${min.toLocaleString()}+`;
+  if (max) return `Up to $${max.toLocaleString()}`;
+  return job.salary || 'Competitive';
+}
+
 type DateFilter = 'any' | 'today' | 'week' | 'month';
 type SortOrder  = 'newest' | 'oldest';
 
@@ -106,7 +116,7 @@ export default function JobListingsPage() {
           title:          job.title || 'Untitled',
           company:        job.company || 'Company',
           location:       job.location || 'Remote',
-          salary:         job.salary || 'Competitive',
+          salary:         buildSalaryLabel(job),
           description:    job.description || '',
           requirements:   job.requirements || [],
           benefits:       job.benefits || [],

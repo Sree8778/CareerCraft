@@ -20,6 +20,16 @@ import CandidateLayout from '@/components/layout/CandidateLayout';
 import { API_BASE as API } from '@/lib/api';
 
 /* ─── Helpers ─────────────────────────────────────── */
+function buildSalaryLabel(d: any): string {
+  if (d.salaryVisible === false) return 'Competitive';
+  const min = Number(d.salaryMin || 0);
+  const max = Number(d.salaryMax || 0);
+  if (min && max) return `$${min.toLocaleString()} – $${max.toLocaleString()}`;
+  if (min) return `$${min.toLocaleString()}+`;
+  if (max) return `Up to $${max.toLocaleString()}`;
+  return d.salary || 'Competitive';
+}
+
 const stripHtml = (html: string) =>
   (html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -129,7 +139,7 @@ export default function JobDetailPage() {
         const d = await r.json();
         setJob({
           id: d.id, title: d.title || 'Untitled', company: d.company || 'Company',
-          location: d.location || 'Remote', salary: d.salary || 'Competitive',
+          location: d.location || 'Remote', salary: buildSalaryLabel(d),
           description: d.description || '', requirements: d.requirements || [],
           benefits: d.benefits || [], postedDate: d.postedDate || '',
           employmentType: d.jobType || d.employmentType || 'Full-time',
