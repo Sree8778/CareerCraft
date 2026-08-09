@@ -61,7 +61,6 @@ jobs:
       - name: Write env-vars file
         run: |
           cat > /tmp/backend-env.yaml <<'EOF'
-          GEMINI_API_KEY: "${{ secrets.GEMINI_API_KEY }}"
           BACKEND_VAULT_MASTER_KEY: "${{ secrets.BACKEND_VAULT_MASTER_KEY }}"
           FIREBASE_CREDENTIALS_B64: "${{ secrets.FIREBASE_CREDENTIALS_B64 }}"
           RESEND_API_KEY: "${{ secrets.RESEND_API_KEY }}"
