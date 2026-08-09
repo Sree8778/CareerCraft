@@ -30,6 +30,7 @@ const navGroups: { label: string | null; links: { name: string; href: string; ic
     label: 'Prepare',
     links: [
       { name: 'Resume Builder', href: '/candidate/resume-builder',     icon: <FileEdit size={18} />, flag: 'resumeBuilder' },
+      { name: 'Career Tools',   href: '/candidate/career-tools',       icon: <Sparkles size={18} /> },
       { name: 'AI Interview',   href: '/candidate/interview',          icon: <Video size={18} />, flag: 'aiInterview' },
       { name: 'Practice Mode',  href: '/candidate/interview/practice', icon: <Mic size={18} />, flag: 'practiceMode' },
     ],

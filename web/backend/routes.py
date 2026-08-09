@@ -45,9 +45,22 @@ from google.cloud import firestore
 import requests as _requests_lib
 import threading as _threading_lib
 import hashlib as _hashlib_lib
+import uuid as _uuid_lib
+import re as _re_lib
 
 # In-memory OTP fallback (used only when Firestore is unavailable)
 _otp_store: dict = {}
+
+# These collections are persisted in Firestore in configured environments.
+# Keeping a tiny process-local fallback lets the complete product workflow be
+# exercised in local mock mode without pretending that data was saved to cloud.
+_career_local_store = {
+    'interviewSlots': {},
+    'applicationKits': {},
+    'offers': {},
+    'aiPreferences': {},
+    'scorecards': {},
+}
 
 # Create a Blueprint for API routes
 api_bp = Blueprint('api', __name__)
@@ -2946,6 +2959,408 @@ def respond_connection(connection_id):
     except Exception as e:
         print(f"Error responding to connection request: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# CAREER TOOLS — self-scheduling, job fit, application kits, and offers
+# =============================================================================
+
+def _firestore_available():
+    from firebase_utils import db, firebase_initialized
+    return firebase_initialized and db
+
+
+def _caller_is_recruiter():
+    """Return whether the caller has the recruiter role (or is a local mock)."""
+    if not _firestore_available():
+        # Local mock tokens do not carry role claims. The explicit view value is
+        # honoured only in mock mode so both workspaces remain testable.
+        if request.args.get('view') == 'candidate':
+            return False
+        return str(getattr(request, 'user', {}).get('email', '')).endswith('@recruitedge.mock')
+    from firebase_utils import db
+    snap = db.collection('users').document(request.user.get('uid', '')).get()
+    data = snap.to_dict() if snap.exists else {}
+    return data.get('role') == 'recruiter' or is_admin_user(getattr(request, 'user', {}))
+
+
+def _plain_text(value):
+    """Flatten arbitrary resume/profile data for deterministic, explainable matching."""
+    if isinstance(value, dict):
+        return ' '.join(_plain_text(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return ' '.join(_plain_text(v) for v in value)
+    return str(value or '')
+
+
+def _match_terms(value):
+    ignored = {
+        'with', 'that', 'this', 'from', 'your', 'will', 'have', 'into', 'their',
+        'about', 'work', 'role', 'team', 'years', 'experience', 'skills', 'using',
+        'and', 'the', 'for', 'are', 'our', 'you', 'job', 'candidate', 'position',
+    }
+    return {
+        item for item in _re_lib.findall(r'[a-zA-Z][a-zA-Z0-9+#.]{2,}', value.lower())
+        if item not in ignored
+    }
+
+
+def _offer_score(offer):
+    """A transparent comparison number — never an employment recommendation."""
+    salary = min(max(float(offer.get('baseSalary') or 0), 0), 250000) / 250000 * 35
+    bonus = min(max(float(offer.get('bonus') or 0), 0), 50000) / 50000 * 10
+    benefits = min(max(float(offer.get('benefitsScore') or 0), 0), 5) / 5 * 15
+    growth = min(max(float(offer.get('growthScore') or 0), 0), 5) / 5 * 20
+    fit = min(max(float(offer.get('personalFit') or 0), 0), 5) / 5 * 20
+    return round(salary + bonus + benefits + growth + fit)
+
+
+@api_bp.route('/interview-slots', methods=['GET'])
+@require_auth
+def get_interview_slots():
+    """Candidates see open slots; recruiters see only the slots they own."""
+    uid = request.user.get('uid', '')
+    recruiter_view = _caller_is_recruiter()
+    try:
+        if _firestore_available():
+            from firebase_utils import db
+            docs = (db.collection('interviewSlots').where('recruiterId', '==', uid).stream()
+                    if recruiter_view else db.collection('interviewSlots').stream())
+            slots = []
+            for doc in docs:
+                item = _json_safe(doc.to_dict())
+                item['id'] = doc.id
+                if recruiter_view or item.get('status') == 'open' or item.get('candidateId') == uid:
+                    slots.append(item)
+        else:
+            slots = list(_career_local_store['interviewSlots'].values())
+            if recruiter_view:
+                slots = [slot for slot in slots if slot.get('recruiterId') == uid]
+            else:
+                slots = [slot for slot in slots if slot.get('status') == 'open' or slot.get('candidateId') == uid]
+        slots.sort(key=lambda item: item.get('startsAt', ''))
+        return jsonify({'slots': slots, 'view': 'recruiter' if recruiter_view else 'candidate'}), 200
+    except Exception as error:
+        return jsonify({'error': str(error)}), 500
+
+
+@api_bp.route('/interview-slots', methods=['POST'])
+@require_auth
+def create_interview_slot():
+    access_error = _require_recruiter()
+    if access_error:
+        return access_error
+    data = request.get_json(silent=True) or {}
+    title = str(data.get('title', '')).strip()
+    starts_at = str(data.get('startsAt', '')).strip()
+    try:
+        duration = int(data.get('duration') or 45)
+    except (TypeError, ValueError):
+        duration = 45
+    if not title or not starts_at:
+        return jsonify({'error': 'title and startsAt are required'}), 400
+    if duration < 15 or duration > 180:
+        return jsonify({'error': 'duration must be between 15 and 180 minutes'}), 400
+    slot = {
+        'id': '', 'recruiterId': request.user.get('uid', ''), 'title': title[:160],
+        'jobTitle': str(data.get('jobTitle', '')).strip()[:160],
+        'startsAt': starts_at, 'duration': duration,
+        'mode': str(data.get('mode', 'Video')).strip()[:40] or 'Video',
+        'meetingLink': str(data.get('meetingLink', '')).strip()[:1000],
+        'status': 'open', 'candidateId': '', 'candidateName': '',
+        'createdAt': datetime.datetime.utcnow().isoformat() + 'Z',
+    }
+    try:
+        if _firestore_available():
+            from firebase_utils import db
+            ref = db.collection('interviewSlots').add({k: v for k, v in slot.items() if k != 'id'})
+            slot['id'] = ref[1].id
+        else:
+            slot['id'] = str(_uuid_lib.uuid4())
+            _career_local_store['interviewSlots'][slot['id']] = slot
+        return jsonify({'status': 'created', 'slot': slot}), 201
+    except Exception as error:
+        return jsonify({'error': str(error)}), 500
+
+
+@api_bp.route('/interview-slots/<slot_id>/book', methods=['POST'])
+@require_auth
+def book_interview_slot(slot_id):
+    uid = request.user.get('uid', '')
+    data = request.get_json(silent=True) or {}
+    try:
+        if _firestore_available():
+            from firebase_utils import db
+            ref = db.collection('interviewSlots').document(slot_id)
+            snap = ref.get()
+            if not snap.exists:
+                return jsonify({'error': 'Slot not found'}), 404
+            slot = _json_safe(snap.to_dict())
+            if slot.get('status') != 'open':
+                return jsonify({'error': 'This time was just booked. Choose another slot.'}), 409
+            candidate_name = str(request.user.get('name') or data.get('candidateName') or 'Candidate').strip()[:120]
+            update = {'status': 'booked', 'candidateId': uid, 'candidateName': candidate_name,
+                      'bookedAt': datetime.datetime.utcnow().isoformat() + 'Z'}
+            ref.update(update)
+            slot.update(update); slot['id'] = slot_id
+        else:
+            slot = _career_local_store['interviewSlots'].get(slot_id)
+            if not slot:
+                return jsonify({'error': 'Slot not found'}), 404
+            if slot.get('status') != 'open':
+                return jsonify({'error': 'This time was just booked. Choose another slot.'}), 409
+            slot.update({
+                'status': 'booked', 'candidateId': uid,
+                'candidateName': str(request.user.get('name') or data.get('candidateName') or 'Candidate').strip()[:120],
+                'bookedAt': datetime.datetime.utcnow().isoformat() + 'Z',
+            })
+        return jsonify({'status': 'booked', 'slot': slot}), 200
+    except Exception as error:
+        return jsonify({'error': str(error)}), 500
+
+
+@api_bp.route('/career/job-matches', methods=['GET'])
+@require_auth
+def get_explainable_job_matches():
+    """Return deterministic matches so every recommendation has a visible reason."""
+    uid = request.user.get('uid', '')
+    try:
+        profile_text, jobs = '', []
+        if _firestore_available():
+            from firebase_utils import db
+            resume = db.collection('resumes').document(uid).get()
+            user = db.collection('users').document(uid).get()
+            profile_text = _plain_text(resume.to_dict() if resume.exists else {}) + ' ' + _plain_text(user.to_dict() if user.exists else {})
+            for doc in db.collection('jobs').limit(60).stream():
+                item = _json_safe(doc.to_dict()); item['id'] = doc.id; jobs.append(item)
+        profile_terms = _match_terms(profile_text)
+        matches = []
+        for job in jobs:
+            job_terms = _match_terms(_plain_text({
+                'title': job.get('title', ''), 'description': job.get('description', ''),
+                'requirements': job.get('requirements', []), 'skills': job.get('skills', []),
+            }))
+            shared = sorted(profile_terms.intersection(job_terms))
+            missing = sorted(job_terms.difference(profile_terms))[:4]
+            score = round(min(98, (len(shared) / max(1, min(len(job_terms), 16))) * 100))
+            matches.append({
+                'jobId': job.get('id', ''), 'title': job.get('title', 'Untitled role'),
+                'company': job.get('company', ''), 'location': job.get('location', ''),
+                'score': score, 'matchingSkills': shared[:5], 'missingSkills': missing,
+                'reason': ('Matches ' + ', '.join(shared[:3])) if shared else 'Add profile skills to receive a tailored match explanation.',
+            })
+        matches.sort(key=lambda item: item['score'], reverse=True)
+        return jsonify({'matches': matches[:12], 'method': 'explainable_skill_overlap'}), 200
+    except Exception as error:
+        return jsonify({'error': str(error)}), 500
+
+
+@api_bp.route('/career/application-kits', methods=['GET', 'POST'])
+@require_auth
+def application_kits():
+    uid = request.user.get('uid', '')
+    try:
+        if request.method == 'GET':
+            if _firestore_available():
+                from firebase_utils import db
+                kits = [{'id': d.id, **_json_safe(d.to_dict())} for d in db.collection('applicationKits').where('candidateId', '==', uid).stream()]
+            else:
+                kits = [item for item in _career_local_store['applicationKits'].values() if item.get('candidateId') == uid]
+            kits.sort(key=lambda item: item.get('createdAt', ''), reverse=True)
+            return jsonify({'kits': kits}), 200
+
+        data = request.get_json(silent=True) or {}
+        title = str(data.get('jobTitle', '')).strip()
+        company = str(data.get('company', '')).strip()
+        if not title:
+            return jsonify({'error': 'jobTitle is required'}), 400
+        deadline = str(data.get('followUpAt', '')).strip()
+        kit = {
+            'id': '', 'candidateId': uid, 'jobTitle': title[:160], 'company': company[:160],
+            'jobDescription': str(data.get('jobDescription', '')).strip()[:6000],
+            'followUpAt': deadline, 'createdAt': datetime.datetime.utcnow().isoformat() + 'Z',
+            'checklist': [
+                'Choose the tailored resume version that best supports this role.',
+                'Review every required field before submitting.',
+                'Save a copy of the submitted application and job description.',
+                'Send a concise follow-up if there is no response by the reminder date.',
+            ],
+            'answers': {
+                'interest': f'I am interested in the {title} opportunity at {company or "your organization"} because it aligns with my relevant experience and the work described in the role.',
+                'availability': 'I can discuss next steps at a mutually convenient time and will confirm my availability promptly.',
+                'followUp': f'Hello, I am following up on my application for {title}. I remain very interested and would welcome the chance to discuss my fit.',
+            },
+        }
+        if _firestore_available():
+            from firebase_utils import db
+            ref = db.collection('applicationKits').add({k: v for k, v in kit.items() if k != 'id'})
+            kit['id'] = ref[1].id
+        else:
+            kit['id'] = str(_uuid_lib.uuid4()); _career_local_store['applicationKits'][kit['id']] = kit
+        return jsonify({'status': 'created', 'kit': kit}), 201
+    except Exception as error:
+        return jsonify({'error': str(error)}), 500
+
+
+@api_bp.route('/offers', methods=['GET', 'POST'])
+@require_auth
+def offers():
+    uid = request.user.get('uid', '')
+    try:
+        if request.method == 'GET':
+            if _firestore_available():
+                from firebase_utils import db
+                values = [{'id': d.id, **_json_safe(d.to_dict())} for d in db.collection('offers').where('candidateId', '==', uid).stream()]
+            else:
+                values = [item for item in _career_local_store['offers'].values() if item.get('candidateId') == uid]
+            for offer in values: offer['comparisonScore'] = _offer_score(offer)
+            values.sort(key=lambda item: item['comparisonScore'], reverse=True)
+            return jsonify({'offers': values, 'scoreExplanation': '35% base pay, 10% bonus, 15% benefits, 20% growth, 20% personal fit'}), 200
+
+        data = request.get_json(silent=True) or {}
+        company, role = str(data.get('company', '')).strip(), str(data.get('role', '')).strip()
+        if not company or not role:
+            return jsonify({'error': 'company and role are required'}), 400
+        def score_field(name):
+            try: return min(5, max(0, float(data.get(name) or 0)))
+            except (TypeError, ValueError): return 0
+        def money_field(name):
+            try: return min(10000000, max(0, float(data.get(name) or 0)))
+            except (TypeError, ValueError): return 0
+        offer = {
+            'id': '', 'candidateId': uid, 'company': company[:160], 'role': role[:160],
+            'baseSalary': money_field('baseSalary'), 'bonus': money_field('bonus'),
+            'benefitsScore': score_field('benefitsScore'), 'growthScore': score_field('growthScore'),
+            'personalFit': score_field('personalFit'), 'remote': bool(data.get('remote')),
+            'location': str(data.get('location', '')).strip()[:160],
+            'notes': str(data.get('notes', '')).strip()[:2000],
+            'createdAt': datetime.datetime.utcnow().isoformat() + 'Z',
+        }
+        offer['comparisonScore'] = _offer_score(offer)
+        if _firestore_available():
+            from firebase_utils import db
+            ref = db.collection('offers').add({k: v for k, v in offer.items() if k not in {'id', 'comparisonScore'}})
+            offer['id'] = ref[1].id
+        else:
+            offer['id'] = str(_uuid_lib.uuid4()); _career_local_store['offers'][offer['id']] = offer
+        return jsonify({'status': 'created', 'offer': offer}), 201
+    except Exception as error:
+        return jsonify({'error': str(error)}), 500
+
+
+@api_bp.route('/offers/<offer_id>', methods=['DELETE'])
+@require_auth
+def delete_offer(offer_id):
+    uid = request.user.get('uid', '')
+    try:
+        if _firestore_available():
+            from firebase_utils import db
+            ref = db.collection('offers').document(offer_id); snap = ref.get()
+            if not snap.exists or snap.to_dict().get('candidateId') != uid:
+                return jsonify({'error': 'Offer not found'}), 404
+            ref.delete()
+        else:
+            offer = _career_local_store['offers'].get(offer_id)
+            if not offer or offer.get('candidateId') != uid:
+                return jsonify({'error': 'Offer not found'}), 404
+            del _career_local_store['offers'][offer_id]
+        return jsonify({'status': 'deleted'}), 200
+    except Exception as error:
+        return jsonify({'error': str(error)}), 500
+
+
+@api_bp.route('/ai-preferences', methods=['GET', 'PUT'])
+@require_auth
+def ai_preferences():
+    """Non-sensitive controls for AI explanations and accessible presentation."""
+    uid = request.user.get('uid', '')
+    defaults = {
+        'showExplanations': True, 'humanReviewRequested': False,
+        'reduceMotion': False, 'captionsPreferred': False, 'highContrast': False,
+    }
+    try:
+        if request.method == 'GET':
+            if _firestore_available():
+                from firebase_utils import db
+                snap = db.collection('users').document(uid).get()
+                saved = (snap.to_dict() or {}).get('aiPreferences', {}) if snap.exists else {}
+            else:
+                saved = _career_local_store['aiPreferences'].get(uid, {})
+            return jsonify({'preferences': {**defaults, **saved}}), 200
+        data = request.get_json(silent=True) or {}
+        saved = {key: bool(data.get(key, defaults[key])) for key in defaults}
+        saved['updatedAt'] = datetime.datetime.utcnow().isoformat() + 'Z'
+        if _firestore_available():
+            from firebase_utils import db
+            db.collection('users').document(uid).set({'aiPreferences': saved}, merge=True)
+        else:
+            _career_local_store['aiPreferences'][uid] = saved
+        return jsonify({'status': 'saved', 'preferences': {**defaults, **saved}}), 200
+    except Exception as error:
+        return jsonify({'error': str(error)}), 500
+
+
+def _recruiter_owns_application(app_id):
+    """Avoid exposing scorecards unless the recruiter owns the application/job."""
+    if not _firestore_available():
+        return True
+    from firebase_utils import db
+    app = db.collection('applications').document(app_id).get()
+    if not app.exists:
+        return False
+    data = app.to_dict() or {}
+    uid = request.user.get('uid', '')
+    if data.get('recruiterId') == uid:
+        return True
+    job_id = data.get('jobId', '')
+    job = db.collection('jobs').document(job_id).get() if job_id else None
+    return bool(job and job.exists and (job.to_dict() or {}).get('recruiterId') == uid)
+
+
+@api_bp.route('/applications/<app_id>/scorecards', methods=['GET', 'POST'])
+@require_auth
+def application_scorecards(app_id):
+    access_error = _require_recruiter()
+    if access_error:
+        return access_error
+    if not _recruiter_owns_application(app_id):
+        return jsonify({'error': 'Application not found'}), 404
+    try:
+        if request.method == 'GET':
+            if _firestore_available():
+                from firebase_utils import db
+                values = [{'id': d.id, **_json_safe(d.to_dict())} for d in db.collection('scorecards').where('applicationId', '==', app_id).stream()]
+            else:
+                values = [item for item in _career_local_store['scorecards'].values() if item.get('applicationId') == app_id]
+            values.sort(key=lambda item: item.get('createdAt', ''), reverse=True)
+            return jsonify({'scorecards': values}), 200
+
+        data = request.get_json(silent=True) or {}
+        recommendation = str(data.get('recommendation', '')).strip()
+        if recommendation not in {'strong_yes', 'yes', 'mixed', 'no'}:
+            return jsonify({'error': 'Choose a valid recommendation'}), 400
+        def rating(name):
+            try: value = int(data.get(name))
+            except (TypeError, ValueError): value = 0
+            return min(5, max(1, value))
+        card = {
+            'id': '', 'applicationId': app_id, 'recruiterId': request.user.get('uid', ''),
+            'interviewerName': str(request.user.get('name') or request.user.get('email') or 'Hiring team').strip()[:120],
+            'technical': rating('technical'), 'communication': rating('communication'),
+            'roleFit': rating('roleFit'), 'recommendation': recommendation,
+            'feedback': str(data.get('feedback', '')).strip()[:2000],
+            'createdAt': datetime.datetime.utcnow().isoformat() + 'Z',
+        }
+        card['overall'] = round((card['technical'] + card['communication'] + card['roleFit']) / 3, 1)
+        if _firestore_available():
+            from firebase_utils import db
+            ref = db.collection('scorecards').add({k: v for k, v in card.items() if k != 'id'})
+            card['id'] = ref[1].id
+        else:
+            card['id'] = str(_uuid_lib.uuid4()); _career_local_store['scorecards'][card['id']] = card
+        return jsonify({'status': 'created', 'scorecard': card}), 201
+    except Exception as error:
+        return jsonify({'error': str(error)}), 500
 
 
 # =============================================================================

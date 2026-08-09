@@ -494,6 +494,25 @@ body {
 }
 
 /* ── Reduced motion ────────────────────────────────────────── */
+.cc-user-reduce-motion *,
+.cc-user-reduce-motion *::before,
+.cc-user-reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
+
+.cc-user-high-contrast {
+  --cc-border: color-mix(in srgb, var(--cc-text) 55%, transparent);
+  --cc-text-muted: color-mix(in srgb, var(--cc-text) 73%, var(--cc-bg));
+}
+
+.cc-user-high-contrast .cc-workspace-sidebar,
+.cc-user-high-contrast .cc-page-hero {
+  box-shadow: inset 0 0 0 1px var(--cc-border);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-blob1, .animate-blob2,
   .cc-aurora-1, .cc-aurora-2, .cc-aurora-3 {

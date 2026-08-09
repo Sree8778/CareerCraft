@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Briefcase, Users, ClipboardList, LogOut, Sparkles, MessageSquare, Building2, Network, ClipboardCheck, Settings, Globe, Menu, X, Newspaper, ShieldCheck } from 'lucide-react';
+import { Briefcase, Users, ClipboardList, LogOut, Sparkles, MessageSquare, Building2, Network, ClipboardCheck, Settings, Globe, Menu, X, Newspaper, ShieldCheck, CalendarCheck2, Scale } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFeatureFlags } from '@/contexts/FeatureFlagsContext';
 import React, { useState, useEffect } from 'react';
@@ -24,6 +24,8 @@ const navGroups: { label: string | null; links: { name: string; href: string; ic
       { name: 'Requisitions',    href: '/recruiter/requisitions', icon: <ClipboardList size={18} /> },
       { name: 'Applications',    href: '/recruiter/applications', icon: <ClipboardCheck size={18} /> },
       { name: 'Candidates',      href: '/recruiter/candidates',   icon: <Users size={18} /> },
+      { name: 'Scheduling',      href: '/recruiter/scheduling',   icon: <CalendarCheck2 size={18} /> },
+      { name: 'Scorecards',      href: '/recruiter/scorecards',   icon: <Scale size={18} /> },
       { name: 'Passive Sourcing',href: '/recruiter/sourcing',     icon: <Globe size={18} />, flag: 'sourcing' },
     ],
   },
