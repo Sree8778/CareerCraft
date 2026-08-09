@@ -58,6 +58,20 @@ const ONE_PAGE_LIMITS = {
     projectDescription: 320,
     certificationEntries: 3,
 };
+const MAX_SKILL_TAG_CHARACTERS = 40;
+const RESUME_TEXT_LIMITS: Record<string, Record<string, number>> = {
+    personal: { name: 80, email: 120, phone: 30, location: 100, linkedin: 200, website: 200 },
+    experience: { jobTitle: 80, company: 80, dates: 35, description: ONE_PAGE_LIMITS.experienceDescription },
+    education: { degree: 90, institution: 90, graduationYear: 12, gpa: 10, achievements: ONE_PAGE_LIMITS.educationDetails },
+    skills: { category: 40 },
+    projects: { title: 90, date: 35, description: ONE_PAGE_LIMITS.projectDescription },
+    publications: { title: 180, authors: 250, journal: 180, date: 50, link: 300 },
+    certifications: { name: 90, issuer: 90, date: 25 },
+    languages: { language: 50 },
+    volunteer: { role: 100, organization: 120, dates: 50, description: 800 },
+    awards: { title: 120, organization: 120, date: 50, description: 500 },
+};
+const RICH_TEXT_FIELDS = new Set(['summary', 'description', 'achievements']);
 const MAX_RESUME_FILE_BYTES = 10 * 1024 * 1024;
 const getResumeFileError = (file: File): string | null => {
     if (!/\.(pdf|docx)$/i.test(file.name)) return 'Please upload a PDF or DOCX resume.';
@@ -66,6 +80,7 @@ const getResumeFileError = (file: File): string | null => {
 };
 
 const plainTextLength = (value: string) => value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim().length;
+const truncateText = (value: string, limit: number) => value.slice(0, limit);
 const CharacterLimitHint = ({ value, limit }: { value: string; limit: number }) => (
     <p className={`mt-1 text-right text-[10px] ${plainTextLength(value) >= limit ? 'text-amber-400' : 'text-zinc-500'}`}>
         {plainTextLength(value)}/{limit} characters
@@ -142,6 +157,57 @@ function toEditorHtml(value: string): string {
     return `<p>${v.replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`;
 }
 
+// Keep rich text formatted while removing every character beyond the limit.
+// This handles large pastes as well as content returned by the parser or AI.
+function truncateHtmlToLimit(value: string, limit: number): string {
+    if (plainTextLength(value) <= limit) return value;
+
+    if (typeof document === 'undefined') {
+        const text = value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim().slice(0, limit);
+        return `<p>${text.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char] || char)}</p>`;
+    }
+
+    const container = document.createElement('div');
+    container.innerHTML = value;
+    const textNodes: Text[] = [];
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+
+    let remaining = limit;
+    for (const textNode of textNodes) {
+        if (remaining <= 0) {
+            textNode.remove();
+            continue;
+        }
+
+        if (textNode.data.length > remaining) {
+            textNode.data = textNode.data.slice(0, remaining);
+            remaining = 0;
+        } else {
+            remaining -= textNode.data.length;
+        }
+    }
+
+    return container.innerHTML || '<p></p>';
+}
+
+const limitResumeValue = (section: string, field: string, value: string) => {
+    if (field === 'skills_list') {
+        return value
+            .split(',')
+            .map(tag => tag.trim().slice(0, MAX_SKILL_TAG_CHARACTERS))
+            .filter(Boolean)
+            .slice(0, ONE_PAGE_LIMITS.skillsPerCategory)
+            .join(', ');
+    }
+
+    const limit = section === 'summary'
+        ? ONE_PAGE_LIMITS.summary
+        : RESUME_TEXT_LIMITS[section]?.[field];
+    if (!limit) return value;
+    return RICH_TEXT_FIELDS.has(field) ? truncateHtmlToLimit(value, limit) : truncateText(value, limit);
+};
+
 // --- Tiptap Editor Wrapper Component ---
 const TiptapEditor = ({ value, onChange, placeholder, maxLength = 1000 }: { value: string; onChange: (html: string) => void; placeholder?: string; maxLength?: number }) => {
     const [mounted, setMounted] = useState(false);
@@ -173,7 +239,11 @@ const TiptapEditor = ({ value, onChange, placeholder, maxLength = 1000 }: { valu
         content: value || '<p></p>',
         onUpdate: ({ editor }) => {
             const nextValue = editor.getHTML();
-            if (plainTextLength(nextValue) <= maxLength) onChange(nextValue);
+            const limitedValue = truncateHtmlToLimit(nextValue, maxLength);
+            if (limitedValue !== nextValue) {
+                editor.commands.setContent(limitedValue, { emitUpdate: false });
+            }
+            onChange(limitedValue);
         },
         editorProps: {
             attributes: {
@@ -264,7 +334,7 @@ const TiptapEditor = ({ value, onChange, placeholder, maxLength = 1000 }: { valu
 const LimitedInputField = ({ label, value, onChange, limit, type = 'text', placeholder }: { label: string; value: string; onChange: (value: string) => void; limit: number; type?: string; placeholder?: string }) => (
     <div>
         <Label>{label}</Label>
-        <Input type={type} value={value} maxLength={limit} placeholder={placeholder} onChange={e => onChange(e.target.value)} />
+        <Input type={type} value={value} maxLength={limit} placeholder={placeholder} onChange={e => onChange(truncateText(e.target.value, limit))} />
         <CharacterLimitHint value={value} limit={limit} />
     </div>
 );
@@ -426,13 +496,13 @@ const SkillTagInput = ({ value, onChange, maxTags = ONE_PAGE_LIMITS.skillsPerCat
 
     // Convert comma-string ↔ array
     const tags: string[] = value
-        ? value.split(',').map(s => s.trim()).filter(Boolean)
+        ? value.split(',').map(s => s.trim().slice(0, MAX_SKILL_TAG_CHARACTERS)).filter(Boolean).slice(0, maxTags)
         : [];
 
-    const updateTags = (next: string[]) => onChange(next.join(', '));
+    const updateTags = (next: string[]) => onChange(next.slice(0, maxTags).map(tag => tag.slice(0, MAX_SKILL_TAG_CHARACTERS)).join(', '));
 
     const addTag = (tag: string) => {
-        const clean = tag.trim();
+        const clean = tag.trim().slice(0, MAX_SKILL_TAG_CHARACTERS);
         if (!clean || tags.includes(clean) || tags.length >= maxTags) { setInput(''); return; }
         updateTags([...tags, clean]);
         setInput('');
@@ -476,7 +546,8 @@ const SkillTagInput = ({ value, onChange, maxTags = ONE_PAGE_LIMITS.skillsPerCat
                 <input
                     ref={inputRef}
                     value={input}
-                    onChange={e => setInput(e.target.value)}
+                    maxLength={MAX_SKILL_TAG_CHARACTERS}
+                    onChange={e => setInput(e.target.value.slice(0, MAX_SKILL_TAG_CHARACTERS))}
                     onKeyDown={handleKey}
                     onFocus={() => setFocused(true)}
                     onBlur={() => setTimeout(() => setFocused(false), 150)}
@@ -521,7 +592,7 @@ const DynamicSection = ({ sectionKey, data, onChange, onAdd, onRemove, onEnhance
                         let InputComponent;
                         const inputProps: any = {
                             value: item[field.key] || '',
-                            onChange: (e: any) => onChange(sectionKey, index, field.key, e.target.value),
+                            onChange: (e: any) => onChange(sectionKey, index, field.key, field.maxLength ? truncateText(e.target.value, field.maxLength) : e.target.value),
                             placeholder: `Enter ${field.label.toLowerCase()}...`,
                             maxLength: field.maxLength,
                         };
@@ -533,7 +604,7 @@ const DynamicSection = ({ sectionKey, data, onChange, onAdd, onRemove, onEnhance
                             inputProps.maxLength = field.maxLength || 1000;
                         } else if (field.type === 'plain_textarea') {
                             InputComponent = Textarea;
-                            inputProps.onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => onChange(sectionKey, index, field.key, e.target.value);
+                            inputProps.onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => onChange(sectionKey, index, field.key, field.maxLength ? truncateText(e.target.value, field.maxLength) : e.target.value);
                             inputProps.rows = 5;
                             inputProps.placeholder = `Enter ${field.label.toLowerCase()}...`;
                         } else if (field.type === 'skill_tags') {
@@ -583,7 +654,7 @@ const LanguagesForm = ({ data, onChange, onAdd, onRemove }: any) => (
                 <div className="flex-1 grid grid-cols-2 gap-3">
                     <div>
                         <Label>Language</Label>
-                        <Input value={item.language || ''} maxLength={50} placeholder="e.g. Spanish" onChange={e => onChange('languages', index, 'language', e.target.value)} />
+                        <Input value={item.language || ''} maxLength={50} placeholder="e.g. Spanish" onChange={e => onChange('languages', index, 'language', truncateText(e.target.value, 50))} />
                         <CharacterLimitHint value={item.language || ''} limit={50} />
                     </div>
                     <div>
@@ -1647,12 +1718,13 @@ export default function ResumeBuilder() {
     const videoRef = useRef<HTMLVideoElement>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
-    const handlePersonalChange = (field: keyof PersonalInfo, value: string) => { setResumeData((prev: ResumeData) => ({ ...prev, personal: { ...prev.personal, [field]: value } })); };
-    const handleSummaryChange = (value: string) => { setResumeData((prev: ResumeData) => ({...prev, summary: value})); };
+    const handlePersonalChange = (field: keyof PersonalInfo, value: string) => { setResumeData((prev: ResumeData) => ({ ...prev, personal: { ...prev.personal, [field]: limitResumeValue('personal', field, value) } })); };
+    const handleSummaryChange = (value: string) => { setResumeData((prev: ResumeData) => ({...prev, summary: limitResumeValue('summary', 'summary', value)})); };
     const handleDynamicChange = <T extends ExperienceEntry | EducationEntry | SkillCategory | CertificationEntry | PublicationEntry | ProjectEntry>(section: keyof ResumeData, index: number, field: keyof T, value: any) => {
         setResumeData((prev: ResumeData) => {
             const newList = [...(prev[section] as T[])];
-            newList[index] = { ...newList[index], [field]: value };
+            const limitedValue = typeof value === 'string' ? limitResumeValue(section, String(field), value) : value;
+            newList[index] = { ...newList[index], [field]: limitedValue };
             return { ...prev, [section]: newList };
         });
     };
@@ -1728,75 +1800,75 @@ export default function ResumeBuilder() {
         normalized.awards     = Array.isArray(normalized.awards)     ? normalized.awards     : [];
 
         normalized.personal = {
-            name: typeof normalized.personal?.name === 'string' ? normalized.personal.name : '',
-            email: typeof normalized.personal?.email === 'string' ? normalized.personal.email : '',
-            phone: typeof normalized.personal?.phone === 'string' ? normalized.personal.phone : '',
-            location: typeof normalized.personal?.location === 'string' ? normalized.personal.location : '',
+            name: typeof normalized.personal?.name === 'string' ? limitResumeValue('personal', 'name', normalized.personal.name) : '',
+            email: typeof normalized.personal?.email === 'string' ? limitResumeValue('personal', 'email', normalized.personal.email) : '',
+            phone: typeof normalized.personal?.phone === 'string' ? limitResumeValue('personal', 'phone', normalized.personal.phone) : '',
+            location: typeof normalized.personal?.location === 'string' ? limitResumeValue('personal', 'location', normalized.personal.location) : '',
             legalStatus: typeof normalized.personal?.legalStatus === 'string' ? normalized.personal.legalStatus : 'Prefer not to say',
-            website: typeof normalized.personal?.website === 'string' ? normalized.personal.website : '',
-            linkedin: typeof normalized.personal?.linkedin === 'string' ? normalized.personal.linkedin : '',
+            website: typeof normalized.personal?.website === 'string' ? limitResumeValue('personal', 'website', normalized.personal.website) : '',
+            linkedin: typeof normalized.personal?.linkedin === 'string' ? limitResumeValue('personal', 'linkedin', normalized.personal.linkedin) : '',
         };
 
-        normalized.summary = toEditorHtml(typeof normalized.summary === 'string' ? normalized.summary : '');
+        normalized.summary = limitResumeValue('summary', 'summary', toEditorHtml(typeof normalized.summary === 'string' ? normalized.summary : ''));
 
-        normalized.experience = normalized.experience.map( (item: any) => ({
+        normalized.experience = normalized.experience.slice(0, ONE_PAGE_LIMITS.experienceEntries).map( (item: any) => ({
             id: item.id || crypto.randomUUID(),
-            jobTitle: typeof item.jobTitle === 'string' ? item.jobTitle : '',
-            company: typeof item.company === 'string' ? item.company : '',
-            dates: typeof item.dates === 'string' ? item.dates : '',
-            description: toEditorHtml(typeof item.description === 'string' ? item.description : '')
+            jobTitle: typeof item.jobTitle === 'string' ? limitResumeValue('experience', 'jobTitle', item.jobTitle) : '',
+            company: typeof item.company === 'string' ? limitResumeValue('experience', 'company', item.company) : '',
+            dates: typeof item.dates === 'string' ? limitResumeValue('experience', 'dates', item.dates) : '',
+            description: limitResumeValue('experience', 'description', toEditorHtml(typeof item.description === 'string' ? item.description : ''))
         }));
-        normalized.education = normalized.education.map( (item: any) => ({
+        normalized.education = normalized.education.slice(0, ONE_PAGE_LIMITS.educationEntries).map( (item: any) => ({
             id: item.id || crypto.randomUUID(),
-            degree: typeof item.degree === 'string' ? item.degree : '',
-            institution: typeof item.institution === 'string' ? item.institution : '',
-            graduationYear: typeof item.graduationYear === 'string' ? item.graduationYear : '',
-            gpa: typeof item.gpa === 'string' ? item.gpa : '',
-            achievements: toEditorHtml(typeof item.achievements === 'string' ? item.achievements : '')
+            degree: typeof item.degree === 'string' ? limitResumeValue('education', 'degree', item.degree) : '',
+            institution: typeof item.institution === 'string' ? limitResumeValue('education', 'institution', item.institution) : '',
+            graduationYear: typeof item.graduationYear === 'string' ? limitResumeValue('education', 'graduationYear', item.graduationYear) : '',
+            gpa: typeof item.gpa === 'string' ? limitResumeValue('education', 'gpa', item.gpa) : '',
+            achievements: limitResumeValue('education', 'achievements', toEditorHtml(typeof item.achievements === 'string' ? item.achievements : ''))
         }));
-        normalized.skills = normalized.skills.map( (item: any) => ({
+        normalized.skills = normalized.skills.slice(0, ONE_PAGE_LIMITS.skillCategories).map( (item: any) => ({
             id: item.id || crypto.randomUUID(),
-            category: typeof item.category === 'string' ? item.category : '',
-            skills_list: typeof item.skills_list === 'string' ? (item.skills_list || defaultPlainValue) : defaultPlainValue,
+            category: typeof item.category === 'string' ? limitResumeValue('skills', 'category', item.category) : '',
+            skills_list: typeof item.skills_list === 'string' ? (limitResumeValue('skills', 'skills_list', item.skills_list) || defaultPlainValue) : defaultPlainValue,
         }));
-        normalized.projects = normalized.projects.map( (item: any) => ({
+        normalized.projects = normalized.projects.slice(0, ONE_PAGE_LIMITS.projectEntries).map( (item: any) => ({
             id: item.id || crypto.randomUUID(),
-            title: typeof item.title === 'string' ? item.title : '',
-            date: typeof item.date === 'string' ? item.date : '',
-            description: toEditorHtml(typeof item.description === 'string' ? item.description : ''),
+            title: typeof item.title === 'string' ? limitResumeValue('projects', 'title', item.title) : '',
+            date: typeof item.date === 'string' ? limitResumeValue('projects', 'date', item.date) : '',
+            description: limitResumeValue('projects', 'description', toEditorHtml(typeof item.description === 'string' ? item.description : '')),
         }));
         normalized.publications = normalized.publications.map( (item: any) => ({
             id: item.id || crypto.randomUUID(),
-            title: typeof item.title === 'string' ? item.title : '',
-            authors: typeof item.authors === 'string' ? item.authors : '',
-            journal: typeof item.journal === 'string' ? item.journal : '',
-            date: typeof item.date === 'string' ? item.date : '',
-            link: typeof item.link === 'string' ? item.link : '',
+            title: typeof item.title === 'string' ? limitResumeValue('publications', 'title', item.title) : '',
+            authors: typeof item.authors === 'string' ? limitResumeValue('publications', 'authors', item.authors) : '',
+            journal: typeof item.journal === 'string' ? limitResumeValue('publications', 'journal', item.journal) : '',
+            date: typeof item.date === 'string' ? limitResumeValue('publications', 'date', item.date) : '',
+            link: typeof item.link === 'string' ? limitResumeValue('publications', 'link', item.link) : '',
         }));
-        normalized.certifications = normalized.certifications.map( (item: any) => ({
+        normalized.certifications = normalized.certifications.slice(0, ONE_PAGE_LIMITS.certificationEntries).map( (item: any) => ({
             id: item.id || crypto.randomUUID(),
-            name: typeof item.name === 'string' ? item.name : '',
-            issuer: typeof item.issuer === 'string' ? item.issuer : '',
-            date: typeof item.date === 'string' ? item.date : '',
+            name: typeof item.name === 'string' ? limitResumeValue('certifications', 'name', item.name) : '',
+            issuer: typeof item.issuer === 'string' ? limitResumeValue('certifications', 'issuer', item.issuer) : '',
+            date: typeof item.date === 'string' ? limitResumeValue('certifications', 'date', item.date) : '',
         }));
         normalized.languages = normalized.languages.map((item: any) => ({
             id: item.id || crypto.randomUUID(),
-            language: typeof item.language === 'string' ? item.language : '',
+            language: typeof item.language === 'string' ? limitResumeValue('languages', 'language', item.language) : '',
             proficiency: typeof item.proficiency === 'string' ? item.proficiency : 'Conversational',
         }));
         normalized.volunteer = normalized.volunteer.map((item: any) => ({
             id: item.id || crypto.randomUUID(),
-            role: typeof item.role === 'string' ? item.role : '',
-            organization: typeof item.organization === 'string' ? item.organization : '',
-            dates: typeof item.dates === 'string' ? item.dates : '',
-            description: toEditorHtml(typeof item.description === 'string' ? item.description : ''),
+            role: typeof item.role === 'string' ? limitResumeValue('volunteer', 'role', item.role) : '',
+            organization: typeof item.organization === 'string' ? limitResumeValue('volunteer', 'organization', item.organization) : '',
+            dates: typeof item.dates === 'string' ? limitResumeValue('volunteer', 'dates', item.dates) : '',
+            description: limitResumeValue('volunteer', 'description', toEditorHtml(typeof item.description === 'string' ? item.description : '')),
         }));
         normalized.awards = normalized.awards.map((item: any) => ({
             id: item.id || crypto.randomUUID(),
-            title: typeof item.title === 'string' ? item.title : '',
-            organization: typeof item.organization === 'string' ? item.organization : '',
-            date: typeof item.date === 'string' ? item.date : '',
-            description: toEditorHtml(typeof item.description === 'string' ? item.description : ''),
+            title: typeof item.title === 'string' ? limitResumeValue('awards', 'title', item.title) : '',
+            organization: typeof item.organization === 'string' ? limitResumeValue('awards', 'organization', item.organization) : '',
+            date: typeof item.date === 'string' ? limitResumeValue('awards', 'date', item.date) : '',
+            description: limitResumeValue('awards', 'description', toEditorHtml(typeof item.description === 'string' ? item.description : '')),
         }));
 
         return normalized;
