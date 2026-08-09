@@ -1925,7 +1925,7 @@ def apply_to_job(job_id):
                     )
                     app_data['resumeSnapshot'] = resume_data
             except Exception as snap_err:
-                print(f”[apply] resume snapshot error: {snap_err}”)
+                print(f"[apply] resume snapshot error: {snap_err}")
 
             # Launch background analysis â€” uses candidate's own API key, zero platform cost
             try:
