@@ -195,7 +195,11 @@ export default function CandidateDashboardPage() {
   const [completion,         setCompletion]         = useState<{ score: number; missing: string[] }>({ score: 0, missing: [] });
   const [applications,       setApplications]       = useState<any[]>([]);
   const [latestApp,          setLatestApp]          = useState<any>(null);
-  const [statsLoading,       setStatsLoading]       = useState(true);
+  // The local developer workspace starts with a complete, honest zero state
+  // instead of a permanent-looking spinner when its optional API is offline.
+  // Production still shows a loading state until the authenticated data call
+  // completes.
+  const [statsLoading,       setStatsLoading]       = useState(() => process.env.NODE_ENV === 'production');
 
   useEffect(() => {
     if (loading) return;
@@ -262,29 +266,27 @@ export default function CandidateDashboardPage() {
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-3xl border border-indigo-100 bg-gradient-to-r from-indigo-100 via-white to-slate-100 p-7 shadow-xl shadow-slate-200/50 dark:border-indigo-300/15 dark:from-indigo-950/60 dark:via-[#0e1630] dark:to-violet-950/50 dark:shadow-2xl"
+          className="cc-workspace-header relative overflow-hidden rounded-3xl p-7"
         >
           <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
           <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-5">
             <div className="space-y-1.5">
-              <span className="rounded-full border border-indigo-200 bg-indigo-100 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/20 dark:text-indigo-300">
-                Candidate Control Center
-              </span>
-              <h1 className="text-3xl font-black text-slate-900 md:text-4xl dark:bg-gradient-to-r dark:from-white dark:to-zinc-400 dark:bg-clip-text dark:text-transparent">
+              <p className="cc-eyebrow">Candidate workspace</p>
+              <h1 className="text-3xl font-black text-[var(--cc-text)] md:text-4xl">
                 Welcome back, {user.name} 👋
               </h1>
-              <p className="max-w-lg text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
+              <p className="max-w-lg text-sm leading-relaxed text-muted">
                 {total === 0
                   ? 'No applications yet — browse open jobs and apply to get started.'
                   : `${total} applications submitted · ${responseRate}% response rate · ${interviewRate}% interview rate`}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-emerald-100 bg-white/85 p-3 shadow-sm dark:border-white/5 dark:bg-zinc-950/80">
+            <div className="cc-card flex shrink-0 items-center gap-3 rounded-2xl p-3">
               <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
               <div className="space-y-0.5 text-xs">
-                <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-500">BYOK Chain Status</span>
-                <span className="font-semibold text-emerald-400 font-mono text-[10px]">✓ Active (Rotating Stack)</span>
+                <span className="block text-[9px] font-bold uppercase tracking-wider text-muted">Job search focus</span>
+                <span className="font-mono text-[10px] font-semibold text-emerald-500">Keep your profile current</span>
               </div>
             </div>
           </div>
@@ -303,7 +305,7 @@ export default function CandidateDashboardPage() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06 }}
-              className="bg-[#0B0F19]/40 border border-white/10 rounded-2xl p-4 hover:border-indigo-500/30 transition"
+              className="cc-card rounded-2xl p-4 transition hover:border-indigo-500/30"
             >
               <div className="flex justify-between items-start mb-2">
                 <span className="text-[9px] font-bold font-mono tracking-wider text-zinc-500 uppercase">{kpi.label}</span>
@@ -323,7 +325,7 @@ export default function CandidateDashboardPage() {
 
             {/* Application funnel + weekly sparkline */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-slate-950/40 border border-white/10 rounded-2xl p-5 space-y-4">
+              <div className="cc-card space-y-4 rounded-2xl p-5">
                 <div className="flex items-center gap-2 pb-2 border-b border-white/5">
                   <BarChart2 className="w-4 h-4 text-indigo-400" />
                   <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Application Funnel</h3>
@@ -335,7 +337,7 @@ export default function CandidateDashboardPage() {
                 )}
               </div>
 
-              <div className="bg-slate-950/40 border border-white/10 rounded-2xl p-5 space-y-4">
+              <div className="cc-card space-y-4 rounded-2xl p-5">
                 <div className="flex items-center gap-2 pb-2 border-b border-white/5">
                   <Activity className="w-4 h-4 text-indigo-400" />
                   <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Weekly Activity</h3>
@@ -349,12 +351,12 @@ export default function CandidateDashboardPage() {
             </div>
 
             {/* AI Insight */}
-            <div className="bg-slate-950/40 border border-indigo-500/20 rounded-2xl p-5">
+            <div className="cc-card rounded-2xl border-indigo-500/20 p-5">
               <AIInsightCard applications={applications} atsScore={atsScore} />
             </div>
 
             {/* Application Pipeline stepper */}
-            <div className="bg-slate-950/40 border border-white/10 rounded-2xl p-5 space-y-4">
+            <div className="cc-card space-y-4 rounded-2xl p-5">
               <div className="flex justify-between items-center border-b border-white/5 pb-3">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-indigo-400" /> Pipeline
@@ -417,7 +419,7 @@ export default function CandidateDashboardPage() {
                 { name: 'AI Practice',     href: '/candidate/interview/practice',icon: <Mic className="w-4 h-4 text-purple-400" />,    color: 'hover:border-purple-500/50' },
               ].map(act => (
                 <Link key={act.name} href={act.href}
-                  className={`min-h-[128px] justify-between bg-white/85 border border-slate-200 p-4 rounded-2xl transition flex flex-col gap-3 group dark:bg-indigo-950/30 dark:border-indigo-300/15 ${act.color}`}>
+                  className={`cc-card group flex min-h-[128px] flex-col justify-between gap-3 rounded-2xl p-4 transition ${act.color}`}>
                   <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 dark:bg-white/5 dark:border-white/10 flex items-center justify-center">{act.icon}</div>
                   <span className="text-xs font-bold text-slate-800 dark:text-white group-hover:text-indigo-500 transition leading-tight">{act.name}</span>
                   <ChevronRight className="w-3.5 h-3.5 text-indigo-400 group-hover:translate-x-0.5 transition-transform" />
@@ -431,7 +433,7 @@ export default function CandidateDashboardPage() {
           <div className="space-y-5">
 
             {/* Profile strength */}
-            <div className="bg-slate-950/40 border border-white/10 rounded-2xl p-5 space-y-4">
+            <div className="cc-card space-y-4 rounded-2xl p-5">
               <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" /> Profile Strength
@@ -464,7 +466,7 @@ export default function CandidateDashboardPage() {
             </div>
 
             {/* ATS score gauge */}
-            <div className="bg-slate-950/40 border border-white/10 rounded-2xl p-5 space-y-4">
+            <div className="cc-card space-y-4 rounded-2xl p-5">
               <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-purple-400" /> Resume Score
@@ -498,7 +500,7 @@ export default function CandidateDashboardPage() {
             </div>
 
             {/* Recent applications */}
-            <div className="bg-slate-950/40 border border-white/10 rounded-2xl p-5 space-y-3">
+            <div className="cc-card space-y-3 rounded-2xl p-5">
               <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-2">
                   <FileText className="w-4 h-4 text-cyan-400" /> Recent

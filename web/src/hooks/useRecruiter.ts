@@ -1,7 +1,9 @@
+import { useAuth } from '@/contexts/AuthContext';
+
 export function useRecruiter() {
-  // Mock for now — later replace with useSession or API fetch
+  const { user } = useAuth();
   return {
-    name: 'Recruiter 👋',
-    email: 'recruiter@recruitedge.com',
+    name: user?.role === 'recruiter' ? user.name : '',
+    email: user?.role === 'recruiter' ? user.email : '',
   };
 }

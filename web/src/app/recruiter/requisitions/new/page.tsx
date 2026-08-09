@@ -14,7 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 import {
   ArrowLeft, ArrowRight, RefreshCw, Briefcase, Sparkles, Plus, X, Eye,
-  DollarSign, MapPin, Clock, CheckCircle2, FileText, ListChecks, Rocket, Save,
+  MapPin, Clock, CheckCircle2, FileText, ListChecks, Rocket, Save,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE as API } from '@/lib/api';
@@ -55,9 +55,9 @@ function Field({ label, children, hint }: { label: string; children: React.React
   );
 }
 
-const inputCls = "w-full p-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm";
-const chipOn  = "px-4 py-2 rounded-xl text-xs font-bold border transition bg-purple-600/30 border-purple-500/50 text-purple-200";
-const chipOff = "px-4 py-2 rounded-xl text-xs font-bold border transition bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10";
+const inputCls = "w-full rounded-xl border p-3 text-sm placeholder:text-muted";
+const chipOn  = "rounded-xl border border-[var(--cc-accent)]/45 bg-[var(--cc-accent)]/14 px-4 py-2 text-xs font-bold text-[var(--cc-accent)] transition";
+const chipOff = "rounded-xl border border-[var(--cc-border)] bg-[var(--cc-surface-solid)] px-4 py-2 text-xs font-bold text-muted transition hover:border-[var(--cc-accent)]/35 hover:text-[var(--cc-text)]";
 
 function NewRequisitionContent() {
   const router = useRouter();
@@ -65,7 +65,7 @@ function NewRequisitionContent() {
   const editId  = searchParams.get('edit');
   const cloneId = searchParams.get('clone');
   const isEditing = !!editId;
-  const { user, getToken } = useAuth();
+  const { getToken } = useAuth();
 
   const [step, setStep] = useState<Step>(0);
   const [formData, setFormData] = useState({
@@ -236,16 +236,19 @@ function NewRequisitionContent() {
 
   return (
     <RecruiterLayout>
-      <div className="max-w-3xl mx-auto text-white space-y-6">
-        <Link href="/recruiter/requisitions" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white text-sm transition">
+      <div className="cc-page mx-auto max-w-3xl space-y-6">
+        <Link href="/recruiter/requisitions" className="inline-flex items-center gap-2 text-sm text-muted transition hover:text-[var(--cc-text)]">
           <ArrowLeft className="w-4 h-4" /> Back to Requisitions
         </Link>
 
-        <div className="flex items-center gap-3">
-          <Briefcase className="w-6 h-6 text-purple-400" />
-          <h1 className="text-2xl font-bold">
-            {isEditing ? 'Edit Requisition' : cloneId ? 'Clone Requisition' : 'Post a Job'}
-          </h1>
+        <div className="cc-workspace-header flex items-center gap-3 rounded-2xl p-6">
+          <Briefcase className="h-6 w-6 text-[var(--cc-accent)]" />
+          <div className="relative z-10">
+            <p className="cc-eyebrow mb-1">Role setup</p>
+            <h1 className="text-2xl font-bold text-[var(--cc-text)]">
+              {isEditing ? 'Edit requisition' : cloneId ? 'Clone requisition' : 'Post a job'}
+            </h1>
+          </div>
           {existingStatus && isEditing && (
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/10 text-zinc-300 uppercase tracking-wider">{existingStatus}</span>
           )}
@@ -256,9 +259,9 @@ function NewRequisitionContent() {
           {STEPS.map((s, i) => (
             <button key={s.label} onClick={() => { if (i < step || !stepError(step)) setStep(i as Step); else toast.error(stepError(step)!); }}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-wider border transition ${
-                i === step ? 'bg-purple-600/25 border-purple-500/50 text-purple-200'
-                : i < step ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
-                : 'bg-white/3 border-white/8 text-zinc-500'
+                i === step ? 'cc-filter-chip bg-[var(--cc-accent)]/15 border-[var(--cc-accent)]/50 text-[var(--cc-accent)]'
+                : i < step ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-500'
+                : 'border-[var(--cc-border)] bg-[var(--cc-surface-solid)] text-muted'
               }`}>
               {i < step ? <CheckCircle2 className="w-3.5 h-3.5" /> : s.icon} {s.label}
             </button>

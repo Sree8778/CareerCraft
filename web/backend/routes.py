@@ -68,13 +68,31 @@ def _require_recruiter():
     """Return a 403 response unless the authenticated user is a recruiter or admin."""
     from firebase_utils import db, firebase_initialized
     uid = getattr(request, 'uid', None)
-    if not uid or not (firebase_initialized and db):
+    if not uid:
+        return jsonify({"error": "Recruiter access required"}), 403
+    # Local mock sessions are created only by the debug-only auth decorator.
+    # Let developers exercise recruiter screens without a Firebase Admin setup.
+    if not (firebase_initialized and db):
+        from flask import current_app
+        if current_app.debug and str(getattr(request, 'user', {}).get('email', '')).endswith('@recruitedge.mock'):
+            return None
         return jsonify({"error": "Recruiter access required"}), 403
     user_doc = db.collection('users').document(uid).get()
     user_data = user_doc.to_dict() if user_doc.exists else {}
     if user_data.get('role') == 'recruiter' or is_admin_user(getattr(request, 'user', {})):
         return None
     return jsonify({"error": "Recruiter access required"}), 403
+
+
+def _json_safe(value):
+    """Convert Firestore timestamps and nested values into JSON-safe data."""
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
 
 def _validate_webhook_url(url):
     """Allow only public HTTPS webhook endpoints to prevent SSRF."""
@@ -329,6 +347,8 @@ def verify_identity_route():
 
     if 'stateId' not in request.files or 'selfie' not in request.files:
         return jsonify({"error": "Missing stateId or selfie image files"}), 400
+    if request.form.get('consent') != 'true':
+        return jsonify({"error": "Explicit consent is required for identity verification"}), 400
         
     state_id_file = request.files['stateId']
     selfie_file = request.files['selfie']
@@ -630,6 +650,8 @@ def get_candidate_resume_for_recruiter(uid):
         if firebase_initialized and db:
             resume_doc = db.collection('resumes').document(uid).get()
             user_doc = db.collection('users').document(uid).get()
+            if not user_doc.exists or (user_doc.to_dict() or {}).get('role') != 'candidate':
+                return jsonify({"error": "Candidate not found"}), 404
             resume_data = resume_doc.to_dict().get('resumeData', {}) if resume_doc.exists else {}
             user_data = user_doc.to_dict() if user_doc.exists else {}
             return jsonify({
@@ -639,12 +661,79 @@ def get_candidate_resume_for_recruiter(uid):
                     "email": user_data.get('email', ''),
                     "phone": user_data.get('phone', ''),
                     "location": user_data.get('location', ''),
+                    "targetRole": user_data.get('targetRole') or user_data.get('currentRole', ''),
+                    "avatar": user_data.get('avatar') or user_data.get('profilePicture', ''),
+                    "recruiterNotes": user_data.get('recruiterNotes', ''),
                 }
             }), 200
         return jsonify({"resumeData": None, "userProfile": {}}), 200
     except Exception as e:
         print(f"Error fetching candidate resume: {e}")
         return jsonify({"resumeData": None, "userProfile": {}}), 200
+
+
+@api_bp.route('/candidates/<uid>/interviews', methods=['GET'])
+@require_auth
+def get_candidate_interviews_for_recruiter(uid):
+    """Return a candidate's interview summaries through the recruiter API.
+
+    Recruiter pages must not read another user's Firestore documents directly:
+    the browser rules deliberately restrict those documents to their owner.
+    """
+    access_error = _require_recruiter()
+    if access_error:
+        return access_error
+    try:
+        from firebase_utils import db, firebase_initialized
+        if not (firebase_initialized and db):
+            return jsonify({"interviews": []}), 200
+
+        user_doc = db.collection('users').document(uid).get()
+        if not user_doc.exists or (user_doc.to_dict() or {}).get('role') != 'candidate':
+            return jsonify({"error": "Candidate not found"}), 404
+
+        interviews = []
+        for interview_doc in db.collection('interviews').where('candidateId', '==', uid).stream():
+            interviews.append({"id": interview_doc.id, **_json_safe(interview_doc.to_dict() or {})})
+
+        def interview_time(interview):
+            return str(interview.get('completedAt') or interview.get('startedAt') or '')
+
+        interviews.sort(key=interview_time, reverse=True)
+        return jsonify({"interviews": interviews}), 200
+    except Exception as e:
+        print(f"Error fetching recruiter interview summaries: {e}")
+        return jsonify({"error": "Failed to load candidate interviews"}), 500
+
+
+@api_bp.route('/candidates/<uid>/notes', methods=['PATCH'])
+@require_auth
+def update_candidate_notes_for_recruiter(uid):
+    """Save recruiter-only notes via the backend, preserving owner-only client rules."""
+    access_error = _require_recruiter()
+    if access_error:
+        return access_error
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    notes = request.json.get('notes', '')
+    if not isinstance(notes, str):
+        return jsonify({"error": "Notes must be text"}), 400
+    if len(notes) > 5000:
+        return jsonify({"error": "Notes must be 5,000 characters or fewer"}), 400
+
+    try:
+        from firebase_utils import db, firebase_initialized
+        if not (firebase_initialized and db):
+            return jsonify({"error": "Candidate notes are unavailable without Firebase"}), 503
+        user_ref = db.collection('users').document(uid)
+        if not user_ref.get().exists:
+            return jsonify({"error": "Candidate not found"}), 404
+        user_ref.update({"recruiterNotes": notes, "recruiterNotesUpdatedAt": datetime.datetime.utcnow()})
+        return jsonify({"notes": notes}), 200
+    except Exception as e:
+        print(f"Error updating recruiter notes: {e}")
+        return jsonify({"error": "Failed to save candidate notes"}), 500
 
 @api_bp.route('/candidates/search-copilot', methods=['POST'])
 @require_auth
@@ -2422,6 +2511,12 @@ def trigger_crawler():
         return access_error
     try:
         count = crawl_jobs_to_db()
+        if count == 0:
+            return jsonify({
+                "status": "not_configured",
+                "ingestedCount": 0,
+                "message": "External job ingestion is not configured. Post roles from the recruiter workspace instead.",
+            }), 503
         return jsonify({"status": "success", "ingestedCount": count}), 200
     except Exception as e:
         print(f"Error triggering job crawler: {e}")

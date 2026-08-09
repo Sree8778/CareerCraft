@@ -21,7 +21,6 @@ const JOB_BOARDS = [
   { name: 'Glassdoor', url: 'https://www.glassdoor.com/Job/jobs.htm?sc.keyword=', icon: '🏢', color: 'border-emerald-500/30 hover:border-emerald-400/60' },
   { name: 'Wellfound (AngelList)', url: 'https://wellfound.com/jobs?role=', icon: '🚀', color: 'border-orange-500/30 hover:border-orange-400/60' },
   { name: 'Dice (Tech)', url: 'https://www.dice.com/jobs?q=', icon: '🎲', color: 'border-red-500/30 hover:border-red-400/60' },
-  { name: 'GitHub Jobs', url: 'https://jobs.github.com/?search=', icon: '⚙️', color: 'border-zinc-500/30 hover:border-zinc-400/60' },
 ];
 
 export default function RecruiterSourcingPage() {

@@ -75,6 +75,7 @@ export default function CandidateInterviewPage() {
   const [selfieBlob, setSelfieBlob] = useState<Blob | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [verificationResult, setVerificationResult] = useState<any>(null);
+  const [identityConsent, setIdentityConsent] = useState(false);
   
   // Proctoring States
   const [virtualAudioChecked, setVirtualAudioChecked] = useState(false);
@@ -101,6 +102,7 @@ export default function CandidateInterviewPage() {
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef('');
+  const fullscreenExitCountRef = useRef(0);
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
   // 30-minute Timer Effect
@@ -117,10 +119,19 @@ export default function CandidateInterviewPage() {
   }, [isTimerRunning, timer]);
 
   useEffect(() => {
-    const syncFullscreenState = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    const syncFullscreenState = () => {
+      const active = Boolean(document.fullscreenElement);
+      setIsFullscreen(active);
+      if (step === 3 && !active) {
+        const next = fullscreenExitCountRef.current + 1;
+        fullscreenExitCountRef.current = next;
+        toast.warning(`Fullscreen exited. This focus event has been logged. (${next})`);
+        logProctoringEvent('fullscreen_exit', next);
+      }
+    };
     document.addEventListener('fullscreenchange', syncFullscreenState);
     return () => document.removeEventListener('fullscreenchange', syncFullscreenState);
-  }, []);
+  }, [step]);
 
   useEffect(() => {
     return () => {
@@ -146,7 +157,7 @@ export default function CandidateInterviewPage() {
           setTabSwitches(prev => {
             const newVal = prev + 1;
             toast.warning(`Tab switch detected! This violation has been logged. (${newVal}/3)`);
-            logProctoringViolation("Tab switched out of active window", newVal);
+            logProctoringEvent('tab_switch', newVal);
             return newVal;
           });
         }
@@ -243,12 +254,17 @@ export default function CandidateInterviewPage() {
       toast.error("Please capture your selfie and upload your State ID first.");
       return;
     }
+    if (!identityConsent) {
+      toast.error('Please confirm consent before starting identity verification.');
+      return;
+    }
 
     setLoading(true);
     const toastId = toast.loading("Performing Biometric Face Comparison...");
     try {
       const formData = new FormData();
       formData.append('stateId', stateIdFile);
+      formData.append('consent', 'true');
       
       const fileSelfie = new File([selfieBlob], "selfie.jpg", { type: "image/jpeg" });
       formData.append('selfie', fileSelfie);
@@ -319,6 +335,7 @@ export default function CandidateInterviewPage() {
     
     setLoading(true);
     try {
+      fullscreenExitCountRef.current = 0;
       const uniquePart = typeof crypto?.randomUUID === 'function'
         ? crypto.randomUUID()
         : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -374,7 +391,12 @@ export default function CandidateInterviewPage() {
         },
         verification: {
           faceMatchScore: verificationResult?.matchScore ?? null,
-          verifiedAt: Timestamp.now()
+          matched: verificationResult?.matched === true,
+          confidence: verificationResult?.confidence ?? 'low',
+          verificationLogs: verificationResult?.analysis ? [verificationResult.analysis] : [],
+          imagesRetained: false,
+          consentCapturedAt: Timestamp.now(),
+          verifiedAt: Timestamp.now(),
         }
       };
 
@@ -575,21 +597,26 @@ export default function CandidateInterviewPage() {
     }
   };
 
-  // Log Proctoring Violation to Firestore
-  const logProctoringViolation = async (violationText: string, violationCount: number) => {
+  // Browser-detectable focus events only. This does not claim to detect
+  // virtual audio devices or activity in other applications.
+  async function logProctoringEvent(event: 'tab_switch' | 'fullscreen_exit', count: number) {
     if (!interviewId) return;
+    const field = event === 'tab_switch' ? 'tabSwitchesCount' : 'fullscreenExitsCount';
+    const label = event === 'tab_switch'
+      ? 'Tab switched out of the active interview window'
+      : 'Fullscreen exited during the interview';
     try {
       await setDoc(doc(db, 'interviews', interviewId), {
         proctoringViolations: {
-          tabSwitchesCount: violationCount,
-          cheatingFlags: arrayUnion(violationText),
+          [field]: count,
+          cheatingFlags: arrayUnion(label),
           lastViolationRecordedAt: Timestamp.now(),
         },
       }, { merge: true });
     } catch (err) {
-      console.error("Failed to log violation", err);
+      console.error("Failed to log focus event", err);
     }
-  };
+  }
 
   // Complete Interview and Generate Scorecard
   const handleCompleteInterview = async () => {
@@ -662,7 +689,7 @@ export default function CandidateInterviewPage() {
               <div>
                 <p className="cc-eyebrow mb-1">Interview practice</p>
                 <h1 className="text-2xl font-bold tracking-tight md:text-3xl">AI Voice Interview</h1>
-                <p className="mt-1 text-sm text-[var(--cc-text-muted)]">A structured, secure practice session with tailored AI follow-up questions.</p>
+                <p className="mt-1 text-sm text-[var(--cc-text-muted)]">A structured practice session with tailored AI follow-up questions.</p>
               </div>
             </div>
           
@@ -719,9 +746,9 @@ export default function CandidateInterviewPage() {
                 className="space-y-6"
               >
                 <div className="text-center max-w-xl mx-auto mb-6">
-                  <h2 className="text-2xl font-bold">Step 1: Face & Biometric Verification</h2>
+                  <h2 className="text-2xl font-bold">Step 1: Identity check</h2>
                   <p className="text-zinc-400 text-sm mt-2">
-                    To avoid proxy interviews, present your official government State ID (or passport) alongside a webcam selfie. These are protected under user-privacy schemas.
+                    Compare your government ID photo with a live selfie before the interview. CareerCraft does not retain these images after the comparison.
                   </p>
                 </div>
 
@@ -790,10 +817,22 @@ export default function CandidateInterviewPage() {
                   </div>
                 </div>
 
+                <label className="mx-auto flex max-w-2xl cursor-pointer items-start gap-3 rounded-xl border border-indigo-500/25 bg-indigo-500/5 p-4 text-left text-xs text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={identityConsent}
+                    onChange={event => setIdentityConsent(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-indigo-500"
+                  />
+                  <span>
+                    I consent to this one-time identity comparison. My ID image and selfie are sent to the configured AI verification provider for this check and are not retained by CareerCraft.
+                  </span>
+                </label>
+
                 <div className="flex justify-center pt-6">
                   <Button 
                     onClick={runIdentityVerification} 
-                    disabled={loading}
+                    disabled={loading || !identityConsent}
                     className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold hover:shadow-purple-500/30 shadow-lg rounded-xl transition"
                   >
                     {loading ? "Analyzing biometric matching..." : "Verify & Proceed"}
@@ -919,8 +958,8 @@ export default function CandidateInterviewPage() {
                   <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3 text-red-400 text-xs">
                     <AlertTriangle className="w-5 h-5 shrink-0" />
                     <div>
-                      <span className="font-semibold block">Proctoring Flag Warning:</span>
-                      You have switched windows or tabs {tabSwitches} time(s). Exceeding 3 switches will automatically flag this interview to the recruiter.
+                    <span className="font-semibold block">Focus event logged:</span>
+                      You have switched windows or tabs {tabSwitches} time(s). This browser-detectable activity is recorded with this interview session.
                     </div>
                   </div>
                 )}
@@ -989,7 +1028,7 @@ export default function CandidateInterviewPage() {
                   </div>
 
                   <div className="flex justify-between items-center border-b border-white/5 pb-3">
-                    <span className="text-sm text-zinc-400">Proctoring Infractions logged:</span>
+                    <span className="text-sm text-zinc-400">Focus events logged:</span>
                     <span className="text-sm font-semibold text-zinc-300">{scorecard.violations}</span>
                   </div>
 

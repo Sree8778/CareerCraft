@@ -12,19 +12,17 @@ import {
   ArrowLeft, Mail, Phone, MapPin, Sparkles, Clock,
   AlertTriangle, ShieldAlert, CheckCircle, Award,
   Play, Pause, Volume2, UserCheck, FileText, Calendar,
-  FileCheck, Shield, AlertCircle, Save, RefreshCw,
+  Shield, AlertCircle, Save, RefreshCw,
   XCircle, MessageSquare, ExternalLink
 } from "lucide-react";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, authHeader, fetchWithTimeout, jsonHeaders } from "@/lib/api";
 
 export default function CandidateDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { getToken } = useAuth();
+  const { getToken, user, isAuthenticated, loading: authLoading } = useAuth();
 
   const [candidate, setCandidate] = useState<any>(null);
   const [resumeData, setResumeData] = useState<any>(null);
@@ -37,54 +35,58 @@ export default function CandidateDetailPage() {
   const audioRefs = useRef<(HTMLAudioElement | null)[]>([]);
 
   useEffect(() => {
-    if (!id) return;
+    if (authLoading || !id) return;
+    if (!isAuthenticated || user?.role !== 'recruiter') {
+      router.replace('/');
+      return;
+    }
+
+    let cancelled = false;
     const load = async () => {
       setLoading(true);
       try {
-        // Candidate profile from Firestore
-        const userSnap = await getDoc(doc(db, "users", id as string));
-        if (userSnap.exists()) {
-          const d = userSnap.data();
-          setCandidate({ id: id as string, ...d });
-          setRecruiterNotes(d.recruiterNotes || "");
-        }
+        const headers = await authHeader(getToken);
+        const [resumeRes, interviewsRes] = await Promise.all([
+          fetchWithTimeout(`${API_BASE}/candidates/${id}/resume`, { headers }),
+          fetchWithTimeout(`${API_BASE}/candidates/${id}/interviews`, { headers }),
+        ]);
 
-        // Resume from backend
-        const resumeRes = await fetch(`${API_BASE}/candidates/${id}/resume`, {
-          headers: { Authorization: `Bearer ${await getToken()}` },
-        });
-        if (resumeRes.ok) {
-          const rd = await resumeRes.json();
-          setResumeData(rd.resumeData || null);
-        }
+        if (!resumeRes.ok) throw new Error('Candidate profile is unavailable.');
+        const resumePayload = await resumeRes.json();
+        const interviewsPayload = interviewsRes.ok ? await interviewsRes.json() : { interviews: [] };
+        if (cancelled) return;
 
-        // Interview session
-        const ivSnap = await getDoc(doc(db, "interviews", `${id}_ai_voice_round`));
-        if (ivSnap.exists()) {
-          const iv = ivSnap.data();
-          setInterview({
-            ...iv,
-            startedAt: iv.startedAt?.toDate?.() || null,
-            completedAt: iv.completedAt?.toDate?.() || null,
-          });
-        }
+        const profile = resumePayload.userProfile || {};
+        setCandidate({ id: id as string, ...profile });
+        setResumeData(resumePayload.resumeData || null);
+        setRecruiterNotes(profile.recruiterNotes || '');
+        setInterview(Array.isArray(interviewsPayload.interviews) ? interviewsPayload.interviews[0] || null : null);
       } catch (err) {
-        console.error(err);
-        toast.error("Failed to load candidate data.");
+        if (!cancelled) {
+          console.error(err);
+          toast.error(err instanceof Error ? err.message : 'Failed to load candidate data.');
+          setCandidate(null);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     load();
-  }, [id]);
+    return () => { cancelled = true; };
+  }, [id, authLoading, isAuthenticated, user?.role, router, getToken]);
 
   const saveNotes = async () => {
     setSavingNotes(true);
     try {
-      await updateDoc(doc(db, "users", id as string), { recruiterNotes });
+      const response = await fetch(`${API_BASE}/candidates/${id}/notes`, {
+        method: 'PATCH',
+        headers: await jsonHeaders(getToken),
+        body: JSON.stringify({ notes: recruiterNotes }),
+      });
+      if (!response.ok) throw new Error('Failed to save notes.');
       toast.success("Notes saved.");
-    } catch {
-      toast.error("Failed to save notes.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save notes.');
     } finally {
       setSavingNotes(false);
     }
@@ -224,8 +226,8 @@ export default function CandidateDetailPage() {
                 { id: "resume", label: "Resume", icon: FileText },
                 ...(interview ? [
                   { id: "interview", label: "AI Interview", icon: Volume2 },
-                  { id: "verification", label: "Biometrics", icon: UserCheck },
-                  { id: "proctoring", label: "Proctoring", icon: ShieldAlert },
+                  { id: "verification", label: "Identity check", icon: UserCheck },
+                  { id: "proctoring", label: "Focus events", icon: ShieldAlert },
                 ] : []),
               ].map(({ id: tid, label, icon: Icon }) => (
                 <button key={tid} onClick={() => setActiveTab(tid as any)}
@@ -375,31 +377,14 @@ export default function CandidateDetailPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {interview.verification.stateIdUrl && (
-                          <div className="glass rounded-2xl overflow-hidden border border-white/10">
-                            <div className="bg-white/5 py-2 px-4 border-b border-white/10 text-xs font-mono text-zinc-300 flex items-center justify-between">
-                              Government ID <FileCheck className="w-3.5 h-3.5 text-indigo-400" />
-                            </div>
-                            <img src={interview.verification.stateIdUrl} alt="ID" className="w-full object-cover aspect-video" />
-                          </div>
-                        )}
-                        {interview.verification.selfieUrl && (
-                          <div className="glass rounded-2xl overflow-hidden border border-white/10">
-                            <div className="bg-white/5 py-2 px-4 border-b border-white/10 text-xs font-mono text-zinc-300 flex items-center justify-between">
-                              Webcam Selfie <UserCheck className="w-3.5 h-3.5 text-purple-400" />
-                            </div>
-                            <img src={interview.verification.selfieUrl} alt="Selfie" className="w-full object-cover aspect-video" />
-                          </div>
-                        )}
-                      </div>
                       <div className="glass p-5 rounded-xl border border-white/10">
                         <div className="flex items-center gap-4 flex-wrap">
                           <div className="text-center">
-                            <p className="text-xs text-zinc-400 uppercase tracking-wider mb-1">Face Match Score</p>
+                            <p className="text-xs text-zinc-400 uppercase tracking-wider mb-1">Identity match</p>
                             <p className="text-3xl font-black text-purple-400">{interview.verification.faceMatchScore ?? '—'}%</p>
                           </div>
                           <div className="flex-1 space-y-2">
+                            <p className="text-xs text-zinc-400">Source images are processed for the check and are not retained in CareerCraft.</p>
                             {(interview.verification.verificationLogs || []).map((log: string, i: number) => (
                               <div key={i} className="flex items-center gap-1.5 text-xs text-zinc-300">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />{log}
@@ -423,7 +408,7 @@ export default function CandidateDetailPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 gap-4">
                         <div className="glass p-4 rounded-xl border border-white/10 text-center">
                           <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1">Tab Switches</p>
                           <p className={`text-4xl font-extrabold font-mono ${(interview.proctoringViolations.tabSwitchesCount || 0) > 2 ? "text-rose-400" : "text-zinc-200"}`}>
@@ -434,12 +419,6 @@ export default function CandidateDetailPage() {
                         <div className="glass p-4 rounded-xl border border-white/10 text-center">
                           <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1">Fullscreen Exits</p>
                           <p className="text-4xl font-extrabold font-mono text-zinc-200">{interview.proctoringViolations.fullscreenExitsCount || 0}</p>
-                        </div>
-                        <div className="glass p-4 rounded-xl border border-white/10 text-center">
-                          <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1">Audio Loopbacks</p>
-                          <p className={`text-sm font-extrabold uppercase py-3 ${interview.proctoringViolations.virtualAudioDetected ? "text-rose-400" : "text-emerald-400"}`}>
-                            {interview.proctoringViolations.virtualAudioDetected ? "⚠ Detected" : "✔ Clean"}
-                          </p>
                         </div>
                       </div>
                       {(interview.proctoringViolations.cheatingFlags?.length > 0) && (

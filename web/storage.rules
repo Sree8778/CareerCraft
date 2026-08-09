@@ -28,12 +28,11 @@ service firebase.storage {
       allow write: if isOwner(userId);
     }
 
-    // Match files inside interview verification and audio folders (State ID, selfies, recorded audio responses)
+    // Identity-check media is intentionally not stored in Firebase Storage.
+    // If a future feature needs retained interview media, expose it only through
+    // a reviewed backend endpoint with an explicit retention policy.
     match /interviews/{userId}/{allPaths=**} {
-      // Restricted reading: only the candidate themselves or authorized users can read their interview materials
-      allow read: if isOwner(userId) || isAuthorizedReader();
-      // Only the folder owner can upload their ID, selfies, and audio answers
-      allow write: if isOwner(userId);
+      allow read, write: if false;
     }
   }
 }

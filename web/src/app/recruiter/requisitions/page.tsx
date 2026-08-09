@@ -96,14 +96,15 @@ export default function RequisitionListPage() {
 
   return (
     <RecruiterLayout>
-      <div className="text-white space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="cc-page text-white space-y-6">
+        <div className="cc-workspace-header flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
+            <p className="cc-eyebrow mb-1">Hiring operations</p>
             <h1 className="text-3xl font-bold">My Requisitions</h1>
-            <p className="text-zinc-400 text-sm mt-1">{jobs.length} job posting{jobs.length !== 1 ? 's' : ''}</p>
+            <p className="text-muted text-sm mt-1">Create, publish, and manage every role in your hiring pipeline.</p>
           </div>
           <Link href="/recruiter/requisitions/new"
-            className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition">
+            className="cc-btn-primary shrink-0 text-sm">
             <Plus className="w-4 h-4" />New Requisition
           </Link>
         </div>
@@ -112,9 +113,8 @@ export default function RequisitionListPage() {
         <div className="flex flex-wrap gap-2">
           {(['All', 'Open', 'Draft', 'Paused', 'In Review', 'Closed', 'Archived'] as StatusFilter[]).map(s => (
             <button key={s} onClick={() => setFilter(s)}
-              className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${
-                filter === s ? 'bg-purple-600 border-purple-500 text-white' : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white'
-              }`}>
+              data-active={filter === s}
+              className="cc-filter-chip px-4 py-1.5 text-sm font-semibold">
               {s}
               {s !== 'All' && statusCounts[s] !== undefined && (
                 <span className="ml-1.5 text-xs opacity-70">{statusCounts[s]}</span>
@@ -129,8 +129,8 @@ export default function RequisitionListPage() {
             <RefreshCw className="w-5 h-5 animate-spin text-purple-400" />Loading your jobs...
           </div>
         ) : filtered.length === 0 ? (
-          <div className="glass rounded-xl p-12 border border-white/10 text-center text-zinc-500">
-            <Briefcase className="w-12 h-12 mx-auto mb-4 text-zinc-700" />
+          <div className="cc-empty-state p-12 text-center text-muted">
+            <Briefcase className="w-12 h-12 mx-auto mb-4 text-[var(--cc-accent)]/60" />
             <p className="font-semibold text-lg">
               {filter === 'All' ? "No job postings yet" : `No ${filter} jobs`}
             </p>
@@ -139,7 +139,7 @@ export default function RequisitionListPage() {
             )}
             {filter === 'All' && (
               <Link href="/recruiter/requisitions/new"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-semibold transition">
+                className="cc-btn-primary text-sm">
                 <Plus className="w-4 h-4" />Post a Job
               </Link>
             )}

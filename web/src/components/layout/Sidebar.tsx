@@ -68,7 +68,7 @@ export default function Sidebar() {
       <aside
         id="recruiter-navigation"
         aria-label="Recruiter navigation"
-        className={`fixed top-20 left-0 h-[calc(100%-5rem)] w-60 backdrop-blur-xl border-r p-5 flex flex-col justify-between transition-transform duration-300 z-40 text-[var(--cc-text)] ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
+        className={`cc-workspace-sidebar fixed top-20 left-0 h-[calc(100%-5rem)] w-60 backdrop-blur-xl border-r p-5 flex flex-col justify-between transition-transform duration-300 z-40 text-[var(--cc-text)] ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
         style={{ background: 'var(--cc-surface)', borderColor: 'var(--cc-border)' }}
       >
         <div className="space-y-5 overflow-y-auto pb-2">
@@ -76,7 +76,7 @@ export default function Sidebar() {
           <div className="flex items-center gap-2 px-1 py-1">
             <Sparkles className="w-4 h-4 text-[var(--cc-accent-2)] animate-pulse" />
             <span className="text-[10px] font-bold font-mono tracking-widest text-muted uppercase">
-              Hiring Console
+              Hiring workspace
             </span>
           </div>
 

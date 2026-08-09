@@ -132,7 +132,9 @@ export default function LoginModal() {
 
   // ── isMock check ─────────────────────────────────────────────────────────────
   const isMock = () => {
-    const key = auth.app.options.apiKey;
+    // Firebase is optional in local preview. Treat a missing client exactly as
+    // the explicit mock configuration, rather than throwing when Login opens.
+    const key = auth?.app?.options?.apiKey;
     return !key || key.startsWith('mock') || key.startsWith('your_api_key');
   };
 

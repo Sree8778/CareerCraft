@@ -13,8 +13,8 @@ export default function CandidateLayout({ children }: CandidateLayoutProps) {
     <div className="cc-workspace-shell flex min-h-screen w-full">
       <CandidateSidebar />
       {/* Main content — clears the fixed 240px sidebar on md+ screens */}
-      <div className="flex flex-col flex-1 overflow-auto ml-0 md:ml-60">
-        <main className="min-h-full p-4 text-[var(--cc-text)] md:p-6">
+      <div className="cc-workspace-main flex flex-1 flex-col overflow-auto ml-0 md:ml-60">
+        <main className="cc-workspace-content min-h-full p-4 text-[var(--cc-text)] md:p-6 lg:p-8">
           {children}
         </main>
       </div>

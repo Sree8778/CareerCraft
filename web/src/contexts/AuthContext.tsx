@@ -1,5 +1,5 @@
 'use client';
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -36,15 +36,57 @@ const AuthContext = createContext<AuthContextType>({
 const isOnboardingDone = (uid: string, firestoreFlag?: boolean) =>
   firestoreFlag === true || localStorage.getItem(`onboarding_done_${uid}`) === '1';
 
+// A developer preview must be usable before any cloud services are configured.
+// This value is only compiled into non-production builds; a real deployment
+// still begins unauthenticated and waits for Firebase to resolve the session.
+const LOCAL_DEVELOPMENT_USER: User = {
+  id: 'mock_uid_123',
+  email: 'developer@recruitedge.mock',
+  name: 'Jane Doe',
+  role: 'candidate',
+  avatar: '',
+};
+const IS_DEVELOPMENT_BUILD = process.env.NODE_ENV !== 'production';
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => IS_DEVELOPMENT_BUILD ? LOCAL_DEVELOPMENT_USER : null);
+  const [loading, setLoading] = useState(() => !IS_DEVELOPMENT_BUILD);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const loadingRef = useRef(!IS_DEVELOPMENT_BUILD);
 
   useEffect(() => {
-    const isMockFirebase = process.env.NODE_ENV !== 'production' && (!auth.app.options.apiKey || auth.app.options.apiKey.startsWith("your_api_key") || auth.app.options.apiKey.startsWith("mock"));
+    loadingRef.current = loading;
+  }, [loading]);
+
+  // This is deliberately independent of Firebase setup. A bad local Firebase
+  // configuration or a stalled SDK callback must never leave the whole product
+  // behind an infinite loading skeleton.
+  useEffect(() => {
+    const hardStop = window.setTimeout(() => {
+      if (!loadingRef.current) return;
+
+      if (process.env.NODE_ENV !== 'production') {
+        const fallback = LOCAL_DEVELOPMENT_USER;
+        let savedUser: User | null = null;
+        try { savedUser = JSON.parse(localStorage.getItem('recruitedge_mock_session') || 'null') as User | null; } catch {}
+        const resolvedUser = savedUser || fallback;
+        setUser(currentUser => currentUser || resolvedUser);
+        setNeedsOnboarding(!isOnboardingDone(resolvedUser.id, resolvedUser.onboardingCompleted));
+      } else {
+        setUser(null);
+        setNeedsOnboarding(false);
+      }
+      setLoading(false);
+    }, 5_000);
+
+    return () => window.clearTimeout(hardStop);
+  }, []);
+
+  useEffect(() => {
+    const firebaseApiKey = auth?.app?.options?.apiKey;
+    const isMockFirebase = process.env.NODE_ENV !== 'production' && (!firebaseApiKey || firebaseApiKey.startsWith("your_api_key") || firebaseApiKey.startsWith("mock"));
     const applyLocalFallback = () => {
-      const fallback: User = { id: 'mock_uid_123', email: 'developer@recruitedge.mock', name: 'Jane Doe', role: 'candidate', avatar: '' };
+      const fallback = LOCAL_DEVELOPMENT_USER;
       setUser(currentUser => currentUser || fallback);
       setNeedsOnboarding(!isOnboardingDone(fallback.id));
       setLoading(false);
@@ -60,12 +102,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setUser(parsed);
           setNeedsOnboarding(!isOnboardingDone(parsed.id, parsed.onboardingCompleted));
         } catch (e) {
-          const fallback: User = { id: 'mock_uid_123', email: 'developer@recruitedge.mock', name: 'Jane Doe', role: 'candidate', avatar: '' };
+          const fallback = LOCAL_DEVELOPMENT_USER;
           setUser(fallback);
           setNeedsOnboarding(!isOnboardingDone(fallback.id));
         }
       } else {
-        const fallback: User = { id: 'mock_uid_123', email: 'developer@recruitedge.mock', name: 'Jane Doe', role: 'candidate', avatar: '' };
+        const fallback = LOCAL_DEVELOPMENT_USER;
         setUser(fallback);
         setNeedsOnboarding(!isOnboardingDone(fallback.id));
       }
@@ -90,6 +132,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }, 8000);
 
     // Listen to Firebase Auth state changes
+    if (!auth) {
+      setUser(null);
+      setNeedsOnboarding(false);
+      setLoading(false);
+      return () => window.clearTimeout(authTimeout);
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       window.clearTimeout(authTimeout);
       if (firebaseUser) {
@@ -189,9 +238,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = async () => {
     try {
       localStorage.removeItem('recruitedge_mock_session');
-      const isMockFirebase = process.env.NODE_ENV !== 'production' && (!auth.app.options.apiKey || auth.app.options.apiKey.startsWith("your_api_key") || auth.app.options.apiKey.startsWith("mock"));
+      const firebaseApiKey = auth?.app?.options?.apiKey;
+      const isMockFirebase = process.env.NODE_ENV !== 'production' && (!firebaseApiKey || firebaseApiKey.startsWith("your_api_key") || firebaseApiKey.startsWith("mock"));
       if (!isMockFirebase) {
-        await signOut(auth);
+        if (auth) await signOut(auth);
       }
       setUser(null);
       setNeedsOnboarding(false);
@@ -204,7 +254,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const getToken = async (): Promise<string> => {
     try {
-      const token = await auth.currentUser?.getIdToken();
+      const token = await auth?.currentUser?.getIdToken();
       if (token) return token;
     } catch {}
     // Mock tokens are available only during local development.

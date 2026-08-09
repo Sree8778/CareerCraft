@@ -33,6 +33,13 @@ function NotificationBell({ userId, role }: { userId: string; role: string }) {
   const field                   = role === 'recruiter' ? 'recruiterId' : 'candidateId';
 
   useEffect(() => {
+    // Local development can intentionally run without Firebase. Notifications
+    // are an enhancement, so an unavailable database must not break the whole
+    // navigation shell after the offline auth fallback completes.
+    if (!db) {
+      setNotifs([]);
+      return;
+    }
     const q = query(
       collection(db, 'notifications'),
       where(field, '==', userId),
@@ -56,7 +63,7 @@ function NotificationBell({ userId, role }: { userId: string; role: string }) {
 
   const markAllRead = async () => {
     const unreadItems = notifs.filter(n => !n.read);
-    if (!unreadItems.length) return;
+    if (!db || !unreadItems.length) return;
     const batch = writeBatch(db);
     unreadItems.forEach(n => batch.update(doc(db, 'notifications', n.id), { read: true }));
     await batch.commit().catch(() => {});

@@ -74,6 +74,126 @@ body {
   --cc-accent-3: #ec8bd2;
   --cc-glow: rgba(118, 137, 255, 0.3);
 }
+
+/* The candidate and recruiter products are two workspaces in the same
+   application.  These rules give both a calm editorial canvas and a single,
+   predictable elevation system, even on pages written before the token system
+   was introduced. */
+.cc-workspace-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 8% -8%, color-mix(in srgb, var(--cc-accent) 12%, transparent), transparent 28rem),
+    radial-gradient(circle at 104% 42%, color-mix(in srgb, var(--cc-accent-2) 10%, transparent), transparent 32rem),
+    var(--cc-bg);
+}
+.cc-workspace-main {
+  min-width: 0;
+  min-height: 100vh;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cc-bg) 76%, transparent), var(--cc-bg));
+}
+.cc-workspace-content {
+  width: 100%;
+  max-width: 96rem;
+  margin-inline: auto;
+}
+.cc-workspace-shell .cc-page { width: min(100%, 88rem); }
+.cc-workspace-shell .glass,
+.cc-workspace-shell .cc-card {
+  background: color-mix(in srgb, var(--cc-surface-solid) 93%, transparent);
+  border-color: var(--cc-border);
+  box-shadow: 0 14px 36px rgba(35, 53, 83, 0.075);
+}
+.cc-workspace-shell .glass:hover,
+.cc-workspace-shell .cc-card:hover {
+  border-color: color-mix(in srgb, var(--cc-accent) 36%, var(--cc-border));
+  box-shadow: 0 18px 42px rgba(35, 53, 83, 0.1), 0 0 0 1px color-mix(in srgb, var(--cc-accent) 6%, transparent);
+}
+.dark .cc-workspace-shell .glass,
+.dark .cc-workspace-shell .cc-card {
+  background: color-mix(in srgb, var(--cc-surface-solid) 88%, transparent);
+  box-shadow: 0 16px 40px rgba(2, 6, 23, 0.24);
+}
+
+.cc-workspace-sidebar {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cc-surface-solid) 92%, transparent), color-mix(in srgb, var(--cc-surface-solid) 78%, transparent)) !important;
+  border-color: var(--cc-border) !important;
+  box-shadow: 14px 0 38px rgba(28, 47, 83, 0.045);
+}
+.dark .cc-workspace-sidebar {
+  background: linear-gradient(180deg, rgba(20, 31, 59, 0.98), rgba(12, 18, 38, 0.96)) !important;
+  box-shadow: 14px 0 38px rgba(0, 0, 0, 0.2);
+}
+.cc-workspace-sidebar nav a { position: relative; }
+.cc-workspace-sidebar nav a[aria-current="page"] {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--cc-accent) 15%, transparent), transparent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cc-accent) 16%, transparent);
+}
+.cc-workspace-sidebar nav a[aria-current="page"]::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  width: 0.2rem;
+  border-radius: 999px;
+  background: linear-gradient(var(--cc-accent), var(--cc-accent-2));
+}
+
+.cc-workspace-header {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--cc-border);
+  border-radius: 1.5rem;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--cc-surface-solid) 90%, var(--cc-accent) 10%), var(--cc-surface-solid));
+  box-shadow: 0 16px 38px rgba(35, 53, 83, 0.09);
+}
+.cc-workspace-header::after {
+  content: '';
+  position: absolute;
+  width: 18rem;
+  height: 18rem;
+  right: -8rem;
+  top: -11rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--cc-accent-2) 24%, transparent), transparent 66%);
+  pointer-events: none;
+}
+.dark .cc-workspace-header {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--cc-surface-solid) 90%, var(--cc-accent) 10%), var(--cc-surface-solid));
+  box-shadow: 0 16px 42px rgba(2, 6, 23, 0.24);
+}
+.cc-filter-chip {
+  border: 1px solid var(--cc-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cc-surface-solid) 84%, transparent);
+  color: var(--cc-text-muted);
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.cc-filter-chip:hover {
+  color: var(--cc-text);
+  border-color: color-mix(in srgb, var(--cc-accent) 40%, var(--cc-border));
+  transform: translateY(-1px);
+}
+.cc-filter-chip[data-active="true"] {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--cc-accent), var(--cc-accent-2));
+  box-shadow: 0 6px 16px var(--cc-glow);
+}
+.cc-empty-state {
+  border: 1px dashed color-mix(in srgb, var(--cc-border) 78%, var(--cc-accent));
+  border-radius: 1.25rem;
+  background: color-mix(in srgb, var(--cc-surface-solid) 72%, transparent);
+}
+.cc-requisition-card,
+.cc-candidate-card {
+  height: 100%;
+  border-radius: 1.15rem;
+}
+.cc-requisition-card:hover,
+.cc-candidate-card:hover { transform: translateY(-2px); }
 .cc-workspace-shell [class*="bg-slate-950"],
 .cc-workspace-shell [class*="bg-zinc-950"],
 .cc-workspace-shell [class*="bg-[#0B0F19"] {

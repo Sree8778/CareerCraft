@@ -29,7 +29,7 @@ const STATUS_STYLES: Record<string, string> = {
   'In Review':'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
 };
 
-const actionBtn = "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition";
+const actionBtn = "flex items-center gap-1 rounded-lg border border-[var(--cc-border)] bg-[var(--cc-surface)] px-2.5 py-1.5 text-[10px] font-bold text-[var(--cc-text-muted)] transition hover:border-[var(--cc-accent)]/45 hover:text-[var(--cc-text)]";
 
 export default function RequisitionCard({
   id, title, location, postedDate, status, applicants, department, jobType,
@@ -47,15 +47,15 @@ export default function RequisitionCard({
 
   return (
     <Link href={`/recruiter/requisitions/${id}`}>
-      <div className="glass p-5 rounded-xl border border-white/10 hover:border-purple-500/40 transition-all duration-200 hover:scale-[1.01] cursor-pointer group space-y-4">
+      <div className="cc-card cc-requisition-card cursor-pointer p-5 group space-y-4">
         <div className="flex justify-between items-start gap-2">
-          <h3 className="text-base font-bold text-white group-hover:text-purple-300 transition leading-tight">{title}</h3>
+          <h3 className="text-base font-bold text-[var(--cc-text)] transition leading-tight group-hover:text-[var(--cc-accent)]">{title}</h3>
           <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold whitespace-nowrap ${STATUS_STYLES[s] || STATUS_STYLES['Open']}`}>
             {s}
           </span>
         </div>
 
-        <div className="space-y-1.5 text-xs text-zinc-400">
+        <div className="space-y-1.5 text-xs text-[var(--cc-text-muted)]">
           <p className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-zinc-500" />{location}</p>
           {department && <p className="flex items-center gap-1.5"><Briefcase className="w-3 h-3 text-zinc-500" />{department}{jobType ? ` · ${jobType}` : ''}</p>}
           <p className="flex items-center gap-1.5"><CalendarDays className="w-3 h-3 text-zinc-500" />Posted {postedDate}{salary ? ` · ${salary}` : ''}</p>
@@ -91,12 +91,12 @@ export default function RequisitionCard({
           )}
         </div>
 
-        <div className="flex items-center justify-between pt-1 border-t border-white/5">
-          <span className="flex items-center gap-1.5 text-xs text-zinc-400">
+        <div className="flex items-center justify-between pt-3 border-t border-[var(--cc-border)]">
+          <span className="flex items-center gap-1.5 text-xs text-[var(--cc-text-muted)]">
             <Users className="w-3.5 h-3.5 text-purple-400" />
-            <span className="font-semibold text-white">{applicants}</span> applicants
+            <span className="font-semibold text-[var(--cc-text)]">{applicants}</span> applicants
           </span>
-          <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-purple-400 transition" />
+          <ChevronRight className="w-4 h-4 text-[var(--cc-text-muted)] group-hover:text-[var(--cc-accent)] transition" />
         </div>
       </div>
     </Link>

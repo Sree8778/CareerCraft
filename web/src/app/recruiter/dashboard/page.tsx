@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
 // src/app/recruiter/dashboard/page.tsx
 import RecruiterLayout from '@/components/layout/RecruiterLayout';
 import {
-  Users, ClipboardList, TrendingUp, Sparkles,
-  ChevronRight, Calendar, UserCheck, Play, Award, ShieldCheck, FileText, RefreshCw
+  Users, ClipboardList, TrendingUp,
+  ChevronRight, UserCheck, ShieldCheck, FileText
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRecruiter } from '@/hooks/useRecruiter';
@@ -102,7 +102,7 @@ export default function RecruiterDashboardPage() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="relative overflow-hidden rounded-3xl border border-purple-100 bg-gradient-to-r from-purple-100 via-white to-slate-100 p-8 shadow-xl shadow-slate-200/50 dark:border-indigo-300/15 dark:from-purple-950/60 dark:via-[#0e1630] dark:to-indigo-950/50 dark:shadow-2xl"
+          className="cc-workspace-header relative overflow-hidden rounded-3xl p-7 md:p-8"
         >
           {/* Glass background glowing spots */}
           <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-purple-500/10 blur-3xl pointer-events-none" />
@@ -110,24 +110,22 @@ export default function RecruiterDashboardPage() {
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
             <div className="space-y-2">
-              <span className="rounded-full border border-purple-200 bg-purple-100 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-purple-700 dark:border-purple-500/30 dark:bg-purple-500/20 dark:text-purple-300">
-                Talent Pipeline Command
-              </span>
-              <h1 className="text-3xl font-black text-slate-900 md:text-4xl dark:bg-gradient-to-r dark:from-white dark:to-zinc-400 dark:bg-clip-text dark:text-transparent">
+              <p className="cc-eyebrow">Hiring overview</p>
+              <h1 className="text-3xl font-black text-[var(--cc-text)] md:text-4xl">
                 Welcome back, {name || user.name} 💼
               </h1>
-              <p className="max-w-lg text-xs leading-relaxed text-slate-600 dark:text-zinc-400">
-                Manage your active open requisitions, audit candidate resume parsing pipelines, and inspect scheduled voice screenings.
+              <p className="max-w-lg text-sm leading-relaxed text-muted">
+                Keep roles moving, review candidates with context, and make the next hiring decision with a clear view of your pipeline.
               </p>
             </div>
             
             {/* Quick stats / live banner */}
-            <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-purple-100 bg-white/85 p-3 shadow-sm dark:border-white/5 dark:bg-zinc-950/80 dark:shadow-inner">
+            <div className="cc-card flex shrink-0 items-center gap-3 rounded-2xl p-3">
               <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-ping" />
               <div className="space-y-0.5 text-xs">
-                <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Secure Assessment Rule</span>
-                <span className="font-semibold text-purple-400 flex items-center gap-1 font-mono text-[10px]">
-                  ✓ Anti-Cheat Proctor Enabled
+                <span className="block text-[9px] font-bold uppercase tracking-wider text-muted">Workspace status</span>
+                <span className="flex items-center gap-1 font-mono text-[10px] font-semibold text-[var(--cc-accent)]">
+                  Ready for your next review
                 </span>
               </div>
             </div>
@@ -155,7 +153,7 @@ export default function RecruiterDashboardPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: 0.1 + idx * 0.05 }}
                   whileHover={{ y: -4, scale: 1.02 }}
-                  className="bg-[#0B0F19]/40 border border-white/10 rounded-2xl p-5 hover:border-purple-500/30 transition-all duration-300 shadow shadow-purple-950/20"
+                  className="cc-card rounded-2xl p-5 shadow-sm transition-all duration-300 hover:border-[var(--cc-accent)]/35"
                 >
                   <div className="flex justify-between items-start mb-3">
                     <span className="text-[10px] font-bold font-mono tracking-wider text-zinc-400 uppercase">{kpi.title}</span>
@@ -173,14 +171,14 @@ export default function RecruiterDashboardPage() {
             {/* Smart Quick Navigation Triggers */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <Link href="/recruiter/requisitions" className="block group">
-                <div className="bg-[#0B0F19]/40 hover:bg-slate-900/40 border border-white/10 hover:border-purple-500/40 rounded-2xl p-6 transition-all duration-300 shadow relative flex flex-col justify-between h-full">
+                <div className="cc-card relative flex h-full flex-col justify-between rounded-2xl p-6 transition-all duration-300 hover:border-[var(--cc-accent)]/40">
                   <div className="space-y-2">
                     <span className="text-[8px] font-bold font-mono uppercase tracking-widest text-zinc-500">Requisitions Deck</span>
                     <h3 className="text-lg font-bold text-white group-hover:text-purple-400 transition-colors">
                       📄 View Requisitions
                     </h3>
                     <p className="text-xs text-zinc-400 leading-normal">
-                      Scan, edit, or toggle status settings for all active job slots and requirements.
+                      Scan, edit, publish, and manage the requirements for every open role.
                     </p>
                   </div>
                   <div className="flex items-center gap-1 text-[10px] font-bold text-purple-400 group-hover:text-purple-300 pt-6 transition">
@@ -190,14 +188,14 @@ export default function RecruiterDashboardPage() {
               </Link>
 
               <Link href="/recruiter/candidates" className="block group">
-                <div className="bg-[#0B0F19]/40 hover:bg-slate-900/40 border border-white/10 hover:border-cyan-500/40 rounded-2xl p-6 transition-all duration-300 shadow relative flex flex-col justify-between h-full">
+                <div className="cc-card relative flex h-full flex-col justify-between rounded-2xl p-6 transition-all duration-300 hover:border-[var(--cc-accent-2)]/40">
                   <div className="space-y-2">
                     <span className="text-[8px] font-bold font-mono uppercase tracking-widest text-zinc-500">Talent Database</span>
                     <h3 className="text-lg font-bold text-white group-hover:text-cyan-400 transition-colors">
                       🧑‍💼 Manage Candidates
                     </h3>
                     <p className="text-xs text-zinc-400 leading-normal">
-                      Verify candidate parsed files, biometric waveforms, and semantic search alignments.
+                      Review candidate profiles, qualifications, and application history in one place.
                     </p>
                   </div>
                   <div className="flex items-center gap-1 text-[10px] font-bold text-cyan-400 group-hover:text-cyan-300 pt-6 transition">
@@ -220,7 +218,7 @@ export default function RecruiterDashboardPage() {
                   { name: 'Manage Account Profile', href: '/recruiter/profile', desc: 'Update details and settings.', color: 'hover:border-indigo-500/40' }
                 ].map((item) => (
                   <Link href={item.href} key={item.name} className="block group">
-                    <div className={`h-full bg-slate-900/30 border border-white/5 p-4 rounded-xl shadow relative flex flex-col justify-between transition duration-300 ${item.color}`}>
+                    <div className={`cc-card relative flex h-full flex-col justify-between rounded-xl p-4 shadow-sm transition duration-300 ${item.color}`}>
                       <div className="space-y-1">
                         <h4 className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">
                           {item.name}
@@ -248,7 +246,7 @@ export default function RecruiterDashboardPage() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, delay: 0.18 }}
-              className="bg-slate-950/40 border border-white/10 p-6 rounded-3xl space-y-4 shadow-xl backdrop-blur-md"
+              className="cc-card space-y-4 rounded-3xl p-6"
             >
               <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
                 <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
@@ -287,11 +285,11 @@ export default function RecruiterDashboardPage() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, delay: 0.2 }}
-              className="bg-slate-950/40 border border-white/10 p-6 rounded-3xl space-y-6 shadow-xl backdrop-blur-md"
+              className="cc-card space-y-6 rounded-3xl p-6"
             >
               <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
                 <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-purple-400" /> Monthly Hiring Target
+                  <TrendingUp className="w-4 h-4 text-purple-400" /> Interview conversion
                 </h3>
               </div>
 
@@ -323,7 +321,7 @@ export default function RecruiterDashboardPage() {
                     {hiringVelocity >= 50 ? 'Ahead of Target' : hiringVelocity > 0 ? 'In Progress' : 'No Data Yet'}
                   </span>
                   <p className="text-[10px] text-zinc-500 leading-normal pt-2.5 max-w-[200px] mx-auto">
-                    Percentage of open job requisitions successfully filled within the active 30-day billing cycle.
+                    Share of applicants who have progressed to the interview stage in your current pipeline.
                   </p>
                 </div>
               </div>
@@ -334,7 +332,7 @@ export default function RecruiterDashboardPage() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, delay: 0.3 }}
-              className="bg-slate-950/40 border border-white/10 p-6 rounded-3xl space-y-4 shadow-xl backdrop-blur-md"
+              className="cc-card space-y-4 rounded-3xl p-6"
             >
               <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
                 <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">

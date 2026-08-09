@@ -20,6 +20,12 @@ const firebaseConfig = {
 // All pages that use Firebase are already marked 'use client' +
 // force-dynamic, so these stubs are never exercised at runtime.
 const isBrowser = typeof window !== 'undefined';
+const hasFirebaseConfig = Boolean(
+  firebaseConfig.apiKey &&
+  firebaseConfig.authDomain &&
+  firebaseConfig.projectId &&
+  firebaseConfig.appId
+);
 
 // @ts-expect-error — intentional lazy init: null assigned here, overwritten in the isBrowser block below
 let app: FirebaseApp = null;
@@ -30,11 +36,17 @@ let db: Firestore = null;
 // @ts-expect-error — intentional lazy init: null assigned here, overwritten in the isBrowser block below
 let storage: FirebaseStorage = null;
 
-if (isBrowser) {
-  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-  auth = getAuth(app);
-  db = getFirestore(app);
-  storage = getStorage(app);
+if (isBrowser && hasFirebaseConfig) {
+  try {
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+  } catch (error) {
+    // The app remains usable in local developer mode through AuthContext's
+    // explicit fallback. Do not crash hydration when Firebase is incomplete.
+    console.warn('Firebase client initialization was skipped:', error);
+  }
 }
 
 export { app, auth, db, storage };

@@ -58,7 +58,6 @@ export default function RecruiterApplicationsPage() {
   const [selectedFilter,  setSelectedFilter]  = useState('All');
   const [searchQuery,     setSearchQuery]     = useState('');
   const [selected,        setSelected]        = useState<Set<string>>(new Set());
-  const [bulkStatus,      setBulkStatus]      = useState('');
   const [showBulkMenu,    setShowBulkMenu]    = useState(false);
   const [updatingBulk,    setUpdatingBulk]    = useState(false);
 
@@ -142,28 +141,29 @@ export default function RecruiterApplicationsPage() {
 
   return (
     <RecruiterLayout>
-      <div className="max-w-7xl mx-auto space-y-6 text-white">
+      <div className="cc-page mx-auto space-y-6">
 
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
+        <div className="cc-workspace-header flex flex-col items-start justify-between gap-4 p-6 md:flex-row md:items-center">
+          <div className="relative z-10">
+            <p className="cc-eyebrow mb-2">Hiring pipeline</p>
+            <h1 className="flex items-center gap-2 text-2xl font-bold text-[var(--cc-text)]">
               <Users className="w-5 h-5 text-purple-400" /> Applicant Pipeline
             </h1>
             <p className="text-sm text-zinc-400 mt-0.5">{total} total · sorted by AI match score</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="relative z-10 flex w-full items-center gap-2 md:w-auto">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
               <input
                 type="text"
                 placeholder="Search candidate or role…"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="pl-9 pr-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500 w-52"
+                className="w-full min-w-0 rounded-xl border py-2 pl-9 pr-4 text-sm placeholder:text-muted md:w-60"
               />
             </div>
-            <button onClick={load} className="p-2 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white transition">
+            <button onClick={load} aria-label="Refresh applications" className="cc-btn-ghost shrink-0 !p-2.5">
               <RefreshCw className="w-4 h-4" />
             </button>
           </div>
@@ -178,7 +178,7 @@ export default function RecruiterApplicationsPage() {
               { label: 'Interviewed', value: interviewed, icon: <TrendingUp className="w-4 h-4 text-indigo-400" />, color: 'text-indigo-300' },
               { label: 'Hired',       value: hired,       icon: <UserCheck className="w-4 h-4 text-emerald-400" />, color: 'text-emerald-300' },
             ].map(s => (
-              <div key={s.label} className="glass rounded-xl p-3 border border-white/10 flex items-center gap-3">
+              <div key={s.label} className="cc-card flex items-center gap-3 rounded-xl p-4">
                 {s.icon}
                 <div>
                   <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
@@ -194,11 +194,8 @@ export default function RecruiterApplicationsPage() {
           <div className="flex flex-wrap gap-2">
             {FILTERS.map(f => (
               <button key={f} onClick={() => setSelectedFilter(f)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
-                  selectedFilter === f
-                    ? 'bg-purple-600 border-purple-500 text-white'
-                    : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
-                }`}>
+                data-active={selectedFilter === f}
+                className="cc-filter-chip px-3 py-1.5 text-xs font-semibold">
                 {f}
               </button>
             ))}
@@ -212,7 +209,7 @@ export default function RecruiterApplicationsPage() {
                 <button
                   onClick={() => setShowBulkMenu(v => !v)}
                   disabled={updatingBulk}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl transition disabled:opacity-50"
+                  className="cc-btn-primary !rounded-xl !px-3 !py-1.5 text-xs disabled:opacity-50"
                 >
                   {updatingBulk ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                   Move to
@@ -224,11 +221,11 @@ export default function RecruiterApplicationsPage() {
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
-                      className="absolute right-0 mt-1 w-40 bg-zinc-900 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden"
+                      className="cc-card absolute right-0 z-50 mt-1 w-40 overflow-hidden rounded-xl shadow-xl"
                     >
                       {PIPELINE_STATUSES.map(s => (
                         <button key={s} onClick={() => applyBulkStatus(s)}
-                          className="w-full text-left px-4 py-2.5 text-xs text-zinc-300 hover:bg-white/5 hover:text-white transition">
+                          className="w-full px-4 py-2.5 text-left text-xs text-muted transition hover:bg-white/5 hover:text-[var(--cc-text)]">
                           {s}
                         </button>
                       ))}
@@ -251,7 +248,7 @@ export default function RecruiterApplicationsPage() {
             Loading applications…
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-24 space-y-3">
+          <div className="cc-empty-state space-y-3 py-20 text-center">
             <Users className="w-10 h-10 mx-auto text-zinc-700" />
             <p className="text-zinc-400 font-semibold">
               {total === 0 ? 'No applications yet.' : 'No results match your filter.'}
@@ -282,7 +279,7 @@ export default function RecruiterApplicationsPage() {
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: Math.min(idx, 12) * 0.03 }}
-                    className={`glass rounded-xl border transition group flex flex-col gap-3 p-5 relative ${
+                    className={`cc-card relative flex flex-col gap-3 rounded-2xl p-5 transition group ${
                       isSelected ? 'border-purple-500/50 bg-purple-500/5' : 'border-white/10 hover:border-purple-500/30'
                     }`}
                   >
@@ -327,7 +324,7 @@ export default function RecruiterApplicationsPage() {
                     </div>
 
                     {/* Applied date */}
-                    <div className="flex items-center gap-1 text-xs text-zinc-500">
+                    <div className="flex items-center gap-1 text-xs text-muted">
                       <Calendar className="w-3 h-3" />
                       {app.appliedDate || (app.appliedAt
                         ? new Date(app.appliedAt._seconds ? app.appliedAt._seconds * 1000 : app.appliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -335,7 +332,7 @@ export default function RecruiterApplicationsPage() {
                     </div>
 
                     {/* Quick status change */}
-                    <div className="flex flex-wrap gap-1 pt-1 border-t border-white/5">
+                    <div className="flex flex-wrap gap-1 border-t pt-3" style={{ borderColor: 'var(--cc-border)' }}>
                       {PIPELINE_STATUSES.filter(s => s !== app.status).slice(0, 3).map(s => (
                         <button
                           key={s}
@@ -351,7 +348,7 @@ export default function RecruiterApplicationsPage() {
                               toast.success(`Moved to ${s}`);
                             } catch { toast.error('Failed to update'); }
                           }}
-                          className="text-[9px] font-bold border px-2 py-0.5 rounded-full transition hover:opacity-80 text-zinc-400 border-zinc-700 hover:border-zinc-500"
+                          className="rounded-full border border-[var(--cc-border)] px-2 py-0.5 text-[9px] font-bold text-muted transition hover:border-[var(--cc-accent)]/45 hover:text-[var(--cc-text)]"
                         >
                           → {s}
                         </button>
@@ -360,7 +357,7 @@ export default function RecruiterApplicationsPage() {
 
                     {/* Review link */}
                     <Link href={`/recruiter/applications/${app.id}`}
-                      className="flex items-center justify-end text-xs text-purple-400 group-hover:text-purple-300 transition gap-1 pt-1">
+                      className="flex items-center justify-end gap-1 pt-1 text-xs text-[var(--cc-accent)] transition group-hover:text-[var(--cc-accent-2)]">
                       Review <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                     </Link>
                   </motion.div>
