@@ -17,11 +17,12 @@ import { doc, setDoc, getDoc, updateDoc, arrayUnion, Timestamp } from 'firebase/
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { decryptApiKey } from '@/lib/crypto';
+import CandidateLayout from '@/components/layout/CandidateLayout';
 
 // --- UI Primitive Component ---
 const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'outline' | 'destructive', size?: 'default' | 'sm', as?: React.ElementType }>(({ children, variant, size, className, as: Component = 'button', ...props }, ref) => {
-    const baseStyle = "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50 disabled:pointer-events-none";
-    const variantStyles = { default: "bg-indigo-600 text-white hover:bg-indigo-700", outline: "border border-gray-300 text-white bg-transparent hover:bg-white/10 hover:border-white/20", destructive: "bg-red-600 text-white hover:bg-red-700" };
+    const baseStyle = "inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cc-accent)] disabled:opacity-50 disabled:pointer-events-none";
+    const variantStyles = { default: "cc-btn-primary", outline: "cc-btn-ghost", destructive: "bg-rose-600 text-white hover:bg-rose-700" };
     const sizeStyles = { default: "h-10 py-2 px-4", sm: "h-9 px-3" };
     return <Component ref={ref} className={`${baseStyle} ${variantStyles[variant || 'default']} ${sizeStyles[size || 'default']} ${className}`} {...props}>{children}</Component>;
 });
@@ -508,50 +509,60 @@ export default function CandidateInterviewPage() {
   if (authLoading || !isAuthenticated) return null;
 
   return (
-    <section className="min-h-screen p-6 bg-gradient-to-b from-black to-neutral-900 text-white flex flex-col items-center">
-      
-      <div className="w-full max-w-4xl max-md:max-w-full">
-        {/* Sleek Header */}
-        <div className="flex justify-between items-center mb-8 bg-white/5 border border-white/10 rounded-2xl p-6 glass">
-          <div>
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent max-sm:text-xl">
-              CareerCraft AI Voice Interview
-            </h1>
-            <p className="text-sm text-zinc-400 mt-1 max-sm:text-xs">
-              Secure Turn-Based Technical Recruiter Assessor
-            </p>
-          </div>
+    <CandidateLayout>
+      <section className="relative -m-4 min-h-[calc(100vh-2rem)] overflow-hidden bg-[var(--cc-bg)] p-4 text-[var(--cc-text)] md:-m-6 md:min-h-[calc(100vh-3rem)] md:p-6">
+        <div className="cc-aurora-blob cc-aurora-1 pointer-events-none" />
+        <div className="cc-aurora-blob cc-aurora-2 pointer-events-none" />
+        <div className="cc-page relative z-10 max-w-5xl">
+          {/* Workspace header */}
+          <div className="cc-card mb-5 flex flex-col gap-4 p-5 md:mb-6 md:flex-row md:items-center md:justify-between md:p-6">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--cc-accent)] to-[var(--cc-accent-2)] text-white shadow-lg shadow-[var(--cc-glow)]">
+                <Mic className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="cc-eyebrow mb-1">Interview practice</p>
+                <h1 className="text-2xl font-bold tracking-tight md:text-3xl">AI Voice Interview</h1>
+                <p className="mt-1 text-sm text-[var(--cc-text-muted)]">A structured, secure practice session with tailored AI follow-up questions.</p>
+              </div>
+            </div>
           
           {step === 3 && (
-            <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl text-red-400 font-mono text-lg animate-pulse max-sm:text-sm">
+            <div className="flex items-center gap-3 rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-2 font-mono text-lg text-rose-500 max-sm:text-sm">
               <Clock className="w-5 h-5 max-sm:w-4 max-sm:h-4" />
               <span>{formatTime(timer)}</span>
             </div>
           )}
         </div>
 
-        {/* Steps Card */}
-        <div className="w-full bg-white/5 border border-white/10 rounded-3xl p-8 glass shadow-2xl relative overflow-hidden">
+        {/* Interview workflow */}
+        <div className="cc-card relative w-full overflow-hidden p-5 md:p-8">
           
           {/* Progress Indicators */}
-          <div className="flex items-center justify-between mb-8 pb-6 border-b border-white/5 max-sm:flex-col max-sm:gap-3">
+          <div className="mb-8 grid grid-cols-2 gap-2 border-b border-[var(--cc-border)] pb-5 sm:grid-cols-4 md:gap-3 md:pb-6">
             {[
               { id: 1, label: 'Identity Check' },
               { id: 2, label: 'Security Scan' },
               { id: 3, label: 'Voice Interview' },
               { id: 4, label: 'Results Card' }
             ].map((s) => (
-              <div key={s.id} className="flex items-center gap-3">
+              <div key={s.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-all ${
+                step === s.id
+                  ? 'border-[var(--cc-accent)] bg-[color-mix(in_srgb,var(--cc-accent)_12%,transparent)] shadow-[0_6px_20px_var(--cc-glow)]'
+                  : step > s.id
+                    ? 'border-emerald-500/35 bg-emerald-500/5'
+                    : 'border-[var(--cc-border)] bg-[color-mix(in_srgb,var(--cc-surface)_62%,transparent)]'
+              }`}>
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                   step === s.id 
-                    ? 'bg-purple-600 text-white border-2 border-purple-400 shadow-lg shadow-purple-500/50' 
+                    ? 'bg-[var(--cc-accent)] text-white shadow-lg shadow-[var(--cc-glow)]'
                     : step > s.id 
                       ? 'bg-emerald-600 text-white' 
-                      : 'bg-white/10 text-zinc-400'
+                      : 'bg-[var(--cc-surface)] text-[var(--cc-text-muted)]'
                 }`}>
                   {s.id}
                 </div>
-                <span className={`text-sm ${step === s.id ? 'font-semibold text-purple-300' : 'text-zinc-500'}`}>
+                <span className={`text-xs leading-tight sm:text-sm ${step === s.id ? 'font-semibold text-[var(--cc-text)]' : 'text-[var(--cc-text-muted)]'}`}>
                   {s.label}
                 </span>
               </div>
@@ -862,7 +873,8 @@ export default function CandidateInterviewPage() {
 
           </AnimatePresence>
         </div>
-      </div>
-    </section>
+        </div>
+      </section>
+    </CandidateLayout>
   );
 }
