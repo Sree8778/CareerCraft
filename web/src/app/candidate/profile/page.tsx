@@ -30,7 +30,7 @@ interface ResumeData {
 /* ─── Card ──────────────────────────────────────────── */
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-[#1C2333] border border-[#2A3347] rounded-xl overflow-hidden ${className}`}>
+    <div className={`cc-card overflow-hidden rounded-2xl border ${className}`}>
       {children}
     </div>
   );
@@ -44,14 +44,14 @@ function Section({ title, addHref, showAll, showAllCount, children }: {
   return (
     <Card>
       <div className="flex items-center justify-between px-6 pt-6 pb-4">
-        <h2 className="text-xl font-semibold text-white">{title}</h2>
+        <h2 className="text-xl font-semibold text-[var(--cc-text)]">{title}</h2>
         <div className="flex items-center gap-1">
           {addHref && (
-            <Link href={addHref} className="text-[#94A3B8] hover:text-white p-1.5 rounded-full hover:bg-white/5 transition">
+            <Link href={addHref} className="rounded-full p-1.5 text-[var(--cc-text-muted)] transition hover:bg-[var(--cc-accent)]/10 hover:text-[var(--cc-accent)]">
               <Plus className="w-5 h-5" />
             </Link>
           )}
-          <Link href="/candidate/settings" className="text-[#94A3B8] hover:text-white p-1.5 rounded-full hover:bg-white/5 transition">
+          <Link href="/candidate/settings" className="rounded-full p-1.5 text-[var(--cc-text-muted)] transition hover:bg-[var(--cc-accent)]/10 hover:text-[var(--cc-accent)]">
             <Pencil className="w-4 h-4" />
           </Link>
         </div>
@@ -61,7 +61,7 @@ function Section({ title, addHref, showAll, showAllCount, children }: {
       </div>
       {showAll && showAllCount && (
         <Link href={addHref || '/candidate/settings'}
-          className="flex items-center justify-center gap-1.5 w-full py-4 border-t border-[#2A3347] text-sm font-semibold text-[#94A3B8] hover:text-white hover:bg-white/3 transition">
+          className="flex w-full items-center justify-center gap-1.5 border-t border-[var(--cc-border)] py-4 text-sm font-semibold text-[var(--cc-text-muted)] transition hover:bg-[var(--cc-accent)]/5 hover:text-[var(--cc-accent)]">
           Show all {showAllCount} {showAll}
           <ExternalLink className="w-3.5 h-3.5" />
         </Link>
@@ -72,7 +72,7 @@ function Section({ title, addHref, showAll, showAllCount, children }: {
 
 /* ─── Divider between items in a section ──────────────── */
 function Divider() {
-  return <div className="border-t border-[#2A3347] my-4" />;
+  return <div className="my-4 border-t border-[var(--cc-border)]" />;
 }
 
 /* ─── Experience / Education item ─────────────────────── */
@@ -83,23 +83,23 @@ function EntryItem({ logoIcon, title, sub, sub2, meta, body, link, children }: {
   return (
     <div className="flex gap-4">
       {/* Company logo square – LinkedIn style */}
-      <div className="w-12 h-12 rounded-md bg-[#252D3D] border border-[#2A3347] flex items-center justify-center shrink-0 text-[#566075]">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[var(--cc-border)] bg-[var(--cc-bg)] text-[var(--cc-text-muted)]">
         {logoIcon ?? <Building2 className="w-5 h-5" />}
       </div>
       <div className="flex-1 min-w-0 pb-1">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-base font-semibold text-white leading-snug">{title}</p>
+          <p className="text-base font-semibold leading-snug text-[var(--cc-text)]">{title}</p>
           {link && (
             <a href={link} target="_blank" rel="noopener noreferrer"
-              className="text-[#566075] hover:text-[#94A3B8] shrink-0 mt-0.5">
+              className="mt-0.5 shrink-0 text-[var(--cc-text-muted)] transition hover:text-[var(--cc-accent)]">
               <ExternalLink className="w-4 h-4" />
             </a>
           )}
         </div>
-        {sub && <p className="text-sm text-[#94A3B8] mt-0.5">{sub}</p>}
-        {sub2 && <p className="text-sm text-[#94A3B8]">{sub2}</p>}
-        {meta && <p className="text-sm text-[#566075] mt-0.5">{meta}</p>}
-        {body && <p className="text-sm text-[#94A3B8] mt-3 leading-relaxed whitespace-pre-line">{body}</p>}
+        {sub && <p className="mt-0.5 text-sm text-[var(--cc-text-muted)]">{sub}</p>}
+        {sub2 && <p className="text-sm text-[var(--cc-text-muted)]">{sub2}</p>}
+        {meta && <p className="mt-0.5 text-sm text-[var(--cc-text-muted)]">{meta}</p>}
+        {body && <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-[var(--cc-text-muted)]">{body}</p>}
         {children}
       </div>
     </div>
@@ -184,17 +184,17 @@ export default function CandidateProfilePage() {
   return (
     <CandidateLayout>
       {loading ? (
-        <div className="flex items-center justify-center h-64 text-[#566075] text-sm animate-pulse">Loading profile…</div>
+        <div className="flex h-64 items-center justify-center text-sm text-[var(--cc-text-muted)] animate-pulse">Loading profile…</div>
       ) : (
-        <div className="flex gap-5 items-start">
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
 
           {/* ── Left: main content ── */}
-          <div className="flex-1 min-w-0 space-y-2.5">
+          <div className="min-w-0 space-y-6">
 
             {/* ── TOP CARD: cover + avatar + identity ── */}
             <Card>
               {/* Cover photo */}
-              <div className="relative h-52 bg-gradient-to-br from-[#0d1b3e] via-[#1a3a6e] to-[#0d2044] overflow-hidden">
+              <div className="relative h-40 overflow-hidden bg-gradient-to-br from-[#192b69] via-[#3865c9] to-[#8b5cf6] sm:h-48">
                 {/* subtle pattern overlay */}
                 <div className="absolute inset-0 opacity-30"
                   style={{ backgroundImage: 'radial-gradient(circle at 20% 60%, #2563eb 0%, transparent 50%), radial-gradient(circle at 80% 40%, #7c3aed 0%, transparent 50%)' }} />
@@ -206,15 +206,15 @@ export default function CandidateProfilePage() {
               </div>
 
               {/* Identity section */}
-              <div className="px-6 pb-6">
+              <div className="px-5 pb-6 sm:px-7">
                 {/* Avatar row */}
-                <div className="flex items-end justify-between -mt-16 mb-4">
+                <div className="mb-5 flex flex-col gap-4 -mt-14 sm:mb-4 sm:flex-row sm:items-end sm:justify-between">
                   <div className="relative">
                     {/* Open to work green ring */}
                     {prefs?.availability === 'Immediately' && (
                       <div className="absolute inset-0 rounded-full border-[5px] border-emerald-500 -m-1.5 z-10" />
                     )}
-                    <div className="w-36 h-36 rounded-full border-[5px] border-[#1C2333] bg-gradient-to-br from-[#2563eb] to-[#7c3aed] flex items-center justify-center text-white text-5xl font-black shadow-2xl relative z-0">
+                    <div className="relative z-0 flex h-28 w-28 items-center justify-center rounded-full border-[5px] border-[var(--cc-surface-solid)] bg-gradient-to-br from-[#2563eb] to-[#7c3aed] text-4xl font-black text-white shadow-2xl sm:h-32 sm:w-32 sm:text-5xl">
                       {name.charAt(0).toUpperCase()}
                     </div>
                     {/* Open to work label */}
@@ -226,16 +226,16 @@ export default function CandidateProfilePage() {
                   </div>
 
                   {/* Action buttons */}
-                  <div className="flex items-center gap-2 mb-1 flex-wrap justify-end">
+                  <div className="mb-1 flex flex-wrap items-center gap-2 sm:justify-end">
                     <Link href="/candidate/resume-builder"
-                      className="bg-[#0A66C2] hover:bg-[#0a5ab2] text-white text-sm font-bold px-5 py-1.5 rounded-full transition">
-                      Open to
+                      className="rounded-full bg-gradient-to-r from-[var(--cc-accent)] to-[var(--cc-accent-2)] px-5 py-1.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--cc-accent)]">
+                      Resume builder
                     </Link>
                     <Link href="/candidate/settings"
-                      className="border border-[#566075] hover:border-[#94A3B8] text-[#94A3B8] hover:text-white text-sm font-bold px-5 py-1.5 rounded-full transition">
+                      className="rounded-full border border-[var(--cc-border)] px-5 py-1.5 text-sm font-bold text-[var(--cc-text-muted)] transition hover:border-[var(--cc-accent)] hover:bg-[var(--cc-accent)]/10 hover:text-[var(--cc-accent)]">
                       Add section
                     </Link>
-                    <button className="border border-[#566075] hover:border-[#94A3B8] text-[#94A3B8] hover:text-white p-2 rounded-full transition">
+                    <button aria-label="More profile actions" className="rounded-full border border-[var(--cc-border)] p-2 text-[var(--cc-text-muted)] transition hover:border-[var(--cc-accent)] hover:text-[var(--cc-accent)]">
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
                   </div>
@@ -243,10 +243,10 @@ export default function CandidateProfilePage() {
 
                 {/* Name, headline, meta */}
                 <div className="space-y-1.5">
-                  <h1 className="text-2xl font-bold text-white leading-tight">{name}</h1>
-                  <p className="text-base text-[#CBD5E1]">{headline}</p>
+                  <h1 className="text-2xl font-bold leading-tight text-[var(--cc-text)]">{name}</h1>
+                  <p className="text-base text-[var(--cc-text-muted)]">{headline}</p>
 
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-[#566075] pt-0.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5 text-sm text-[var(--cc-text-muted)]">
                     {location && (
                       <span className="flex items-center gap-1">
                         <MapPin className="w-3.5 h-3.5" />{location}
@@ -265,10 +265,10 @@ export default function CandidateProfilePage() {
                   </div>
 
                   <div className="flex items-center gap-3 pt-1">
-                    <Link href="/candidate/network" className="text-sm font-semibold text-[#0A66C2] hover:text-[#0a5ab2] hover:underline">
+                    <Link href="/candidate/network" className="text-sm font-semibold text-[var(--cc-accent)] hover:underline">
                       {connectionCount === null ? '' : `${connectionCount} connection${connectionCount === 1 ? '' : 's'}`}
                     </Link>
-                    <Link href="/candidate/network" className="text-sm text-[#566075] hover:text-[#94A3B8]">
+                    <Link href="/candidate/network" className="text-sm text-[var(--cc-text-muted)] hover:text-[var(--cc-accent)]">
                       · Contact info
                     </Link>
                   </div>
@@ -276,7 +276,7 @@ export default function CandidateProfilePage() {
                   {/* Edit profile link */}
                   <div className="pt-2">
                     <Link href="/candidate/settings"
-                      className="text-sm font-semibold text-[#0A66C2] hover:text-[#0a5ab2] hover:underline">
+                      className="text-sm font-semibold text-[var(--cc-accent)] hover:underline">
                       Edit profile
                     </Link>
                   </div>
@@ -293,14 +293,14 @@ export default function CandidateProfilePage() {
                       <Briefcase className="w-5 h-5 text-emerald-400" />
                     </div>
                     <div>
-                      <p className="text-base font-semibold text-white">Open to work</p>
-                      <p className="text-sm text-[#94A3B8]">
+                      <p className="text-base font-semibold text-[var(--cc-text)]">Open to work</p>
+                      <p className="text-sm text-[var(--cc-text-muted)]">
                         {[prefs.jobType, prefs.locationPref, prefs.availability && `Available ${prefs.availability}`]
                           .filter(Boolean).join(' · ')}
                       </p>
                     </div>
                   </div>
-                  <Link href="/candidate/settings" className="text-[#566075] hover:text-white transition">
+                  <Link href="/candidate/settings" className="text-[var(--cc-text-muted)] transition hover:text-[var(--cc-accent)]">
                     <Pencil className="w-4 h-4" />
                   </Link>
                 </div>
@@ -311,13 +311,13 @@ export default function CandidateProfilePage() {
             {summary && (
               <Card>
                 <div className="flex items-center justify-between px-6 pt-6 pb-3">
-                  <h2 className="text-xl font-semibold text-white">About</h2>
-                  <Link href="/candidate/settings" className="text-[#94A3B8] hover:text-white p-1.5 rounded-full hover:bg-white/5 transition">
+                  <h2 className="text-xl font-semibold text-[var(--cc-text)]">About</h2>
+                  <Link href="/candidate/settings" className="rounded-full p-1.5 text-[var(--cc-text-muted)] transition hover:bg-[var(--cc-accent)]/10 hover:text-[var(--cc-accent)]">
                     <Pencil className="w-4 h-4" />
                   </Link>
                 </div>
                 <div className="px-6 pb-6">
-                  <p className="text-sm text-[#94A3B8] leading-relaxed whitespace-pre-line">{summary}</p>
+                  <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--cc-text-muted)]">{summary}</p>
                 </div>
               </Card>
             )}
@@ -372,9 +372,9 @@ export default function CandidateProfilePage() {
                     {i > 0 && <Divider />}
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-base font-semibold text-white">{skill}</p>
+                        <p className="text-base font-semibold text-[var(--cc-text)]">{skill}</p>
                       </div>
-                      <span className="text-xs text-[#566075] bg-[#252D3D] border border-[#2A3347] px-2.5 py-1 rounded-full">
+                      <span className="rounded-full border border-[var(--cc-border)] bg-[var(--cc-bg)] px-2.5 py-1 text-xs text-[var(--cc-text-muted)]">
                         Skill
                       </span>
                     </div>
@@ -400,7 +400,7 @@ export default function CandidateProfilePage() {
                       {proj.technologies && (
                         <div className="flex flex-wrap gap-1.5 mt-2.5">
                           {proj.technologies.split(',').map(t => t.trim()).filter(Boolean).map((tech, j) => (
-                            <span key={j} className="text-[11px] font-mono bg-[#252D3D] text-[#7B8EC8] px-2 py-0.5 rounded border border-[#2A3347]">
+                            <span key={j} className="rounded border border-[var(--cc-border)] bg-[var(--cc-bg)] px-2 py-0.5 font-mono text-[11px] text-[var(--cc-accent)]">
                               {tech}
                             </span>
                           ))}
@@ -435,14 +435,14 @@ export default function CandidateProfilePage() {
             {!summary && !experience.length && !education.length && !allSkills.length && (
               <Card>
                 <div className="p-8 text-center space-y-4">
-                  <p className="text-[#566075] text-sm">Your profile is empty — add details to stand out to recruiters.</p>
+                  <p className="text-sm text-[var(--cc-text-muted)]">Your profile is empty — add details to stand out to recruiters.</p>
                   <div className="flex gap-3 justify-center">
                     <Link href="/candidate/resume-builder"
-                      className="bg-[#0A66C2] hover:bg-[#0a5ab2] text-white text-sm font-bold px-5 py-2 rounded-full transition">
+                      className="rounded-full bg-gradient-to-r from-[var(--cc-accent)] to-[var(--cc-accent-2)] px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:brightness-110">
                       Build from resume
                     </Link>
                     <Link href="/candidate/settings"
-                      className="border border-[#566075] hover:border-[#94A3B8] text-[#94A3B8] text-sm font-semibold px-5 py-2 rounded-full transition">
+                      className="rounded-full border border-[var(--cc-border)] px-5 py-2 text-sm font-semibold text-[var(--cc-text-muted)] transition hover:border-[var(--cc-accent)] hover:text-[var(--cc-accent)]">
                       Edit settings
                     </Link>
                   </div>
@@ -453,28 +453,28 @@ export default function CandidateProfilePage() {
           </div>
 
           {/* ── Right sidebar ── */}
-          <aside className="w-80 shrink-0 space-y-2.5">
+          <aside className="w-full space-y-6 xl:w-80">
 
             {/* Profile analytics */}
             <Card>
               <div className="p-5">
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-base font-semibold text-white">Analytics</h3>
-                  <span className="text-[11px] text-[#566075]">Private to you</span>
+                  <h3 className="text-base font-semibold text-[var(--cc-text)]">Analytics</h3>
+                  <span className="text-[11px] text-[var(--cc-text-muted)]">Private to you</span>
                 </div>
                 <div className="space-y-3 mt-3">
-                  <Link href="/candidate/network" className="flex items-center gap-3 hover:bg-white/3 -mx-2 px-2 py-1.5 rounded-lg transition group">
-                    <Eye className="w-5 h-5 text-[#566075] group-hover:text-[#94A3B8]" />
+                  <Link href="/candidate/network" className="group -mx-2 flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-[var(--cc-accent)]/5">
+                    <Eye className="h-5 w-5 text-[var(--cc-text-muted)] group-hover:text-[var(--cc-accent)]" />
                     <div>
-                      <p className="text-sm font-semibold text-white group-hover:text-[#0A66C2] transition">Profile views</p>
-                      <p className="text-xs text-[#566075]">Discover who's viewed your profile</p>
+                      <p className="text-sm font-semibold text-[var(--cc-text)] transition group-hover:text-[var(--cc-accent)]">Profile views</p>
+                      <p className="text-xs text-[var(--cc-text-muted)]">Discover who's viewed your profile</p>
                     </div>
                   </Link>
-                  <Link href="/candidate/jobs" className="flex items-center gap-3 hover:bg-white/3 -mx-2 px-2 py-1.5 rounded-lg transition group">
-                    <Users className="w-5 h-5 text-[#566075] group-hover:text-[#94A3B8]" />
+                  <Link href="/candidate/jobs" className="group -mx-2 flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-[var(--cc-accent)]/5">
+                    <Users className="h-5 w-5 text-[var(--cc-text-muted)] group-hover:text-[var(--cc-accent)]" />
                     <div>
-                      <p className="text-sm font-semibold text-white group-hover:text-[#0A66C2] transition">Search appearances</p>
-                      <p className="text-xs text-[#566075]">See how often you appear in searches</p>
+                      <p className="text-sm font-semibold text-[var(--cc-text)] transition group-hover:text-[var(--cc-accent)]">Search appearances</p>
+                      <p className="text-xs text-[var(--cc-text-muted)]">See how often you appear in searches</p>
                     </div>
                   </Link>
                 </div>
@@ -484,13 +484,13 @@ export default function CandidateProfilePage() {
             {/* Public profile URL */}
             <Card>
               <div className="p-5 space-y-3">
-                <h3 className="text-base font-semibold text-white">Public profile & URL</h3>
-                <div className="flex items-center gap-2 bg-[#151D2E] border border-[#2A3347] rounded-lg px-3 py-2">
-                  <Link2 className="w-3.5 h-3.5 text-[#566075] shrink-0" />
-                  <span className="text-xs text-[#566075] font-mono truncate">/profile/{user?.id?.slice(0, 14)}…</span>
+                <h3 className="text-base font-semibold text-[var(--cc-text)]">Public profile & URL</h3>
+                <div className="flex items-center gap-2 rounded-xl border border-[var(--cc-border)] bg-[var(--cc-bg)] px-3 py-2">
+                  <Link2 className="h-3.5 w-3.5 shrink-0 text-[var(--cc-text-muted)]" />
+                  <span className="truncate font-mono text-xs text-[var(--cc-text-muted)]">/profile/{user?.id?.slice(0, 14)}…</span>
                 </div>
                 <Link href={`/profile/${user?.id}`}
-                  className="flex items-center justify-center gap-1.5 w-full py-2 border border-[#566075] hover:border-[#94A3B8] text-[#94A3B8] hover:text-white text-sm font-semibold rounded-full transition">
+                  className="flex w-full items-center justify-center gap-1.5 rounded-full border border-[var(--cc-border)] py-2 text-sm font-semibold text-[var(--cc-text-muted)] transition hover:border-[var(--cc-accent)] hover:bg-[var(--cc-accent)]/10 hover:text-[var(--cc-accent)]">
                   <Eye className="w-3.5 h-3.5" /> View public profile
                 </Link>
               </div>
@@ -501,35 +501,35 @@ export default function CandidateProfilePage() {
               <Card>
                 <div className="p-5">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-base font-semibold text-white">Job preferences</h3>
-                    <Link href="/candidate/settings" className="text-[#566075] hover:text-white transition">
+                    <h3 className="text-base font-semibold text-[var(--cc-text)]">Job preferences</h3>
+                    <Link href="/candidate/settings" className="text-[var(--cc-text-muted)] transition hover:text-[var(--cc-accent)]">
                       <Pencil className="w-3.5 h-3.5" />
                     </Link>
                   </div>
                   <div className="space-y-2.5">
                     {prefs.jobType && (
-                      <div className="flex items-center gap-2.5 text-sm text-[#94A3B8]">
-                        <Briefcase className="w-4 h-4 text-[#566075] shrink-0" /> {prefs.jobType}
+                      <div className="flex items-center gap-2.5 text-sm text-[var(--cc-text-muted)]">
+                        <Briefcase className="h-4 w-4 shrink-0 text-[var(--cc-accent)]" /> {prefs.jobType}
                       </div>
                     )}
                     {prefs.locationPref && (
-                      <div className="flex items-center gap-2.5 text-sm text-[#94A3B8]">
-                        <Globe className="w-4 h-4 text-[#566075] shrink-0" /> {prefs.locationPref}
+                      <div className="flex items-center gap-2.5 text-sm text-[var(--cc-text-muted)]">
+                        <Globe className="h-4 w-4 shrink-0 text-[var(--cc-accent)]" /> {prefs.locationPref}
                       </div>
                     )}
                     {prefs.workAuth && (
-                      <div className="flex items-center gap-2.5 text-sm text-[#94A3B8]">
-                        <CheckCircle className="w-4 h-4 text-[#566075] shrink-0" /> {prefs.workAuth}
+                      <div className="flex items-center gap-2.5 text-sm text-[var(--cc-text-muted)]">
+                        <CheckCircle className="h-4 w-4 shrink-0 text-[var(--cc-accent)]" /> {prefs.workAuth}
                       </div>
                     )}
                     {prefs.availability && (
-                      <div className="flex items-center gap-2.5 text-sm text-[#94A3B8]">
-                        <Calendar className="w-4 h-4 text-[#566075] shrink-0" /> {prefs.availability}
+                      <div className="flex items-center gap-2.5 text-sm text-[var(--cc-text-muted)]">
+                        <Calendar className="h-4 w-4 shrink-0 text-[var(--cc-accent)]" /> {prefs.availability}
                       </div>
                     )}
                     {prefs.salaryMin && (
-                      <div className="flex items-center gap-2.5 text-sm text-[#94A3B8]">
-                        <span className="text-[#566075] text-base shrink-0">$</span>
+                      <div className="flex items-center gap-2.5 text-sm text-[var(--cc-text-muted)]">
+                        <span className="shrink-0 text-base text-[var(--cc-accent)]">$</span>
                         {prefs.salaryMin}{prefs.salaryMax ? ` – $${prefs.salaryMax}` : '+'} / yr
                       </div>
                     )}

@@ -335,7 +335,7 @@ export default function LoginModal() {
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
+    <div className="fixed inset-0 z-[10000] flex items-start justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-md sm:items-center">
       <div id="recaptcha-container" />
 
       <motion.div
@@ -343,7 +343,7 @@ export default function LoginModal() {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.92, y: 16 }}
         transition={{ type: 'spring', damping: 26, stiffness: 160 }}
-        className="relative w-full max-w-md bg-[#0b0c10]/95 backdrop-blur-2xl rounded-3xl p-8 border border-white/10 shadow-2xl overflow-hidden"
+        className="relative my-auto w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl border border-white/10 bg-[#0b0c10]/95 p-8 shadow-2xl backdrop-blur-2xl"
       >
         {/* Glow accents */}
         <div className="absolute -top-24 -right-24 w-48 h-48 rounded-full bg-purple-500/10 blur-3xl pointer-events-none" />
