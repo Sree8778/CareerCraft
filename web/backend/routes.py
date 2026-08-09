@@ -400,10 +400,12 @@ def get_next_question_route():
     conversation_history = data.get('conversationHistory', [])
     latest_transcript = data.get('latestTranscript', '')
     elapsed_seconds = data.get('elapsedSeconds', 0)
-    
+    interview_context = data.get('interviewContext', None)
+
     try:
         next_question = generate_next_interview_question(
-            resume_data, conversation_history, latest_transcript, elapsed_seconds
+            resume_data, conversation_history, latest_transcript, elapsed_seconds,
+            interview_context=interview_context,
         )
         return jsonify({"nextQuestion": next_question}), 200
     except RuntimeError as e:

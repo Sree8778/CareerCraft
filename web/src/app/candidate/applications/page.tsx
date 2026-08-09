@@ -344,7 +344,7 @@ export default function CandidateApplicationsPage() {
                           onToggle={() => setExpandedCard(prev => prev === app.id ? null : app.id)}
                           onDragStart={() => onDragStart(app.id)}
                           onMoveTo={updateStatus}
-                          onStartInterview={id => router.push(`/candidate/applications/${id}/interview`)}
+                          onStartInterview={id => router.push(`/candidate/interview?applicationId=${id}`)}
                         />
                       ))}
                     </AnimatePresence>

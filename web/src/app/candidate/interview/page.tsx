@@ -3,18 +3,19 @@
 export const dynamic = 'force-dynamic';
 
 // src/app/candidate/interview/page.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   Camera, FileCheck, ShieldAlert, Volume2, Mic,
   AlertTriangle, CheckCircle, Award, Clock, ArrowRight, UserCheck
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { doc, setDoc, getDoc, arrayUnion, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import CandidateLayout from '@/components/layout/CandidateLayout';
+import { API_BASE } from '@/lib/api';
 
 type InterviewResponse = {
   questionText: string;
@@ -60,12 +61,26 @@ const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HT
 });
 Button.displayName = 'Button';
 
-export default function CandidateInterviewPage() {
+function CandidateInterviewContent() {
   const { isAuthenticated, user, getToken, loading: authLoading } = useAuth();
   const router = useRouter();
-  
+  const searchParams = useSearchParams();
+  const applicationId = searchParams.get('applicationId');
+
+  // Job interview context (populated when applicationId is present)
+  const [interviewContext, setInterviewContext] = useState<{
+    applicationId: string;
+    jobTitle: string;
+    company: string;
+    topics: string[];
+    description: string;
+    mode: string;
+  } | null>(null);
+  const [contextResume, setContextResume] = useState<any>(null);
+  const [contextLoading, setContextLoading] = useState(!!applicationId);
+
   // State variables
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1); // 1: Bio Verification, 2: System Check, 3: Voice Arena, 4: Wrap-up Scorecard
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [loading, setLoading] = useState(false);
   
   // Verification uploads
@@ -175,6 +190,56 @@ export default function CandidateInterviewPage() {
       router.push('/');
     }
   }, [isAuthenticated, router, authLoading]);
+
+  // Load job context from applicationId query param
+  useEffect(() => {
+    if (!applicationId || authLoading || !isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const [appResp, ] = await Promise.all([
+          fetch(`${API_BASE}/applications/${applicationId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ]);
+        if (!appResp.ok) throw new Error('Could not load application');
+        const appData = await appResp.json();
+        const app = appData.application ?? appData;
+
+        // Fetch job details
+        const jobId = app.jobId || app.job_id;
+        let jobData: any = {};
+        if (jobId) {
+          const jobResp = await fetch(`${API_BASE}/jobs/${jobId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (jobResp.ok) {
+            const jd = await jobResp.json();
+            jobData = jd.job ?? jd;
+          }
+        }
+
+        const cfg = jobData.aiInterview || {};
+        if (!cancelled) {
+          setInterviewContext({
+            applicationId,
+            jobTitle: jobData.title || 'Position',
+            company: jobData.company || '',
+            topics: cfg.topics || [],
+            description: jobData.description || '',
+            mode: cfg.mode || 'auto',
+          });
+          if (app.resumeSnapshot) setContextResume(app.resumeSnapshot);
+        }
+      } catch (err) {
+        console.warn('[interview] context load failed:', err);
+      } finally {
+        if (!cancelled) setContextLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [applicationId, authLoading, isAuthenticated]);
 
   // Start Camera for Verification
   const startCamera = async () => {
@@ -341,13 +406,15 @@ export default function CandidateInterviewPage() {
         : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const generatedId = `${user?.id || 'candidate'}_${uniquePart}`;
 
-      // Fetch resume data
-      let resumeData = {};
-      try {
-        const resumeSnap = await getDoc(doc(db, 'resumes', user?.id || 'mock_uid'));
-        resumeData = resumeSnap.exists() ? resumeSnap.data().resumeData : {};
-      } catch (error) {
-        console.warn('Unable to load saved resume data for the interview.', error);
+      // Use resume snapshot from application if in job-interview mode; fall back to Firestore
+      let resumeData: any = contextResume || {};
+      if (!contextResume) {
+        try {
+          const resumeSnap = await getDoc(doc(db, 'resumes', user?.id || 'mock_uid'));
+          resumeData = resumeSnap.exists() ? resumeSnap.data().resumeData : {};
+        } catch (error) {
+          console.warn('Unable to load saved resume data for the interview.', error);
+        }
       }
 
       // Get first opening question
@@ -361,7 +428,8 @@ export default function CandidateInterviewPage() {
           resumeData,
           conversationHistory: [],
           latestTranscript: '',
-          elapsedSeconds: 0
+          elapsedSeconds: 0,
+          ...(interviewContext ? { interviewContext } : {})
         })
       });
 
@@ -375,11 +443,16 @@ export default function CandidateInterviewPage() {
       
       
       // Save initial interview document
-      const sessionRecord = {
+      const sessionRecord: Record<string, any> = {
         candidateId: user?.id || 'mock_uid',
         candidateName: user?.name || 'Candidate',
-        jobId: 'ai_eval_role',
-        jobTitle: 'AI Core Technical Assessor',
+        jobId: interviewContext ? undefined : 'ai_eval_role',
+        jobTitle: interviewContext ? interviewContext.jobTitle : 'AI Core Technical Assessor',
+        ...(interviewContext ? {
+          company: interviewContext.company,
+          applicationId: interviewContext.applicationId,
+          interviewMode: 'job_specific',
+        } : {}),
         status: 'in_progress',
         startedAt: Timestamp.now(),
         conversationHistory: [{ speaker: 'ai', text: firstQuestion, timestamp: Timestamp.now() }],
@@ -528,13 +601,15 @@ export default function CandidateInterviewPage() {
         setLoading(false); return;
       }
 
-      // 2. Fetch resume data
-      let resumeData = {};
-      try {
-        const resumeSnap = await getDoc(doc(db, 'resumes', user?.id || 'mock_uid'));
-        resumeData = resumeSnap.exists() ? resumeSnap.data().resumeData : {};
-      } catch (error) {
-        console.warn('Unable to load saved resume data for the follow-up question.', error);
+      // 2. Use cached resume (from application snapshot or Firestore)
+      let resumeData: any = contextResume || {};
+      if (!contextResume) {
+        try {
+          const resumeSnap = await getDoc(doc(db, 'resumes', user?.id || 'mock_uid'));
+          resumeData = resumeSnap.exists() ? resumeSnap.data().resumeData : {};
+        } catch (error) {
+          console.warn('Unable to load saved resume data for the follow-up question.', error);
+        }
       }
 
       // 3. Request next dynamic question
@@ -549,7 +624,8 @@ export default function CandidateInterviewPage() {
           resumeData,
           conversationHistory: updatedHistory,
           latestTranscript: speechTranscript,
-          elapsedSeconds
+          elapsedSeconds,
+          ...(interviewContext ? { interviewContext } : {})
         })
       });
       const nextData = await readInterviewResponse(nextResp);
@@ -648,6 +724,34 @@ export default function CandidateInterviewPage() {
         toast.warning('The scorecard is available in this browser, but cloud sync is unavailable.');
       }
 
+      // Save result to application when in job-interview mode
+      if (interviewContext?.applicationId) {
+        try {
+          const token = await getToken();
+          await fetch(`${API_BASE}/applications/${interviewContext.applicationId}/interview/complete`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              overallScore: averageScore,
+              overallFeedback: finalFeedback,
+              responses: responses.map(r => ({
+                question: r.questionText,
+                answer: r.transcript,
+                score: r.aiScore,
+                feedback: r.aiFeedback,
+              })),
+              interviewId,
+              status,
+            }),
+          });
+        } catch (err) {
+          console.warn('[interview] could not save result to application:', err);
+        }
+      }
+
       setScorecard({
         overallScore: averageScore,
         overallFeedback: finalFeedback,
@@ -673,6 +777,15 @@ export default function CandidateInterviewPage() {
   };
 
   if (authLoading || !isAuthenticated) return null;
+  if (contextLoading) {
+    return (
+      <CandidateLayout>
+        <div className="flex min-h-[60vh] items-center justify-center text-[var(--cc-text-muted)]">
+          Loading interview…
+        </div>
+      </CandidateLayout>
+    );
+  }
 
   return (
     <CandidateLayout>
@@ -687,9 +800,19 @@ export default function CandidateInterviewPage() {
                 <Mic className="h-5 w-5" />
               </div>
               <div>
-                <p className="cc-eyebrow mb-1">Interview practice</p>
-                <h1 className="text-2xl font-bold tracking-tight md:text-3xl">AI Voice Interview</h1>
-                <p className="mt-1 text-sm text-[var(--cc-text-muted)]">A structured practice session with tailored AI follow-up questions.</p>
+                {interviewContext ? (
+                  <>
+                    <p className="cc-eyebrow mb-1">Job interview screening</p>
+                    <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{interviewContext.jobTitle}</h1>
+                    <p className="mt-1 text-sm text-[var(--cc-text-muted)]">{interviewContext.company} · AI-powered voice interview</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="cc-eyebrow mb-1">Interview practice</p>
+                    <h1 className="text-2xl font-bold tracking-tight md:text-3xl">AI Voice Interview</h1>
+                    <p className="mt-1 text-sm text-[var(--cc-text-muted)]">A structured practice session with tailored AI follow-up questions.</p>
+                  </>
+                )}
               </div>
             </div>
           
@@ -1054,5 +1177,13 @@ export default function CandidateInterviewPage() {
         </div>
       </section>
     </CandidateLayout>
+  );
+}
+
+export default function CandidateInterviewPage() {
+  return (
+    <Suspense fallback={null}>
+      <CandidateInterviewContent />
+    </Suspense>
   );
 }

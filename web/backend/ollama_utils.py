@@ -261,7 +261,8 @@ Resume:
 # ── 5. Interview question generation ──────────────────────────────────────────
 
 def generate_next_interview_question(resume_data: dict, conversation_history: list,
-                                      latest_transcript: str, elapsed_seconds: int) -> str:
+                                      latest_transcript: str, elapsed_seconds: int,
+                                      interview_context: dict | None = None) -> str:
     history_str = ""
     for turn in conversation_history:
         speaker = "Interviewer" if turn.get("speaker") == "ai" else "Candidate"
@@ -270,6 +271,40 @@ def generate_next_interview_question(resume_data: dict, conversation_history: li
         history_str += f"Candidate (Latest): {latest_transcript}\n"
 
     elapsed_mins = elapsed_seconds / 60.0
+
+    if interview_context:
+        job_title = interview_context.get("jobTitle", "this role")
+        company = interview_context.get("company", "")
+        topics = interview_context.get("topics") or []
+        description = (interview_context.get("description") or "")[:600]
+        company_str = f" at {company}" if company else ""
+        topics_str = "\n".join(f"- {t}" for t in topics) if topics else ""
+        prompt = f"""You are an expert interviewer conducting a live voice interview for a {job_title} position{company_str}.
+Your job: evaluate this specific candidate for this specific role and probe their real depth.
+
+Candidate Resume:
+{json.dumps(resume_data, indent=2)}
+
+Role: {job_title}{company_str}
+{f"Job context: {description}" if description else ""}
+{f"Topics to cover (rotate through them, follow up naturally):\n{topics_str}" if topics_str else "Focus on skills most relevant to the role and the candidate's background."}
+
+Elapsed: {elapsed_mins:.1f} / 30 minutes
+
+Conversation so far:
+{history_str}
+
+Rules:
+1. Empty history → warm greeting, then an opening question that connects the candidate's strongest resume experience to the {job_title} role.
+2. Probe the candidate's experience as it relates to the job requirements.
+3. Build on their answers — ask follow-up HOW and WHY. Don't move to a new topic until you've dug into the current one.
+4. Connect topics to the candidate's actual resume entries when possible.
+5. Elapsed > 26 min → wrap up gracefully.
+6. 1-2 sentences only (optimised for TTS).
+7. Output ONLY the raw question or statement. No tags, no labels, no formatting."""
+        return _call(prompt, heavy=True) or f"Tell me about your most relevant experience for the {job_title} role."
+
+    # Generic practice mode
     prompt = f"""You are an elite Senior Technical Architect conducting a live 30-minute voice interview.
 Deep-dive technical assessment. Listen carefully and probe further.
 
