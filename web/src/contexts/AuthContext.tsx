@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const isMockFirebase = process.env.NODE_ENV !== 'production' && (!auth.app.options.apiKey || auth.app.options.apiKey.startsWith("your_api_key") || auth.app.options.apiKey.startsWith("mock"));
-    const useLocalFallback = () => {
+    const applyLocalFallback = () => {
       const fallback: User = { id: 'mock_uid_123', email: 'developer@recruitedge.mock', name: 'Jane Doe', role: 'candidate', avatar: '' };
       setUser(currentUser => currentUser || fallback);
       setNeedsOnboarding(!isOnboardingDone(fallback.id));
@@ -77,13 +77,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // machine (offline, blocked network, or emulator-free development). Do
     // not leave the whole app on its loading screen in that case. A later
     // auth callback will still replace this temporary developer session.
-    const localAuthTimeout = process.env.NODE_ENV !== 'production'
-      ? window.setTimeout(useLocalFallback, 6000)
-      : undefined;
+    const authTimeout = window.setTimeout(() => {
+      if (process.env.NODE_ENV !== 'production') {
+        applyLocalFallback();
+        return;
+      }
+      // A production user must never be silently replaced with a mock account.
+      // Stop the loading shell so the normal unauthenticated flow can recover.
+      setUser(null);
+      setNeedsOnboarding(false);
+      setLoading(false);
+    }, 8000);
 
     // Listen to Firebase Auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (localAuthTimeout) window.clearTimeout(localAuthTimeout);
+      window.clearTimeout(authTimeout);
       if (firebaseUser) {
         try {
           // Fetch additional user profile data from Firestore
@@ -158,7 +166,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Keep the full candidate workspace available during local development
         // when a configured Firebase project has no signed-in browser session.
         if (process.env.NODE_ENV !== 'production') {
-          useLocalFallback();
+          applyLocalFallback();
           return;
         }
         setUser(null);
@@ -167,7 +175,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     return () => {
-      if (localAuthTimeout) window.clearTimeout(localAuthTimeout);
+      window.clearTimeout(authTimeout);
       unsubscribe();
     };
   }, []);

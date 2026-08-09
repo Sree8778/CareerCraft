@@ -30,6 +30,30 @@ interface FeedbackResult {
   questionScores: number[]; summary: string;
 }
 
+class PracticeApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'PracticeApiError';
+  }
+}
+
+async function readPracticeResponse(response: Response): Promise<Record<string, any>> {
+  const body = await response.text();
+  let data: Record<string, any> = {};
+  if (body) {
+    try {
+      data = JSON.parse(body);
+    } catch {
+      throw new PracticeApiError(
+        response.ok ? 'The interview service returned an invalid response.' : `The interview service is unavailable (${response.status}).`,
+        response.status,
+      );
+    }
+  }
+  if (!response.ok) throw new PracticeApiError(data.message || data.error || `The interview service is unavailable (${response.status}).`, response.status);
+  return data;
+}
+
 const TYPE_CONFIG: Record<InterviewType, { icon: React.ReactNode; color: string; border: string; desc: string }> = {
   Technical:  { icon: <Brain className="w-5 h-5" />,    color: 'text-indigo-500 dark:text-indigo-300',  border: 'border-indigo-500',  desc: 'Algorithms, system design & coding' },
   Behavioral: { icon: <Users className="w-5 h-5" />,    color: 'text-purple-500 dark:text-purple-300',  border: 'border-purple-500',  desc: 'STAR situations & leadership' },
@@ -129,6 +153,7 @@ export default function PracticeInterviewPage() {
   const [muted, setMuted]                   = useState(false);
   const [ttsEnabled, setTtsEnabled]         = useState(true);
   const [feedback, setFeedback]             = useState<FeedbackResult | null>(null);
+  const [feedbackUnavailable, setFeedbackUnavailable] = useState(false);
 
   const recognitionRef  = useRef<any>(null);
   const silenceTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -249,13 +274,13 @@ export default function PracticeInterviewPage() {
         headers: { 'Content-Type': 'application/json', ...await getAuthHeader() },
         body: JSON.stringify({ conversation: conv, role, interviewType, difficulty, jobDescription, turnNumber: turnNum, totalTurns }),
       });
-      const data = await res.json();
+      const data = await readPracticeResponse(res);
       if (res.status === 402 && data.error === 'no_api_keys') {
         toast.warning(data.message || 'Add your API keys in Profile → Settings.', { duration: 8000 });
         setAppPhase('setup'); return;
       }
-      if (!res.ok) throw new Error(data.error || 'AI error');
-      const aiText: string = data.text;
+      const aiText = typeof data.text === 'string' ? data.text.trim() : '';
+      if (!aiText) throw new Error('The interview service did not return a question.');
       const newConv: Turn[] = [...conv, { role: 'ai', text: aiText }];
       convRef.current = newConv;
       setConversation(newConv);
@@ -267,9 +292,8 @@ export default function PracticeInterviewPage() {
         else startListening();
       });
     } catch (e: any) {
-      toast.error(e.message);
-      setRoomState('listening');
-      startListening();
+      toast.error(e instanceof Error ? e.message : 'Could not load the next question.');
+      setRoomState('done');
     }
   }, [role, interviewType, difficulty, totalTurns, speak, startListening]);
 
@@ -300,20 +324,26 @@ export default function PracticeInterviewPage() {
         headers: { 'Content-Type': 'application/json', ...await getAuthHeader() },
         body: JSON.stringify({ conversation: conv, role, interviewType }),
       });
-      const data = await res.json();
-      if (res.ok) setFeedback(data);
-    } catch (_) {}
+      const data = await readPracticeResponse(res);
+      setFeedback(data as FeedbackResult);
+    } catch (error) {
+      console.warn('Unable to generate final interview feedback.', error);
+      setFeedbackUnavailable(true);
+      toast.warning('Your interview ended, but final feedback could not be generated.');
+    }
     if (isMountedRef.current) setAppPhase('results');
   }, [role, interviewType]);
 
   // ── Start interview ────────────────────────────────────────────────────────
   const startInterview = async () => {
     if (!role.trim()) { toast.error('Enter a target role.'); return; }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) { toast.error('Voice practice requires Chrome or Edge speech recognition.'); return; }
     if (typeof window !== 'undefined' && window.speechSynthesis.getVoices().length === 0) {
       await new Promise<void>(r => { window.speechSynthesis.onvoiceschanged = () => r(); setTimeout(r, 1500); });
     }
     convRef.current = []; turnRef.current = 0;
-    setConversation([]); setLiveTranscript(''); setFeedback(null);
+    setConversation([]); setLiveTranscript(''); setFeedback(null); setFeedbackUnavailable(false);
     setAppPhase('room');
     fetchAITurn([], 1);
   };
@@ -466,7 +496,6 @@ export default function PracticeInterviewPage() {
   // ── RESULTS SCREEN ─────────────────────────────────────────────────────────
   if (appPhase === 'results') {
     const score     = feedback?.overallScore ?? 0;
-    const userTurns = conversation.filter(t => t.role === 'user');
     const aiTurns   = conversation.filter(t => t.role === 'ai');
     return (
       <CandidateLayout>
@@ -482,16 +511,25 @@ export default function PracticeInterviewPage() {
           {/* Score */}
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}
             className="cc-card p-6 text-center">
-            <div className={`text-6xl font-black mb-1 ${SCORE_COLOR(score)}`}>
-              {score.toFixed(1)}<span className="text-2xl font-normal text-muted">/10</span>
-            </div>
-            <div className="text-sm text-muted mb-4">{feedback?.rating ?? 'Evaluated'}</div>
-            <div className="flex justify-center gap-1">
-              {Array.from({ length: 10 }, (_, i) => (
-                <div key={i} className={`h-2 flex-1 rounded-full ${i < Math.round(score) ? SCORE_BG(score) : ''}`}
-                  style={i < Math.round(score) ? {} : { background: 'var(--cc-border)' }} />
-              ))}
-            </div>
+            {feedbackUnavailable ? (
+              <>
+                <div className="text-xl font-bold mb-2" style={{ color: 'var(--cc-text)' }}>Feedback unavailable</div>
+                <p className="text-sm text-muted">Your answers were recorded, but the feedback service did not respond. Try again later for an evaluated score.</p>
+              </>
+            ) : (
+              <>
+                <div className={`text-6xl font-black mb-1 ${SCORE_COLOR(score)}`}>
+                  {score.toFixed(1)}<span className="text-2xl font-normal text-muted">/10</span>
+                </div>
+                <div className="text-sm text-muted mb-4">{feedback?.rating ?? 'Evaluated'}</div>
+                <div className="flex justify-center gap-1">
+                  {Array.from({ length: 10 }, (_, i) => (
+                    <div key={i} className={`h-2 flex-1 rounded-full ${i < Math.round(score) ? SCORE_BG(score) : ''}`}
+                      style={i < Math.round(score) ? {} : { background: 'var(--cc-border)' }} />
+                  ))}
+                </div>
+              </>
+            )}
             {feedback?.summary && (
               <p className="mt-4 text-sm text-muted italic">"{feedback.summary}"</p>
             )}

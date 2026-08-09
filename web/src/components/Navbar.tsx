@@ -286,10 +286,10 @@ export default function Navbar() {
             </button>
 
             {showProfileMenu && (
-              <div id="account-menu" role="menu" className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-[9999]">
-                <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{user?.name}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
+              <div id="account-menu" role="menu" className="absolute right-0 mt-2 w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800 z-[9999]">
+                <div className="min-w-0 border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+                  <p className="truncate text-sm font-semibold text-gray-900 dark:text-white" title={user?.name}>{user?.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400" title={user?.email}>{user?.email}</p>
                   <p className="text-xs text-purple-600 dark:text-purple-400 capitalize">{user?.role}</p>
                 </div>
 

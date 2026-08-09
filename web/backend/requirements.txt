@@ -4,7 +4,6 @@ Flask
 Flask-Cors
 python-dotenv
 google-genai
-google-generativeai
 python-docx
 PyMuPDF
 reportlab

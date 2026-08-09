@@ -6,18 +6,50 @@ export const dynamic = 'force-dynamic';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Camera, FileCheck, ShieldAlert, Volume2, Mic, Play, 
-  Pause, RotateCcw, AlertTriangle, CheckCircle, 
-  HelpCircle, Send, Award, Clock, ArrowRight, UserCheck
+  Camera, FileCheck, ShieldAlert, Volume2, Mic,
+  AlertTriangle, CheckCircle, Award, Clock, ArrowRight, UserCheck
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { doc, setDoc, getDoc, updateDoc, arrayUnion, Timestamp } from 'firebase/firestore';
-import { db, storage } from '@/lib/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { decryptApiKey } from '@/lib/crypto';
+import { doc, setDoc, getDoc, arrayUnion, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import CandidateLayout from '@/components/layout/CandidateLayout';
+
+type InterviewResponse = {
+  questionText: string;
+  transcript: string;
+  aiScore: number;
+  aiFeedback: string;
+};
+
+class InterviewApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'InterviewApiError';
+  }
+}
+
+async function readInterviewResponse(response: Response): Promise<Record<string, any>> {
+  const body = await response.text();
+  let payload: Record<string, any> = {};
+
+  if (body) {
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      throw new InterviewApiError(
+        response.ok ? 'The interview service returned an invalid response.' : `The interview service is unavailable (${response.status}).`,
+        response.status,
+      );
+    }
+  }
+
+  if (!response.ok) {
+    throw new InterviewApiError(payload.message || payload.error || `The interview service is unavailable (${response.status}).`, response.status);
+  }
+  return payload;
+}
 
 // --- UI Primitive Component ---
 const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'outline' | 'destructive', size?: 'default' | 'sm', as?: React.ElementType }>(({ children, variant, size, className, as: Component = 'button', ...props }, ref) => {
@@ -41,6 +73,7 @@ export default function CandidateInterviewPage() {
   const [stateIdPreview, setStateIdPreview] = useState<string | null>(null);
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
   const [selfieBlob, setSelfieBlob] = useState<Blob | null>(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
   const [verificationResult, setVerificationResult] = useState<any>(null);
   
   // Proctoring States
@@ -51,10 +84,10 @@ export default function CandidateInterviewPage() {
   
   // Voice Arena States
   const [conversation, setConversation] = useState<any[]>([]);
+  const [responses, setResponses] = useState<InterviewResponse[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState("");
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [speechTranscript, setSpeechTranscript] = useState("");
   const [timer, setTimer] = useState(1800); // 30 mins in seconds
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -65,6 +98,9 @@ export default function CandidateInterviewPage() {
   
   // Webcam elements
   const videoRef = useRef<HTMLVideoElement>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const transcriptRef = useRef('');
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:5000/api';
 
   // 30-minute Timer Effect
@@ -80,6 +116,28 @@ export default function CandidateInterviewPage() {
     return () => clearInterval(interval);
   }, [isTimerRunning, timer]);
 
+  useEffect(() => {
+    const syncFullscreenState = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreenState);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recognitionRef.current?.stop();
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (stateIdPreview) URL.revokeObjectURL(stateIdPreview);
+  }, [stateIdPreview]);
+
+  useEffect(() => () => {
+    if (selfiePreview) URL.revokeObjectURL(selfiePreview);
+  }, [selfiePreview]);
+
   // Tab switch detection (Proctoring)
   useEffect(() => {
     if (step === 3) {
@@ -88,7 +146,7 @@ export default function CandidateInterviewPage() {
           setTabSwitches(prev => {
             const newVal = prev + 1;
             toast.warning(`Tab switch detected! This violation has been logged. (${newVal}/3)`);
-            logProctoringViolation("Tab switched out of active window");
+            logProctoringViolation("Tab switched out of active window", newVal);
             return newVal;
           });
         }
@@ -110,10 +168,13 @@ export default function CandidateInterviewPage() {
   // Start Camera for Verification
   const startCamera = async () => {
     try {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      cameraStreamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
+      setIsCameraActive(true);
     } catch (err) {
       console.error("Camera access failed", err);
       toast.error("Could not access camera. Please allow camera permissions.");
@@ -122,14 +183,18 @@ export default function CandidateInterviewPage() {
 
   // Stop Camera
   const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-    }
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setIsCameraActive(false);
   };
 
   // Capture Selfie Snapshot
   const captureSelfie = () => {
+    if (!videoRef.current || !cameraStreamRef.current) {
+      toast.error('Enable your camera before capturing a selfie.');
+      return;
+    }
     if (videoRef.current) {
       const canvas = document.createElement('canvas');
       canvas.width = 640;
@@ -139,6 +204,7 @@ export default function CandidateInterviewPage() {
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         canvas.toBlob((blob) => {
           if (blob) {
+            if (selfiePreview) URL.revokeObjectURL(selfiePreview);
             setSelfieBlob(blob);
             setSelfiePreview(URL.createObjectURL(blob));
             stopCamera();
@@ -152,11 +218,23 @@ export default function CandidateInterviewPage() {
   // Handle State ID Upload
   const handleIdUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setStateIdFile(file);
-      setStateIdPreview(URL.createObjectURL(file));
-      toast.success("State ID uploaded!");
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      toast.error('Upload a JPEG or PNG image of your ID.');
+      e.target.value = '';
+      return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Your ID image must be 10 MB or smaller.');
+      e.target.value = '';
+      return;
+    }
+
+    if (stateIdPreview) URL.revokeObjectURL(stateIdPreview);
+    setStateIdFile(file);
+    setStateIdPreview(URL.createObjectURL(file));
+    toast.success("ID image uploaded.");
   };
 
   // Run Biometric Verification
@@ -183,18 +261,13 @@ export default function CandidateInterviewPage() {
         body: formData
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to verify identity with server.");
-      }
-
-      const result = await response.json();
+      const result = await readInterviewResponse(response);
       setVerificationResult(result);
 
       if (result.fraudDetected) {
         toast.error(`Verification Failed: ${result.fraudDetails || 'Spoofing detected.'}`, { id: toastId });
-      } else if (result.matchScore < 70) {
-        toast.warning(`Low Likeness Match (${result.matchScore}%). Proceeding with flags.`, { id: toastId });
-        setStep(2);
+      } else if (!result.matched || Number(result.matchScore) < 75) {
+        toast.error(`Identity could not be verified (${result.matchScore || 0}% likeness). Please retake your selfie and try again.`, { id: toastId });
       } else {
         toast.success(`Identity Verified successfully! Match Score: ${result.matchScore}%`, { id: toastId });
         setStep(2);
@@ -202,59 +275,63 @@ export default function CandidateInterviewPage() {
     } catch (err: any) {
       console.error(err);
       toast.error(`Verification Error: ${err.message}`, { id: toastId });
-      // Proceed in developer demo mode if server isn't answering
-      toast.info("Proceeding in developer demo mode.");
-      setVerificationResult({
-        matchScore: 89,
-        matched: true,
-        confidence: "high",
-        analysis: "Simulated biometric match passed.",
-        fraudDetected: false
-      });
-      setStep(2);
     } finally {
       setLoading(false);
     }
   };
 
-  // Run System & Device Checks (Otter/Parakeet & Loopback blocker)
+  // Browser checks can confirm browser support, but cannot inspect the operating system.
   const runSystemChecks = () => {
     setLoading(true);
-    toast.info("Scanning for virtual audio drivers (Otter.ai, Parakeet, Soundflower)...");
-    
-    setTimeout(() => {
-      setVirtualAudioChecked(true);
-      setSysCheckPassed(true);
-      setLoading(false);
-      toast.success("Audio scan clean! No suspicious virtual output drivers detected.");
-    }, 1500);
+    const hasSpeechRecognition = Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+    const supportsFullscreen = Boolean(document.documentElement.requestFullscreen);
+    const supportsMicrophone = Boolean(navigator.mediaDevices?.getUserMedia);
+
+    setVirtualAudioChecked(hasSpeechRecognition && supportsMicrophone);
+    setSysCheckPassed(hasSpeechRecognition && supportsMicrophone && supportsFullscreen);
+    setLoading(false);
+
+    if (!hasSpeechRecognition || !supportsMicrophone || !supportsFullscreen) {
+      toast.error('Use Chrome or Edge on a device with microphone and fullscreen support to continue.');
+      return;
+    }
+    toast.success('Browser, microphone, and fullscreen support are ready.');
   };
 
-  // Request Fullscreen for Security
-  const enterFullscreen = () => {
-    const element = document.documentElement;
-    if (element.requestFullscreen) {
-      element.requestFullscreen();
-      setIsFullscreen(true);
-      toast.success("Security Fullscreen Mode locked.");
+  // Request fullscreen focus mode.
+  const enterFullscreen = async () => {
+    try {
+      await document.documentElement.requestFullscreen();
+      setIsFullscreen(Boolean(document.fullscreenElement));
+      toast.success("Fullscreen focus mode enabled.");
+    } catch {
+      setIsFullscreen(false);
+      toast.error('Fullscreen could not be enabled. Please allow it in your browser.');
     }
   };
 
   // Initialize and Start Turn-based Voice Arena
   const startVoiceArena = async () => {
-    if (!sysCheckPassed) {
-      toast.error("Please run system checks before starting the interview.");
+    if (!sysCheckPassed || !isFullscreen) {
+      toast.error("Run the browser checks and enable fullscreen before starting the interview.");
       return;
     }
     
     setLoading(true);
     try {
-      const generatedId = `${user?.id || 'mock_uid'}_ai_voice_round`;
-      setInterviewId(generatedId);
+      const uniquePart = typeof crypto?.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const generatedId = `${user?.id || 'candidate'}_${uniquePart}`;
 
       // Fetch resume data
-      const resumeSnap = await getDoc(doc(db, 'resumes', user?.id || 'mock_uid'));
-      const resumeData = resumeSnap.exists() ? resumeSnap.data().resumeData : {};
+      let resumeData = {};
+      try {
+        const resumeSnap = await getDoc(doc(db, 'resumes', user?.id || 'mock_uid'));
+        resumeData = resumeSnap.exists() ? resumeSnap.data().resumeData : {};
+      } catch (error) {
+        console.warn('Unable to load saved resume data for the interview.', error);
+      }
 
       // Get first opening question
       const response = await fetch(`${API_BASE_URL}/interviews/get-next-question`, {
@@ -271,20 +348,17 @@ export default function CandidateInterviewPage() {
         })
       });
 
-      const data = await response.json();
+      const data = await readInterviewResponse(response);
       if (response.status === 402 && data.error === 'no_api_keys') {
         toast.warning('Add your API keys in Profile → Settings to start an AI interview.', { duration: 6000 });
         setLoading(false); return;
       }
-      const firstQuestion = data.nextQuestion || "Welcome. Let's start with your background. Can you outline your primary technical skills?";
+      const firstQuestion = typeof data.nextQuestion === 'string' ? data.nextQuestion.trim() : '';
+      if (!firstQuestion) throw new Error('The interview service did not return an opening question.');
       
-      setCurrentQuestion(firstQuestion);
-      setConversation([{ speaker: 'ai', text: firstQuestion, timestamp: new Date() }]);
-      setStep(3);
-      setIsTimerRunning(true);
       
       // Save initial interview document
-      await setDoc(doc(db, 'interviews', generatedId), {
+      const sessionRecord = {
         candidateId: user?.id || 'mock_uid',
         candidateName: user?.name || 'Candidate',
         jobId: 'ai_eval_role',
@@ -295,20 +369,38 @@ export default function CandidateInterviewPage() {
         proctoringViolations: {
           tabSwitchesCount: 0,
           fullscreenExitsCount: 0,
-          virtualAudioDetected: false,
+          browserReadinessConfirmed: true,
           cheatingFlags: []
         },
         verification: {
-          faceMatchScore: verificationResult?.matchScore || 90,
+          faceMatchScore: verificationResult?.matchScore ?? null,
           verifiedAt: Timestamp.now()
         }
-      });
+      };
+
+      try {
+        await setDoc(doc(db, 'interviews', generatedId), sessionRecord);
+      } catch (error) {
+        console.warn('Cloud interview session could not be saved.', error);
+        sessionStorage.setItem(`careercraft_interview_${generatedId}`, JSON.stringify({
+          ...sessionRecord,
+          startedAt: new Date().toISOString(),
+        }));
+        toast.warning('Cloud sync is unavailable. This interview will run locally and will not be available to a recruiter.');
+      }
+
+      setInterviewId(generatedId);
+      setCurrentQuestion(firstQuestion);
+      setConversation([{ speaker: 'ai', text: firstQuestion, timestamp: new Date() }]);
+      setResponses([]);
+      setStep(3);
+      setIsTimerRunning(true);
 
       // TTS synthesis of opening question
       speakText(firstQuestion);
     } catch (err) {
       console.error(err);
-      toast.error("Could not establish secure interview session.");
+      toast.error(err instanceof Error ? err.message : 'Could not establish the interview session.');
     } finally {
       setLoading(false);
     }
@@ -326,17 +418,59 @@ export default function CandidateInterviewPage() {
     }
   };
 
-  // Mock speech recorder
+  // Browser speech recognition provides the candidate's actual transcript.
   const toggleRecording = () => {
     if (isRecording) {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
       setIsRecording(false);
-      toast.success("Voice answer captured!");
-      // Simulate speech-to-text response transcribing
-      setSpeechTranscript("In my last job, I was responsible for designing clean APIs with Python Flask, syncing with Cloud Firestore databases, and configuring secure Firebase storage paths. I strictly followed the privacy-first model using structured indexes.");
-    } else {
+      if (transcriptRef.current.trim()) {
+        toast.success("Voice answer captured.");
+      } else {
+        toast.warning('No speech was detected. Try recording again.');
+      }
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error('Speech recognition requires Chrome or Edge.');
+      return;
+    }
+
+    transcriptRef.current = '';
+    setSpeechTranscript('');
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((result: any) => result[0]?.transcript || '')
+        .join('')
+        .trim();
+      transcriptRef.current = transcript;
+      setSpeechTranscript(transcript);
+    };
+    recognition.onerror = (event: any) => {
+      recognitionRef.current = null;
+      setIsRecording(false);
+      if (event.error !== 'aborted' && event.error !== 'no-speech') {
+        toast.error(`Microphone error: ${event.error}.`);
+      }
+    };
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
+      setIsRecording(false);
+    };
+
+    try {
+      recognition.start();
+      recognitionRef.current = recognition;
       setIsRecording(true);
-      setSpeechTranscript("");
-      toast.info("Recording candidate response... Speak clearly.");
+      toast.info('Recording your answer. Speak clearly, then select Stop Recording.');
+    } catch {
+      toast.error('The microphone could not start. Check your browser permission and try again.');
     }
   };
 
@@ -352,7 +486,6 @@ export default function CandidateInterviewPage() {
       ...conversation,
       { speaker: 'candidate', text: speechTranscript, timestamp: new Date() }
     ];
-    setConversation(updatedHistory);
 
     try {
       // 1. Evaluate this turn
@@ -367,15 +500,20 @@ export default function CandidateInterviewPage() {
           transcript: speechTranscript
         })
       });
-      const evalData = await evalResp.json();
+      const evalData = await readInterviewResponse(evalResp);
       if (evalResp.status === 402 && evalData.error === 'no_api_keys') {
         toast.warning('Add your API keys in Profile → Settings to use AI interview evaluation.', { duration: 6000 });
         setLoading(false); return;
       }
 
       // 2. Fetch resume data
-      const resumeSnap = await getDoc(doc(db, 'resumes', user?.id || 'mock_uid'));
-      const resumeData = resumeSnap.exists() ? resumeSnap.data().resumeData : {};
+      let resumeData = {};
+      try {
+        const resumeSnap = await getDoc(doc(db, 'resumes', user?.id || 'mock_uid'));
+        resumeData = resumeSnap.exists() ? resumeSnap.data().resumeData : {};
+      } catch (error) {
+        console.warn('Unable to load saved resume data for the follow-up question.', error);
+      }
 
       // 3. Request next dynamic question
       const elapsedSeconds = 1800 - timer;
@@ -392,8 +530,9 @@ export default function CandidateInterviewPage() {
           elapsedSeconds
         })
       });
-      const nextData = await nextResp.json();
-      const followUp = nextData.nextQuestion || "Thank you. Let's move to your system architecture designs.";
+      const nextData = await readInterviewResponse(nextResp);
+      const followUp = typeof nextData.nextQuestion === 'string' ? nextData.nextQuestion.trim() : '';
+      if (!followUp) throw new Error('The interview service did not return a follow-up question.');
 
       // Update local states
       setCurrentQuestion(followUp);
@@ -404,42 +543,49 @@ export default function CandidateInterviewPage() {
       setConversation(nextHistory);
       setSpeechTranscript("");
 
-      // Update Firestore document
-      const docRef = doc(db, 'interviews', interviewId);
-      await updateDoc(docRef, {
-        conversationHistory: nextHistory.map(turn => ({
-          speaker: turn.speaker,
-          text: turn.text,
-          timestamp: Timestamp.fromDate(turn.timestamp)
-        })),
-        responses: arrayUnion({
-          questionText: currentQuestion,
-          transcript: speechTranscript,
-          aiScore: evalData.score || 80,
-          aiFeedback: evalData.feedback || "Answer shows strong command."
-        })
-      });
+      const evaluatedResponse: InterviewResponse = {
+        questionText: currentQuestion,
+        transcript: speechTranscript,
+        aiScore: Number.isFinite(Number(evalData.score)) ? Math.max(0, Math.min(100, Math.round(Number(evalData.score)))) : 0,
+        aiFeedback: typeof evalData.feedback === 'string' ? evalData.feedback : 'No written feedback was returned.',
+      };
+      setResponses((current) => [...current, evaluatedResponse]);
+
+      try {
+        await setDoc(doc(db, 'interviews', interviewId), {
+          conversationHistory: nextHistory.map(turn => ({
+            speaker: turn.speaker,
+            text: turn.text,
+            timestamp: Timestamp.fromDate(turn.timestamp)
+          })),
+          responses: arrayUnion(evaluatedResponse),
+        }, { merge: true });
+      } catch (error) {
+        console.warn('Unable to synchronise the interview response to the cloud.', error);
+        toast.warning('Your response is saved for this browser session, but cloud sync is unavailable.');
+      }
 
       speakText(followUp);
       toast.success("Answer analyzed, loading follow-up...");
     } catch (err) {
       console.error(err);
-      toast.error("Failed to sync response.");
+      toast.error(err instanceof Error ? err.message : 'Could not analyse this response. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   // Log Proctoring Violation to Firestore
-  const logProctoringViolation = async (violationText: string) => {
+  const logProctoringViolation = async (violationText: string, violationCount: number) => {
     if (!interviewId) return;
     try {
-      const docRef = doc(db, 'interviews', interviewId);
-      await updateDoc(docRef, {
-        "proctoringViolations.tabSwitchesCount": tabSwitches + 1,
-        "proctoringViolations.cheatingFlags": arrayUnion(violationText),
-        "proctoringViolations.lastViolationRecordedAt": Timestamp.now()
-      });
+      await setDoc(doc(db, 'interviews', interviewId), {
+        proctoringViolations: {
+          tabSwitchesCount: violationCount,
+          cheatingFlags: arrayUnion(violationText),
+          lastViolationRecordedAt: Timestamp.now(),
+        },
+      }, { merge: true });
     } catch (err) {
       console.error("Failed to log violation", err);
     }
@@ -451,27 +597,29 @@ export default function CandidateInterviewPage() {
     setIsTimerRunning(false);
     
     try {
-      // Fetch dynamic scorecard from interview responses
-      const docSnap = await getDoc(doc(db, 'interviews', interviewId));
-      const interviewData = docSnap.exists() ? docSnap.data() : {};
-      
-      const responses = interviewData.responses || [];
       const totalScore = responses.reduce((acc: number, cur: any) => acc + cur.aiScore, 0);
-      const averageScore = responses.length > 0 ? Math.round(totalScore / responses.length) : 78;
+      const averageScore = responses.length > 0 ? Math.round(totalScore / responses.length) : 0;
 
-      const finalFeedback = averageScore > 75 
-        ? "Candidate demonstrated excellent communication and solid structural comprehension of technical components. Biometric logs verification verified identity successfully."
-        : "Candidate has reasonable base skills, but lacked detailed concrete solutions on modular architecture design questions.";
+      const finalFeedback = responses.length === 0
+        ? 'No answers were submitted, so there is not enough information to score this interview.'
+        : averageScore >= 75
+          ? 'The submitted answers showed strong communication and technical understanding.'
+          : 'The submitted answers show a foundation to build on; add more specific examples and technical detail.';
 
-      const status = tabSwitches > 2 ? 'flagged' : 'completed';
+      const status = tabSwitches > 3 ? 'flagged' : 'completed';
 
-      await updateDoc(doc(db, 'interviews', interviewId), {
-        status,
-        completedAt: Timestamp.now(),
-        overallScore: averageScore,
-        overallFeedback: finalFeedback,
-        elapsedSeconds: 1800 - timer
-      });
+      try {
+        await setDoc(doc(db, 'interviews', interviewId), {
+          status,
+          completedAt: Timestamp.now(),
+          overallScore: averageScore,
+          overallFeedback: finalFeedback,
+          elapsedSeconds: 1800 - timer,
+        }, { merge: true });
+      } catch (error) {
+        console.warn('Unable to save the final interview scorecard to the cloud.', error);
+        toast.warning('The scorecard is available in this browser, but cloud sync is unavailable.');
+      }
 
       setScorecard({
         overallScore: averageScore,
@@ -486,15 +634,6 @@ export default function CandidateInterviewPage() {
     } catch (err) {
       console.error(err);
       toast.error("Failed to compile final scorecard.");
-      // Fallback
-      setScorecard({
-        overallScore: 82,
-        overallFeedback: "Biometric and technical review matched candidate skills cleanly.",
-        status: "completed",
-        totalQuestions: 4,
-        violations: tabSwitches
-      });
-      setStep(4);
     } finally {
       setLoading(false);
     }
@@ -542,7 +681,7 @@ export default function CandidateInterviewPage() {
           <div className="mb-8 grid grid-cols-2 gap-2 border-b border-[var(--cc-border)] pb-5 sm:grid-cols-4 md:gap-3 md:pb-6">
             {[
               { id: 1, label: 'Identity Check' },
-              { id: 2, label: 'Security Scan' },
+              { id: 2, label: 'Browser Check' },
               { id: 3, label: 'Voice Interview' },
               { id: 4, label: 'Results Card' }
             ].map((s) => (
@@ -608,12 +747,12 @@ export default function CandidateInterviewPage() {
                           <Button onClick={startCamera} variant="outline" size="sm">
                             Enable Camera
                           </Button>
-                          <Button onClick={captureSelfie} size="sm">
+                          <Button onClick={captureSelfie} size="sm" disabled={!isCameraActive}>
                             Capture Selfie
                           </Button>
                         </>
                       ) : (
-                        <Button onClick={() => { setSelfiePreview(null); startCamera(); }} variant="outline" size="sm">
+                        <Button onClick={() => { setSelfieBlob(null); setSelfiePreview(null); startCamera(); }} variant="outline" size="sm">
                           Retake Selfie
                         </Button>
                       )}
@@ -625,7 +764,7 @@ export default function CandidateInterviewPage() {
                     <div className="w-full text-center">
                       <h3 className="text-lg font-semibold mb-4 flex items-center justify-center gap-2">
                         <UserCheck className="w-5 h-5 text-indigo-400" />
-                        State ID / Passport Card
+                        Government ID image
                       </h3>
                       
                       <div className="w-full aspect-video rounded-xl bg-white/5 border border-dashed border-white/20 flex flex-col items-center justify-center overflow-hidden relative mb-4">
@@ -635,8 +774,8 @@ export default function CandidateInterviewPage() {
                           <label className="cursor-pointer flex flex-col items-center justify-center p-6 text-zinc-400 hover:text-white transition">
                             <FileCheck className="w-10 h-10 mb-2 text-indigo-400" />
                             <span className="text-sm font-semibold">Click to select ID photo</span>
-                            <span className="text-xs mt-1 text-zinc-500">PDF, JPG, PNG up to 10MB</span>
-                            <input type="file" accept="image/*" className="hidden" onChange={handleIdUpload} />
+                            <span className="text-xs mt-1 text-zinc-500">JPG or PNG • up to 10 MB</span>
+                            <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={handleIdUpload} />
                           </label>
                         )}
                       </div>
@@ -645,7 +784,7 @@ export default function CandidateInterviewPage() {
                     {stateIdPreview && (
                       <label className="cursor-pointer">
                         <Button as="span" variant="outline" size="sm">Change File</Button>
-                        <input type="file" accept="image/*" className="hidden" onChange={handleIdUpload} />
+                        <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={handleIdUpload} />
                       </label>
                     )}
                   </div>
@@ -663,7 +802,7 @@ export default function CandidateInterviewPage() {
               </motion.div>
             )}
 
-            {/* STEP 2: SECURITY SCAN & ACCESS CHECK */}
+            {/* STEP 2: BROWSER READINESS */}
             {step === 2 && (
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
@@ -673,9 +812,9 @@ export default function CandidateInterviewPage() {
               >
                 <div className="text-center">
                   <ShieldAlert className="w-16 h-16 text-yellow-500 mx-auto mb-4 animate-bounce" />
-                  <h2 className="text-2xl font-bold">Step 2: Proctored Security Check</h2>
+                  <h2 className="text-2xl font-bold">Step 2: Browser readiness</h2>
                   <p className="text-zinc-400 text-sm mt-2">
-                    To maintain high integrity, our secure anti-cheat scanner verifies your operating system is free of virtual loopback audio drivers (used to route responses into AI otter/parakeet text parsers).
+                    Confirm that your browser can use speech recognition, your microphone, and fullscreen mode. This browser check cannot inspect other applications on your device.
                   </p>
                 </div>
 
@@ -683,15 +822,15 @@ export default function CandidateInterviewPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-zinc-300">Biometric Verification:</span>
                     <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                      <CheckCircle className="w-4 h-4" /> Passed ({verificationResult?.matchScore || 89}% match)
+                      <CheckCircle className="w-4 h-4" /> Passed ({verificationResult?.matchScore ?? 0}% match)
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-zinc-300">Virtual Audio Loopbacks Scan:</span>
+                    <span className="text-sm text-zinc-300">Microphone and voice support:</span>
                     {virtualAudioChecked ? (
                       <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                        <CheckCircle className="w-4 h-4" /> Secure (Clean)
+                        <CheckCircle className="w-4 h-4" /> Ready
                       </span>
                     ) : (
                       <span className="text-yellow-500 font-semibold">Unscanned</span>
@@ -714,7 +853,7 @@ export default function CandidateInterviewPage() {
 
                 <div className="flex gap-4 justify-center pt-4">
                   <Button onClick={runSystemChecks} variant="outline" disabled={loading} className="px-6">
-                    {loading ? "Checking drivers..." : "Run Security Scan"}
+                    {loading ? "Checking browser..." : "Run browser check"}
                   </Button>
                   <Button 
                     onClick={startVoiceArena} 
@@ -826,7 +965,7 @@ export default function CandidateInterviewPage() {
                 <Award className="w-16 h-16 text-emerald-400 mx-auto mb-4" />
                 <h2 className="text-3xl font-extrabold text-white">Interview Complete!</h2>
                 <p className="text-zinc-400 text-sm">
-                  Your AI Voice Recruiter assessment has been synced securely. Here is your initial evaluation report.
+                  Your initial AI interview evaluation report is ready.
                 </p>
 
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-left space-y-4">

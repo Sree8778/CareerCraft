@@ -324,11 +324,19 @@ def generate_summary_suggestions_route():
 @api_bp.route('/interviews/verify-identity', methods=['POST'])
 @require_auth
 def verify_identity_route():
+    if request.content_length and request.content_length > 21 * 1024 * 1024:
+        return jsonify({"error": "Identity verification uploads must be 10 MB or smaller per image"}), 413
+
     if 'stateId' not in request.files or 'selfie' not in request.files:
         return jsonify({"error": "Missing stateId or selfie image files"}), 400
         
     state_id_file = request.files['stateId']
     selfie_file = request.files['selfie']
+
+    allowed_image_types = {'image/jpeg', 'image/png'}
+    for label, upload in (("ID", state_id_file), ("Selfie", selfie_file)):
+        if upload.mimetype not in allowed_image_types:
+            return jsonify({"error": f"{label} must be a JPEG or PNG image"}), 400
     
     try:
         state_id_bytes = state_id_file.read()
@@ -336,6 +344,12 @@ def verify_identity_route():
         
         verification_result = verify_face_similarity(state_id_bytes, selfie_bytes)
         return jsonify(verification_result), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except RuntimeError as e:
+        if _is_no_keys(e):
+            return _no_keys_resp(e)
+        return jsonify({"error": str(e)}), 503
     except Exception as e:
         print(f"Error verifying identity: {e}")
         return jsonify({"error": "An internal error occurred during biometric identity verification."}), 500
