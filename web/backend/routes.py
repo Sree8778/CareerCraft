@@ -1062,11 +1062,12 @@ def analyze_fit_route():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
 
-    data        = request.json
-    resume_data = data.get('resumeData')
-    job_details = data.get('jobDetails')
-    job_id      = data.get('jobId', '')
-    uid         = request.user.get('uid')
+    data          = request.json
+    resume_data   = data.get('resumeData')
+    job_details   = data.get('jobDetails')
+    job_id        = data.get('jobId', '')
+    uid           = request.user.get('uid')
+    force_refresh = data.get('forceRefresh', False)
 
     if not resume_data or not job_details:
         return jsonify({"error": "Missing resumeData or jobDetails"}), 400
@@ -1077,12 +1078,12 @@ def analyze_fit_route():
     except Exception as e:
         rule_based = {"score": 60, "breakdown": {}, "matchedSkills": [], "missingSkills": []}
 
-    # Check Firestore cache (24 h)
+    # Check Firestore cache (24 h) — skipped when caller requests a forced refresh
     cache_key = f"{uid}_{job_id}" if job_id else None
     try:
         from firebase_utils import db, firebase_initialized
         import datetime as _dt
-        if cache_key and firebase_initialized and db:
+        if cache_key and firebase_initialized and db and not force_refresh:
             cache_snap = db.collection('atsCache').document(cache_key).get()
             if cache_snap.exists:
                 cached = cache_snap.to_dict()

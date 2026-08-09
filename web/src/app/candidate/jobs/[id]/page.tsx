@@ -169,17 +169,21 @@ export default function JobDetailPage() {
     runAnalysis();
   }, [job, resumeData]);
 
-  const runAnalysis = useCallback(async () => {
-    if (!resumeData || !job) return;
+  // overrideResume: pass directly to bypass stale closure (e.g. right after a save)
+  // forceRefresh: skip the backend's 24h cache so tailored resume is fully reflected
+  const runAnalysis = useCallback(async (overrideResume?: any, forceRefresh = false) => {
+    const resumeToUse = overrideResume ?? resumeData;
+    if (!resumeToUse || !job) return;
     setAnalyzing(true);
     try {
       const res = await fetch(`${API}/analyze-fit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...await authHeader() },
         body: JSON.stringify({
-          resumeData,
+          resumeData: resumeToUse,
           jobDetails: { title: job.title, company: job.company, description: job.description, requirements: job.requirements },
           jobId: String(id),
+          forceRefresh,
         }),
       });
       const data = await res.json();
@@ -192,7 +196,8 @@ export default function JobDetailPage() {
       setAiEnhanced(data.aiEnhanced ?? false);
       setTutorials(data.tutorials || []);
       setLearningProjects(data.projects || []);
-      if (data.coverLetter && !coverLetter) setCoverLetter(data.coverLetter);
+      // On force-refresh always apply the new cover letter; otherwise only set when empty
+      if (data.coverLetter && (forceRefresh || !coverLetter)) setCoverLetter(data.coverLetter);
     } catch {
       const score = Math.floor(55 + Math.random() * 25);
       setAtsScore(score);
@@ -364,12 +369,18 @@ export default function JobDetailPage() {
         resumeData: editResume,
         updatedAt: new Date().toISOString(),
       });
+      // Pre-set analyzing so the useEffect doesn't fire a duplicate call
+      setAnalyzing(true);
       setResumeData(editResume);
       setDrawerOpen(false);
       setCoverLetter('');
       setAnalyzed(false);
-      toast.success('Resume saved! Regenerating your match score and cover letter…', { id: toastId });
+      toast.success('Resume saved! Re-analysing with your updated resume…', { id: toastId });
+      // Run fresh analysis — pass editResume directly (bypasses stale closure) and
+      // force_refresh = true so the backend skips its 24h cache for this user+job
+      await runAnalysis(editResume, true);
     } catch (err: any) {
+      setAnalyzing(false);
       toast.error(err.message || 'Failed to save resume.', { id: toastId });
     } finally {
       setSavingResume(false);
