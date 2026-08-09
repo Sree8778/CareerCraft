@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:recruit_edge/api/api_service.dart';
-import 'package:recruit_edge/theme/app_theme.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
+import 'package:recruit_edge/pages/job_details_page.dart';
+import 'package:recruit_edge/pages/job_search_page.dart';
 
 class FeaturedJobsSection extends StatefulWidget {
   const FeaturedJobsSection({super.key});
@@ -56,7 +57,9 @@ class _FeaturedJobsSectionState extends State<FeaturedJobsSection> {
 
                   return GlassCard(
                     onTap: () {
-                      print('Tapped on job: ${job['title']}');
+                      Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => JobDetailsPage(job: job),
+                      ));
                     },
                     child: ListTile(
                       title: Text(job['title'] ?? 'Job Title', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
@@ -72,7 +75,9 @@ class _FeaturedJobsSectionState extends State<FeaturedJobsSection> {
           Center(
             child: ElevatedButton(
               onPressed: () {
-                print('View All Jobs tapped');
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => const JobSearchPage(),
+                ));
               },
               child: const Text('View All Jobs'),
             ),

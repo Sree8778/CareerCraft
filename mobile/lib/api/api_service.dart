@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:recruit_edge/models/benefit.dart';
 import 'package:recruit_edge/models/testimonial.dart';
@@ -106,7 +106,7 @@ Future<List<Map<String, dynamic>>> fetchJobs() async {
       throw Exception('Failed to load jobs. Status code: ${response.statusCode}');
     }
   } catch (e) {
-    print('Error fetching jobs: $e');
+    debugPrint('Error fetching jobs: $e');
     return [];
   }
 }
@@ -124,7 +124,7 @@ Future<List<Map<String, dynamic>>> fetchRecruiterJobs(String recruiterId) async 
     }
     return [];
   } catch (e) {
-    print('Error fetching recruiter jobs: $e');
+    debugPrint('Error fetching recruiter jobs: $e');
     return [];
   }
 }
@@ -146,7 +146,7 @@ Future<List<Map<String, dynamic>>> fetchCandidates() async {
       throw Exception('Failed to load candidates. Status code: ${response.statusCode}');
     }
   } catch (e) {
-    print('Error fetching candidates: $e');
+    debugPrint('Error fetching candidates: $e');
     return [];
   }
 }
@@ -173,7 +173,7 @@ Future<List<dynamic>> searchCandidatesCopilot(String query) async {
       throw Exception('Copilot search failed: ${response.statusCode}');
     }
   } catch (e) {
-    print('Error during Copilot search: $e');
+    debugPrint('Error during Copilot search: $e');
     return [];
   }
 }
@@ -202,68 +202,54 @@ Future<Map<String, dynamic>?> parseResume(Uint8List fileBytes, String filename) 
       final data = jsonDecode(response.body);
       return data['parsedData'] as Map<String, dynamic>;
     } else {
-      print('Resume parsing failed: ${response.statusCode} - ${response.body}');
+      debugPrint('Resume parsing failed: ${response.statusCode} - ${response.body}');
       return null;
     }
   } catch (e) {
-    print('Error calling resume parser: $e');
+    debugPrint('Error calling resume parser: $e');
     return null;
   }
 }
 
 /// Call section enhancement endpoint using AI
 Future<List<String>> enhanceSection(String sectionName, String textToEnhance) async {
-  try {
-    final token = await AuthService.getToken();
-    final response = await http.post(
-      Uri.parse('$baseUrl/enhance-section'),
-      headers: <String, String>{
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(<String, String>{
-        'sectionName': sectionName,
-        'textToEnhance': textToEnhance,
-      }),
-    );
+  final token = await AuthService.getToken();
+  final response = await http.post(
+    Uri.parse('$baseUrl/enhance-section'),
+    headers: <String, String>{
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Authorization': 'Bearer $token',
+    },
+    body: jsonEncode(<String, String>{
+      'sectionName': sectionName,
+      'textToEnhance': textToEnhance,
+    }),
+  );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return List<String>.from(data['enhancedVersions']);
-    } else {
-      print('Enhancement API error: ${response.body}');
-      return _getMockEnhancements(sectionName, textToEnhance);
-    }
-  } catch (e) {
-    print('Enhancement network error: $e');
-    return _getMockEnhancements(sectionName, textToEnhance);
+  if (response.statusCode == 200) {
+    final data = jsonDecode(response.body);
+    return List<String>.from(data['enhancedVersions']);
   }
+  throw Exception('AI enhancement unavailable (${response.statusCode})');
 }
 
 /// Generate elevator pitch from full resume details using AI
 Future<String> generateElevatorPitch(Map<String, dynamic> resumeData) async {
-  try {
-    final token = await AuthService.getToken();
-    final response = await http.post(
-      Uri.parse('$baseUrl/generate-elevator-pitch'),
-      headers: <String, String>{
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(resumeData),
-    );
+  final token = await AuthService.getToken();
+  final response = await http.post(
+    Uri.parse('$baseUrl/generate-elevator-pitch'),
+    headers: <String, String>{
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Authorization': 'Bearer $token',
+    },
+    body: jsonEncode(resumeData),
+  );
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['elevatorPitch'] as String;
-    } else {
-      print('Pitch generation error: ${response.body}');
-      return _getMockPitch(resumeData);
-    }
-  } catch (e) {
-    print('Pitch generation network error: $e');
-    return _getMockPitch(resumeData);
+  if (response.statusCode == 200) {
+    final data = jsonDecode(response.body);
+    return data['elevatorPitch'] as String;
   }
+  throw Exception('Elevator pitch generation unavailable (${response.statusCode})');
 }
 
 /// Generate PDF document from resume data
@@ -288,11 +274,11 @@ Future<Uint8List?> generatePdf(Map<String, dynamic> resumeData, Map<String, dyna
     if (response.statusCode == 200) {
       return response.bodyBytes;
     } else {
-      print('PDF generation failed: ${response.statusCode} - ${response.body}');
+      debugPrint('PDF generation failed: ${response.statusCode} - ${response.body}');
       return null;
     }
   } catch (e) {
-    print('PDF generation network error: $e');
+    debugPrint('PDF generation network error: $e');
     return null;
   }
 }
@@ -319,31 +305,16 @@ Future<Uint8List?> generateDocx(Map<String, dynamic> resumeData, Map<String, dyn
     if (response.statusCode == 200) {
       return response.bodyBytes;
     } else {
-      print('DOCX generation failed: ${response.statusCode} - ${response.body}');
+      debugPrint('DOCX generation failed: ${response.statusCode} - ${response.body}');
       return null;
     }
   } catch (e) {
-    print('DOCX generation network error: $e');
+    debugPrint('DOCX generation network error: $e');
     return null;
   }
 }
 
-// --- PRIVATE MOCK FALLBACK UTILITIES ---
-
-List<String> _getMockEnhancements(String sectionName, String textToEnhance) {
-  return [
-    textToEnhance, // Option 0: Original
-    "[Enhanced Suggestion 1] Dynamically drove growth and implemented key initiatives for $sectionName, optimizing workflows and improving efficiency by 25%. Supported core requirements with state-of-the-art architectures.",
-    "[Enhanced Suggestion 2] Spearheaded high-impact contributions in $sectionName utilizing advanced capabilities. Partnered with cross-functional partners to execute scalable solutions.",
-  ];
-}
-
-String _getMockPitch(Map<String, dynamic> resumeData) {
-  final name = resumeData['personal']?['name'] ?? 'Professional Candidate';
-  return "Hello, I am $name. I am a passionate and results-driven specialist. I excel in solving complex architectural challenges, leveraging state-of-the-art design systems, and deploying secure databases. I look forward to adding measurable value to your high-performing team!";
-}
-
-// --- NEW PORTAL & PARITY CHAT API CALLS ---
+// --- PORTAL & PARITY CHAT API CALLS ---
 
 Future<List<dynamic>> fetchApplications(String candidateId) async {
   try {
@@ -358,7 +329,7 @@ Future<List<dynamic>> fetchApplications(String candidateId) async {
     }
     return [];
   } catch (e) {
-    print('Error fetching applications: $e');
+    debugPrint('Error fetching applications: $e');
     return [];
   }
 }
@@ -376,7 +347,7 @@ Future<bool> applyToJob(String jobId, String coverLetter) async {
     );
     return response.statusCode == 200 || response.statusCode == 201;
   } catch (e) {
-    print('Error applying: $e');
+    debugPrint('Error applying: $e');
     return false;
   }
 }
@@ -394,7 +365,7 @@ Future<List<dynamic>> fetchChats(String role) async {
     }
     return [];
   } catch (e) {
-    print('Error loading chats: $e');
+    debugPrint('Error loading chats: $e');
     return [];
   }
 }
@@ -430,7 +401,7 @@ Future<Map<String, dynamic>?> createChat({
     }
     return null;
   } catch (e) {
-    print('Error creating chat: $e');
+    debugPrint('Error creating chat: $e');
     return null;
   }
 }
@@ -448,7 +419,7 @@ Future<List<dynamic>> fetchChatMessages(String chatId) async {
     }
     return [];
   } catch (e) {
-    print('Error loading messages: $e');
+    debugPrint('Error loading messages: $e');
     return [];
   }
 }
@@ -474,7 +445,7 @@ Future<Map<String, dynamic>?> sendChatMessage(String chatId, String text, String
     }
     return null;
   } catch (e) {
-    print('Error sending chat message: $e');
+    debugPrint('Error sending chat message: $e');
     return null;
   }
 }
@@ -492,7 +463,7 @@ Future<List<dynamic>> fetchNotifications() async {
     }
     return [];
   } catch (e) {
-    print('Error fetching notifications: $e');
+    debugPrint('Error fetching notifications: $e');
     return [];
   }
 }
@@ -506,7 +477,7 @@ Future<bool> markNotificationsAsRead() async {
     );
     return response.statusCode == 200;
   } catch (e) {
-    print('Error reading notifications: $e');
+    debugPrint('Error reading notifications: $e');
     return false;
   }
 }
@@ -537,11 +508,11 @@ Future<Map<String, dynamic>?> scheduleInterview({
     if (response.statusCode == 200 || response.statusCode == 201) {
       return jsonDecode(response.body);
     } else {
-      print('Schedule interview error: ${response.body}');
+      debugPrint('Schedule interview error: ${response.body}');
       return null;
     }
   } catch (e) {
-    print('Error scheduling interview: $e');
+    debugPrint('Error scheduling interview: $e');
     return null;
   }
 }
@@ -558,7 +529,7 @@ Future<List<dynamic>> fetchCompanies({String? search}) async {
     }
     return [];
   } catch (e) {
-    print('Error fetching companies: $e');
+    debugPrint('Error fetching companies: $e');
     return [];
   }
 }
@@ -572,7 +543,7 @@ Future<Map<String, dynamic>?> fetchCompanyDetails(String companyId) async {
     }
     return null;
   } catch (e) {
-    print('Error fetching company details: $e');
+    debugPrint('Error fetching company details: $e');
     return null;
   }
 }
@@ -586,7 +557,7 @@ Future<List<dynamic>> fetchCompanyReviews(String companyId) async {
     }
     return [];
   } catch (e) {
-    print('Error fetching company reviews: $e');
+    debugPrint('Error fetching company reviews: $e');
     return [];
   }
 }
@@ -619,7 +590,7 @@ Future<Map<String, dynamic>?> submitCompanyReview({
     }
     return null;
   } catch (e) {
-    print('Error submitting company review: $e');
+    debugPrint('Error submitting company review: $e');
     return null;
   }
 }
@@ -633,7 +604,7 @@ Future<List<dynamic>> fetchCompanyQnA(String companyId) async {
     }
     return [];
   } catch (e) {
-    print('Error fetching company QnA: $e');
+    debugPrint('Error fetching company QnA: $e');
     return [];
   }
 }
@@ -662,7 +633,7 @@ Future<Map<String, dynamic>?> submitCompanyQuestion({
     }
     return null;
   } catch (e) {
-    print('Error submitting company question: $e');
+    debugPrint('Error submitting company question: $e');
     return null;
   }
 }
@@ -693,7 +664,7 @@ Future<Map<String, dynamic>?> submitCompanyAnswer({
     }
     return null;
   } catch (e) {
-    print('Error submitting company answer: $e');
+    debugPrint('Error submitting company answer: $e');
     return null;
   }
 }
@@ -707,7 +678,7 @@ Future<Map<String, dynamic>?> fetchSalaryStats() async {
     }
     return null;
   } catch (e) {
-    print('Error fetching salary stats: $e');
+    debugPrint('Error fetching salary stats: $e');
     return null;
   }
 }
@@ -723,7 +694,7 @@ Future<bool> triggerJobCrawler() async {
     );
     return response.statusCode == 200;
   } catch (e) {
-    print('Error triggering job crawler: $e');
+    debugPrint('Error triggering job crawler: $e');
     return false;
   }
 }
@@ -744,7 +715,7 @@ Future<List<Map<String, dynamic>>> fetchWebhooks() async {
     }
     return [];
   } catch (e) {
-    print('Error fetching webhooks: $e');
+    debugPrint('Error fetching webhooks: $e');
     return [];
   }
 }
@@ -772,7 +743,7 @@ Future<Map<String, dynamic>?> subscribeWebhook({
     }
     return null;
   } catch (e) {
-    print('Error subscribing webhook: $e');
+    debugPrint('Error subscribing webhook: $e');
     return null;
   }
 }
@@ -792,7 +763,7 @@ Future<bool> pingWebhook(String url) async {
     );
     return response.statusCode == 200;
   } catch (e) {
-    print('Error pinging webhook: $e');
+    debugPrint('Error pinging webhook: $e');
     return false;
   }
 }
@@ -814,7 +785,7 @@ Future<List<dynamic>> fetchFeed() async {
     }
     return [];
   } catch (e) {
-    print('Error loading feed: $e');
+    debugPrint('Error loading feed: $e');
     return [];
   }
 }
@@ -836,7 +807,7 @@ Future<Map<String, dynamic>?> createFeedPost(String content) async {
     }
     return null;
   } catch (e) {
-    print('Error creating post: $e');
+    debugPrint('Error creating post: $e');
     return null;
   }
 }
@@ -853,7 +824,7 @@ Future<Map<String, dynamic>?> togglePostLike(String postId) async {
     }
     return null;
   } catch (e) {
-    print('Error toggling like: $e');
+    debugPrint('Error toggling like: $e');
     return null;
   }
 }
@@ -875,7 +846,7 @@ Future<Map<String, dynamic>?> addPostComment(String postId, String text) async {
     }
     return null;
   } catch (e) {
-    print('Error adding comment: $e');
+    debugPrint('Error adding comment: $e');
     return null;
   }
 }
@@ -889,7 +860,7 @@ Future<bool> deleteFeedPost(String postId) async {
     );
     return response.statusCode == 200;
   } catch (e) {
-    print('Error deleting post: $e');
+    debugPrint('Error deleting post: $e');
     return false;
   }
 }
@@ -911,7 +882,7 @@ Future<List<dynamic>> fetchDirectory({String search = '', String role = ''}) asy
     }
     return [];
   } catch (e) {
-    print('Error loading directory: $e');
+    debugPrint('Error loading directory: $e');
     return [];
   }
 }
@@ -929,7 +900,7 @@ Future<List<dynamic>> fetchConnections() async {
     }
     return [];
   } catch (e) {
-    print('Error loading connections: $e');
+    debugPrint('Error loading connections: $e');
     return [];
   }
 }
@@ -993,7 +964,7 @@ Future<Map<String, dynamic>> fetchPlatformFeatures() async {
     }
     return {};
   } catch (e) {
-    print('Error loading feature flags: $e');
+    debugPrint('Error loading feature flags: $e');
     return {};
   }
 }

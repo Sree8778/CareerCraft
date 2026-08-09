@@ -7,7 +7,6 @@ on:
       - "web/backend/**"
       - ".github/workflows/deploy-backend.yml"
 
-  # Allow manual re-deploy from the Actions tab
   workflow_dispatch:
 
 concurrency:
@@ -15,10 +14,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGION: ${{ secrets.GCP_REGION }}
+  REGION: us-central1
   PROJECT: ${{ secrets.GCP_PROJECT_ID }}
   SERVICE: careercraft-backend
-  IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID }}/careercraft-backend
+  IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/careercraft/backend
 
 jobs:
   build-and-deploy:
@@ -27,13 +26,12 @@ jobs:
 
     permissions:
       contents: read
-      id-token: write   # needed for Workload Identity (optional, used when GCP_SA_KEY absent)
+      id-token: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Google Cloud authentication ──────────────────────────────────────────
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -44,11 +42,9 @@ jobs:
         with:
           project_id: ${{ env.PROJECT }}
 
-      # ── Configure Docker to push to GCR ─────────────────────────────────────
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker --quiet
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
-      # ── Build & push image ───────────────────────────────────────────────────
       - name: Build Docker image
         working-directory: web/backend
         run: |
@@ -62,7 +58,17 @@ jobs:
           docker push ${{ env.IMAGE }}:${{ github.sha }}
           docker push ${{ env.IMAGE }}:latest
 
-      # ── Deploy to Cloud Run ──────────────────────────────────────────────────
+      - name: Write env-vars file
+        run: |
+          cat > /tmp/backend-env.yaml <<'EOF'
+          BACKEND_VAULT_MASTER_KEY: "${{ secrets.BACKEND_VAULT_MASTER_KEY }}"
+          FIREBASE_CREDENTIALS_B64: "${{ secrets.FIREBASE_CREDENTIALS_B64 }}"
+          RESEND_API_KEY: "${{ secrets.RESEND_API_KEY }}"
+          EMAIL_FROM: "${{ secrets.EMAIL_FROM }}"
+          PLATFORM_URL: "${{ secrets.PLATFORM_URL }}"
+          SUPER_ADMIN_EMAILS: "${{ secrets.SUPER_ADMIN_EMAILS }}"
+          EOF
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
@@ -70,11 +76,11 @@ jobs:
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
-            --min-instances 0 \
-            --max-instances 10 \
-            --memory 1Gi \
+            --memory 2Gi \
             --cpu 1 \
+            --max-instances 3 \
             --timeout 300 \
+            --env-vars-file /tmp/backend-env.yaml \
             --quiet
 
       - name: Show service URL

@@ -19,7 +19,6 @@ class _RecruiterSourcingPageState extends State<RecruiterSourcingPage> {
   List<dynamic> _filtered = [];
   bool _isLoading = true;
   bool _runningCopilot = false;
-  bool _copilotUsed = false;
 
   // Filter scales
   int _minExperience = 0;
@@ -43,7 +42,7 @@ class _RecruiterSourcingPageState extends State<RecruiterSourcingPage> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading candidates in sourcing: $e');
+      debugPrint('Error loading candidates in sourcing: $e');
       setState(() {
         _isLoading = false;
       });
@@ -52,7 +51,7 @@ class _RecruiterSourcingPageState extends State<RecruiterSourcingPage> {
 
   void _applyManualFilters() {
     setState(() {
-      _copilotUsed = false;
+
       final querySkills = _skillsController.text.toLowerCase().trim();
       final queryLoc = _locationController.text.toLowerCase().trim();
 
@@ -106,26 +105,30 @@ class _RecruiterSourcingPageState extends State<RecruiterSourcingPage> {
       final ranked = await searchCandidatesCopilot(query);
       setState(() {
         _filtered = ranked;
-        _copilotUsed = true;
+
         _runningCopilot = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.green,
-          content: Text('AI Copilot successfully prioritized ${_filtered.length} candidates.'),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.green,
+            content: Text('AI Copilot successfully prioritized ${_filtered.length} candidates.'),
+          ),
+        );
+      }
     } catch (e) {
-      print('Copilot sourcing search failed: $e');
+      debugPrint('Copilot sourcing search failed: $e');
       setState(() {
         _runningCopilot = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.red,
-          content: Text('Copilot API search connection timed out.'),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Copilot API search connection timed out.'),
+          ),
+        );
+      }
     }
   }
 
@@ -136,7 +139,7 @@ class _RecruiterSourcingPageState extends State<RecruiterSourcingPage> {
       _copilotController.clear();
       _minExperience = 0;
       _minProctor = 0;
-      _copilotUsed = false;
+
       _filtered = _candidates;
     });
   }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:recruit_edge/api/api_service.dart';
-import 'package:recruit_edge/theme/app_theme.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
@@ -40,7 +39,7 @@ class _CandidateMessagesPageState extends State<CandidateMessagesPage> {
         });
       }
     } catch (e) {
-      print('Error loading chats: $e');
+      debugPrint('Error loading chats: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -183,7 +182,7 @@ class _CandidateChatThreadScreenState extends State<CandidateChatThreadScreen> {
         if (!silent) _scrollToBottom();
       }
     } catch (e) {
-      print('Error loading messages: $e');
+      debugPrint('Error loading messages: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -214,8 +213,9 @@ class _CandidateChatThreadScreenState extends State<CandidateChatThreadScreen> {
     _messageController.clear();
 
     final user = FirebaseAuth.instance.currentUser;
-    final senderId = user?.uid ?? 'mock_uid_123';
-    final senderName = user?.displayName ?? 'Jane Doe';
+    if (user == null) return;
+    final senderId = user.uid;
+    final senderName = user.displayName ?? user.email ?? 'User';
 
     try {
       final msg = await sendChatMessage(widget.chat['id'], text, senderId, senderName);
@@ -226,7 +226,7 @@ class _CandidateChatThreadScreenState extends State<CandidateChatThreadScreen> {
         _scrollToBottom();
       }
     } catch (e) {
-      print('Failed to send: $e');
+      debugPrint('Failed to send: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -249,7 +249,7 @@ class _CandidateChatThreadScreenState extends State<CandidateChatThreadScreen> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final chat = widget.chat;
     final user = FirebaseAuth.instance.currentUser;
-    final myUid = user?.uid ?? 'mock_uid_123';
+    final myUid = user?.uid ?? '';
 
     return Scaffold(
       backgroundColor: isDarkMode ? const Color(0xFF0F0C20) : Colors.white,

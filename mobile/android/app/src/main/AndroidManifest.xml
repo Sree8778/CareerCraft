@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Required for all API/Firebase calls in release builds -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Required for speech recognition in AI Voice Interview -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <application
         android:label="CareerCraft"
         android:name="${applicationName}"

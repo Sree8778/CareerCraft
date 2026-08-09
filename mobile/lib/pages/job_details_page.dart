@@ -47,7 +47,7 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
         });
       }
     } catch (e) {
-      print('Error checking existing app: $e');
+      debugPrint('Error checking existing app: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -67,6 +67,7 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
         _coverLetterController.text,
       );
 
+      if (!mounted) return;
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Application submitted successfully!')),
@@ -75,10 +76,11 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
         _checkExistingApplication();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to submit application. you might have already applied.')),
+          const SnackBar(content: Text('Failed to submit application. You might have already applied.')),
         );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
@@ -214,7 +216,7 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
                                     const Text('Pipeline stage:', style: TextStyle(fontSize: 12)),
                                     Text(
                                       (_existingApplication!['status'] ?? 'Applied').toUpperCase(),
-                                      style: TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.1),
+                                      style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.1),
                                     ),
                                   ],
                                 ),

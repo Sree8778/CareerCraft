@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:recruit_edge/theme/app_theme.dart';
-import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:recruit_edge/pages/recruiter_candidate_details_page.dart';
 import 'package:recruit_edge/api/api_service.dart';
 
@@ -35,7 +34,7 @@ class _RecruiterCandidatesPageState extends State<RecruiterCandidatesPage> {
         _candidates = list;
       });
     } catch (e) {
-      print('Failed to load candidates: $e');
+      debugPrint('Failed to load candidates: $e');
     } finally {
       if (mounted) setState(() { _isLoading = false; });
     }
@@ -65,12 +64,13 @@ class _RecruiterCandidatesPageState extends State<RecruiterCandidatesPage> {
         _candidates = matchedList;
       });
     } catch (e) {
-      print('Recruiter Copilot search failed: $e. Proceeding with dynamic simulated matching.');
+      debugPrint('Recruiter Copilot search failed: $e');
       if (!mounted) return;
-      // Simulating semantic match sorting dynamically against the current active candidate list
-      setState(() {
-        _candidates = _getSimulatedMatchedCandidates(query);
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AI Copilot search unavailable. Showing all candidates.')),
+      );
+      setState(() => _candidates = []);
+      _loadCandidates();
     } finally {
       if (mounted) setState(() { _isLoading = false; });
     }
@@ -184,10 +184,10 @@ class _RecruiterCandidatesPageState extends State<RecruiterCandidatesPage> {
 
           Color scoreColor = Colors.green;
           if (matchScore != null) {
-            if (matchScore < 60) {
-              scoreColor = Colors.amber;
-            } else if (matchScore < 40) {
+            if (matchScore < 40) {
               scoreColor = Colors.red;
+            } else if (matchScore < 60) {
+              scoreColor = Colors.amber;
             }
           }
 
@@ -300,43 +300,4 @@ class _RecruiterCandidatesPageState extends State<RecruiterCandidatesPage> {
     );
   }
 
-  // Simulate copilot sorting dynamically
-  List<dynamic> _getSimulatedMatchedCandidates(String query) {
-    final lower = query.toLowerCase();
-    return _candidates.map((cand) {
-      final name = cand['name'] ?? 'Candidate';
-      final title = cand['title'] ?? '';
-      final skills = cand['skills'] ?? '';
-      
-      int score = 50;
-      String reasoning = "Candidate profile matches search parameters.";
-      
-      if (lower.contains('flutter') || lower.contains('mobile')) {
-        if (skills.toLowerCase().contains('flutter') || title.toLowerCase().contains('flutter')) {
-          score = 95;
-          reasoning = "Stellar Candidate! $name possesses expert experience developing state-of-the-art Flutter systems.";
-        } else if (skills.toLowerCase().contains('design') || title.toLowerCase().contains('design')) {
-          score = 70;
-          reasoning = "$name is a brilliant UI/UX Designer who focuses on mobile screens, aligning closely with mobile experiences.";
-        } else {
-          score = 40;
-          reasoning = "$name is qualified, but skills are focused elsewhere rather than mobile Flutter builds.";
-        }
-      } else if (lower.contains('python') || lower.contains('backend')) {
-        if (skills.toLowerCase().contains('python') || skills.toLowerCase().contains('flask')) {
-          score = 96;
-          reasoning = "Stellar Candidate! $name matches your exact request. Expert Backend Engineer with deep database configurations.";
-        } else {
-          score = 55;
-          reasoning = "$name is primarily a front-end or client engineer, connecting to backend APIs but not building them.";
-        }
-      }
-      
-      return {
-        ...cand,
-        'matchScore': score,
-        'copilotReasoning': reasoning,
-      };
-    }).toList()..sort((a, b) => (b['matchScore'] as int).compareTo(a['matchScore'] as int));
-  }
 }

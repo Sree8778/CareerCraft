@@ -5,10 +5,9 @@ on:
     branches: [main]
     paths:
       - "web/**"
-      - "!web/backend/**"           # backend changes handled by deploy-backend.yml
+      - "!web/backend/**"
       - ".github/workflows/deploy-frontend.yml"
 
-  # Allow manual re-deploy from the Actions tab
   workflow_dispatch:
 
 concurrency:
@@ -16,10 +15,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGION: ${{ secrets.GCP_REGION }}
+  REGION: us-central1
   PROJECT: ${{ secrets.GCP_PROJECT_ID }}
   SERVICE: careercraft-frontend
-  IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID }}/careercraft-frontend
+  IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/careercraft/frontend
 
 jobs:
   build-and-deploy:
@@ -34,7 +33,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Google Cloud authentication ──────────────────────────────────────────
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -45,11 +43,9 @@ jobs:
         with:
           project_id: ${{ env.PROJECT }}
 
-      # ── Configure Docker to push to GCR ─────────────────────────────────────
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker --quiet
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
-      # ── Build & push image ───────────────────────────────────────────────────
       - name: Build Docker image
         working-directory: web
         run: |
@@ -71,7 +67,6 @@ jobs:
           docker push ${{ env.IMAGE }}:${{ github.sha }}
           docker push ${{ env.IMAGE }}:latest
 
-      # ── Deploy to Cloud Run ──────────────────────────────────────────────────
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
@@ -79,10 +74,9 @@ jobs:
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
-            --min-instances 0 \
-            --max-instances 5 \
             --memory 512Mi \
             --cpu 1 \
+            --max-instances 3 \
             --port 3000 \
             --quiet
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:recruit_edge/theme/app_theme.dart';
-import 'package:recruit_edge/widgets/glass_card.dart'; // For button styling
+import 'package:recruit_edge/pages/job_search_page.dart';
+import 'package:recruit_edge/pages/recruiter_job_post_page.dart';
 
 class HeroSection extends StatelessWidget {
   const HeroSection({super.key});
@@ -33,8 +34,9 @@ class HeroSection extends StatelessWidget {
             children: [
               ElevatedButton(
                 onPressed: () {
-                  // Action for "Find a Job"
-                  print('Find a Job tapped');
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => const JobSearchPage(),
+                  ));
                 },
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -44,8 +46,9 @@ class HeroSection extends StatelessWidget {
               ),
               ElevatedButton(
                 onPressed: () {
-                  // Action for "Post a Job"
-                  print('Post a Job tapped');
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => const RecruiterJobPostPage(),
+                  ));
                 },
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),

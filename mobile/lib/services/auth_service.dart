@@ -1,8 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 
 class AuthService {
   static bool _firebaseInitialized = false;
@@ -12,65 +12,47 @@ class AuthService {
     try {
       await Firebase.initializeApp();
       _firebaseInitialized = true;
-      print("Firebase successfully initialized in Mobile app.");
+      debugPrint("Firebase successfully initialized in Mobile app.");
     } catch (e) {
-      print("WARNING: Firebase.initializeApp() failed: $e");
-      print("Mobile app will fall back to mock auth mode.");
+      debugPrint("WARNING: Firebase.initializeApp() failed: $e");
     }
   }
 
   static Future<String?> login(String email, String password) async {
     await ensureInitialized();
-    if (_firebaseInitialized) {
-      try {
-        UserCredential userCredential = await FirebaseAuth.instance
-            .signInWithEmailAndPassword(email: email, password: password);
-        return await userCredential.user?.getIdToken();
-      } catch (e) {
-        print("Firebase sign-in error: $e");
-        rethrow;
-      }
-    } else if (!kReleaseMode) {
-      // Mock auth fallback for seamless testing
-      if (email.isNotEmpty && password.isNotEmpty) {
-        return "mock_token_for_$email";
-      }
-      return null;
+    try {
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+      return await userCredential.user?.getIdToken();
+    } catch (e) {
+      debugPrint("Firebase sign-in error: $e");
+      rethrow;
     }
-    throw StateError('Firebase is not configured. Authentication is unavailable.');
   }
 
   static Future<String?> register(String email, String password) async {
     await ensureInitialized();
-    if (_firebaseInitialized) {
-      try {
-        UserCredential userCredential = await FirebaseAuth.instance
-            .createUserWithEmailAndPassword(email: email, password: password);
-        return await userCredential.user?.getIdToken();
-      } catch (e) {
-        print("Firebase registration error: $e");
-        rethrow;
-      }
-    } else if (!kReleaseMode) {
-      // Mock signup fallback
-      return "mock_token_for_$email";
+    try {
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
+      return await userCredential.user?.getIdToken();
+    } catch (e) {
+      debugPrint("Firebase registration error: $e");
+      rethrow;
     }
-    throw StateError('Firebase is not configured. Registration is unavailable.');
   }
 
   static Future<String?> getToken() async {
     await ensureInitialized();
-    if (_firebaseInitialized) {
-      try {
-        User? user = FirebaseAuth.instance.currentUser;
-        if (user != null) {
-          return await user.getIdToken();
-        }
-      } catch (e) {
-        print("Error getting token: $e");
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        return await user.getIdToken();
       }
+    } catch (e) {
+      debugPrint("Error getting token: $e");
     }
-    return kReleaseMode ? '' : "mock_token";
+    return null;
   }
 
   static Future<User?> getCurrentUser() async {
@@ -121,7 +103,7 @@ class AuthService {
       }
       return user;
     } catch (e) {
-      print('Google sign-in error: $e');
+      debugPrint('Google sign-in error: $e');
       rethrow;
     }
   }

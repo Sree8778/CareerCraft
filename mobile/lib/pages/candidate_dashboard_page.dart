@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:recruit_edge/api/api_service.dart';
-import 'package:recruit_edge/theme/app_theme.dart';
 import 'package:recruit_edge/widgets/glass_card.dart';
 import 'package:recruit_edge/pages/candidate_profile_page.dart';
 import 'package:recruit_edge/pages/candidate_applications_page.dart';
@@ -46,7 +45,7 @@ class _CandidateDashboardPageState extends State<CandidateDashboardPage> {
         });
       }
     } catch (e) {
-      print('Error loading notifications in dashboard: $e');
+      debugPrint('Error loading notifications in dashboard: $e');
       if (mounted) {
         setState(() {
           _isLoadingNotifs = false;
@@ -63,17 +62,19 @@ class _CandidateDashboardPageState extends State<CandidateDashboardPage> {
       final success = await markNotificationsAsRead();
       if (success) {
         _loadNotifications(silent: true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Colors.green,
-            content: Text('All alerts marked as read!'),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.green,
+              content: Text('All alerts marked as read!'),
+            ),
+          );
+        }
       } else {
         throw Exception('Failed to clear notifications');
       }
     } catch (e) {
-      print('Error marking alerts as read: $e');
+      debugPrint('Error marking alerts as read: $e');
       _loadNotifications(silent: true);
     }
   }

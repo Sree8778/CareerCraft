@@ -30,37 +30,39 @@ class _CompaniesPageState extends State<CompaniesPage> {
       });
       try {
         final data = await fetchCompanies(search: query);
+        if (!mounted) return;
+        final existingIds = _companies.map((c) => c['id']?.toString()).toSet();
+        bool addedAny = false;
+        String importedName = "";
+        for (final item in data) {
+          final id = item['id']?.toString();
+          if (id != null && !existingIds.contains(id)) {
+            _companies.add(item);
+            addedAny = true;
+            importedName = item['name'] ?? query;
+          }
+        }
         setState(() {
-          final existingIds = _companies.map((c) => c['id']?.toString()).toSet();
-          bool addedAny = false;
-          String importedName = "";
-          for (final item in data) {
-            final id = item['id']?.toString();
-            if (id != null && !existingIds.contains(id)) {
-              _companies.add(item);
-              addedAny = true;
-              importedName = item['name'] ?? query;
-            }
-          }
           _isSearching = false;
-          if (addedAny) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                backgroundColor: Colors.deepPurpleAccent,
-                content: Text('Imported $importedName profile & real-world reviews!'),
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                backgroundColor: Colors.amber[800],
-                content: const Text('No new company found matching search in registry.'),
-              ),
-            );
-          }
         });
+        if (!mounted) return;
+        if (addedAny) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.deepPurpleAccent,
+              content: Text('Imported $importedName profile & real-world reviews!'),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.amber[800],
+              content: const Text('No new company found matching search in registry.'),
+            ),
+          );
+        }
       } catch (e) {
-        print('Error searching company registry: $e');
+        debugPrint('Error searching company registry: $e');
         setState(() {
           _isSearching = false;
         });
@@ -76,7 +78,7 @@ class _CompaniesPageState extends State<CompaniesPage> {
           _isLoading = false;
         });
       } catch (e) {
-        print('Error loading companies: $e');
+        debugPrint('Error loading companies: $e');
         setState(() {
           _isLoading = false;
         });

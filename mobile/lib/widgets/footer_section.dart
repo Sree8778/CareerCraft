@@ -22,15 +22,15 @@ class FooterSection extends StatelessWidget {
             alignment: WrapAlignment.center,
             children: [
               TextButton(
-                onPressed: () => print('Privacy Policy tapped'),
+                onPressed: () {},
                 child: Text('Privacy Policy', style: Theme.of(context).textTheme.bodyMedium),
               ),
               TextButton(
-                onPressed: () => print('Terms of Service tapped'),
+                onPressed: () {},
                 child: Text('Terms of Service', style: Theme.of(context).textTheme.bodyMedium),
               ),
               TextButton(
-                onPressed: () => print('Contact Us tapped'),
+                onPressed: () {},
                 child: Text('Contact Us', style: Theme.of(context).textTheme.bodyMedium),
               ),
             ],
