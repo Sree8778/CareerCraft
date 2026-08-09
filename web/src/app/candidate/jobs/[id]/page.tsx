@@ -249,7 +249,7 @@ export default function JobDetailPage() {
       const r = await fetch(`${API}/jobs/${id}/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...await authHeader() },
-        body: JSON.stringify({ coverLetter, jobTitle: job?.title, company: job?.company, candidateName: user?.name, candidateEmail: user?.email, atsScore }),
+        body: JSON.stringify({ coverLetter, jobTitle: job?.title, company: job?.company, candidateName: user?.name, candidateEmail: user?.email, atsScore, resumeData }),
       });
       const result = await r.json();
       if (r.status === 409) { toast.error('You already applied to this job.'); return; }

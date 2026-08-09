@@ -105,6 +105,11 @@ export default function ApplicationDetailPage() {
 
   useEffect(() => {
     if (!app?.candidateId) return;
+    // Use the resume snapshot captured at application time when available
+    if (app.resumeSnapshot) {
+      setResumeData(app.resumeSnapshot);
+      return;
+    }
     const fetchResume = async () => {
       setLoadingResume(true);
       try {

@@ -1910,13 +1910,26 @@ def apply_to_job(job_id):
                     'read': False,
                 })
 
+            # Snapshot the resume submitted with this application
+            try:
+                resume_data: dict = data.get('resumeData') or {}
+                if not resume_data:
+                    # Fall back to what's saved in Firestore
+                    rdoc = db.collection('resumes').document(candidate_id).get()
+                    if rdoc.exists:
+                        resume_data = (rdoc.to_dict() or {}).get('resumeData', {})
+                # Persist snapshot so recruiter always sees the submitted version
+                if resume_data:
+                    db.collection('applications').document(app_data['id']).update(
+                        {'resumeSnapshot': resume_data}
+                    )
+                    app_data['resumeSnapshot'] = resume_data
+            except Exception as snap_err:
+                print(f”[apply] resume snapshot error: {snap_err}”)
+
             # Launch background analysis â€” uses candidate's own API key, zero platform cost
             try:
                 import threading
-                resume_data: dict = {}
-                rdoc = db.collection('resumes').document(candidate_id).get()
-                if rdoc.exists:
-                    resume_data = rdoc.to_dict() or {}
                 job_details_for_analysis = {
                     'title': job_title,
                     'company': company,
