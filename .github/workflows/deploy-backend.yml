@@ -67,6 +67,7 @@ jobs:
           EMAIL_FROM: "${{ secrets.EMAIL_FROM }}"
           PLATFORM_URL: "${{ secrets.PLATFORM_URL }}"
           SUPER_ADMIN_EMAILS: "${{ secrets.SUPER_ADMIN_EMAILS }}"
+          ALLOWED_ORIGINS: "${{ secrets.ALLOWED_ORIGINS }}"
           EOF
 
       - name: Deploy to Cloud Run
