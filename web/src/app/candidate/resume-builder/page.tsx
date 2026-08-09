@@ -103,7 +103,12 @@ const Button = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HT
 });
 Button.displayName = 'Button';
 
-const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => (<input {...props} className="flex h-10 w-full rounded-md border border-[var(--cc-border)] bg-[var(--cc-surface)] px-3 py-2 text-sm text-[var(--cc-text)] placeholder-[var(--cc-text-muted)]" />);
+const Input = ({ className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement>) => (
+    <input
+        {...props}
+        className={`flex h-10 w-full rounded-md border border-[var(--cc-border)] bg-[var(--cc-surface)] px-3 py-2 text-sm text-[var(--cc-text)] placeholder-[var(--cc-text-muted)] ${className}`}
+    />
+);
 const Select = ({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) => (<select {...props} className="flex h-10 w-full rounded-md border border-[var(--cc-border)] bg-[var(--cc-surface)] px-3 py-2 text-sm text-[var(--cc-text)]">{children}</select>);
 const Label = (props: React.LabelHTMLAttributes<HTMLLabelElement>) => (<label {...props} className="text-sm font-medium leading-none block mb-1 text-[var(--cc-text-muted)]" />);
 const Textarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => ( <textarea {...props} className="flex min-h-[80px] w-full rounded-md border border-[var(--cc-border)] bg-[var(--cc-surface)] px-3 py-2 text-sm text-[var(--cc-text)] placeholder-[var(--cc-text-muted)]" />);
@@ -2298,9 +2303,20 @@ export default function ResumeBuilder() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div>
-                                            <Input type="file" accept=".pdf,.docx" onChange={handleFileUpload} disabled={loading} />
-                                            <p className="text-xs text-zinc-500 mt-1.5">Upload an existing resume to auto-fill all sections, or fill manually below.</p>
+                                        <div className="space-y-2">
+                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                                <label
+                                                    htmlFor="resume-file"
+                                                    className={`inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 px-4 text-xs font-bold text-white shadow-md shadow-indigo-500/20 transition hover:from-sky-400 hover:to-indigo-500 hover:shadow-lg hover:shadow-indigo-500/25 ${loading ? 'pointer-events-none opacity-60' : ''}`}
+                                                >
+                                                    <Upload size={15} /> Choose resume file
+                                                </label>
+                                                <span className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-indigo-200/65">
+                                                    <FileText size={13} className="text-indigo-400" /> PDF or DOCX · up to 10 MB
+                                                </span>
+                                            </div>
+                                            <Input id="resume-file" type="file" accept=".pdf,.docx" onChange={handleFileUpload} disabled={loading} className="hidden" />
+                                            <p className="text-xs text-slate-500 dark:text-indigo-200/65">Upload an existing resume to auto-fill all sections, or fill manually below.</p>
                                         </div>
                                     )}
                                 </CardContent>
