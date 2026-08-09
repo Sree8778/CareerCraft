@@ -210,7 +210,7 @@ export default function Navbar() {
         isLanding
           ? 'bg-white/90 border-slate-200/80'
           : isOnDashboard
-            ? 'bg-white/95 border-slate-200/80 shadow-[0_8px_30px_rgba(15,23,42,0.08)] dark:bg-[#0b0b12]/95 dark:border-white/10 dark:shadow-[0_8px_30px_rgba(0,0,0,0.22)]'
+            ? 'bg-white/95 border-slate-200/80 shadow-[0_8px_30px_rgba(15,23,42,0.08)] dark:bg-[#0e1630]/95 dark:border-indigo-300/15 dark:shadow-[0_8px_30px_rgba(8,15,35,0.28)]'
             : 'bg-white/80 dark:bg-zinc-900/80 border-gray-200/50 dark:border-white/10'
       }`}
     >

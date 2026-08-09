@@ -38,11 +38,20 @@ function getDateMs(appliedAt: any): number {
 
 const FUNNEL_COLS = [
   { id: 'Applied',   color: 'bg-blue-500',    label: 'Applied',   icon: <Send className="w-3 h-3" /> },
-  { id: 'In Review', color: 'bg-yellow-500',   label: 'In Review', icon: <Eye className="w-3 h-3" /> },
-  { id: 'Interview', color: 'bg-indigo-500',   label: 'Interview', icon: <Mic className="w-3 h-3" /> },
-  { id: 'Offer',     color: 'bg-emerald-500',  label: 'Offer',     icon: <Star className="w-3 h-3" /> },
+  { id: 'In Review', color: 'bg-indigo-500',  label: 'In Review', icon: <Eye className="w-3 h-3" /> },
+  { id: 'Interview', color: 'bg-violet-500',  label: 'Interview', icon: <Mic className="w-3 h-3" /> },
+  { id: 'Offer',     color: 'bg-purple-500',  label: 'Offer',     icon: <Star className="w-3 h-3" /> },
   { id: 'Rejected',  color: 'bg-red-500',      label: 'Rejected',  icon: <X className="w-3 h-3" /> },
 ];
+
+// A single blue-to-violet progression keeps the candidate journey readable
+// while giving every stage a distinct place in the pipeline.
+const PIPELINE_STAGES = [
+  { label: 'Applied',   desc: 'Resume sent', color: 'from-sky-500 to-blue-600',     icon: Send },
+  { label: 'In Review', desc: 'ATS aligned', color: 'from-blue-600 to-indigo-600',  icon: Eye },
+  { label: 'Interview', desc: 'Slot booked', color: 'from-indigo-600 to-violet-600', icon: Mic },
+  { label: 'Offer',     desc: 'Accepted',    color: 'from-violet-600 to-purple-700', icon: Star },
+] as const;
 
 function FunnelChart({ applications }: { applications: any[] }) {
   const counts = FUNNEL_COLS.reduce<Record<string, number>>((acc, c) => {
@@ -59,10 +68,10 @@ function FunnelChart({ applications }: { applications: any[] }) {
         return (
           <div key={col.id} className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 w-24 shrink-0">
-              <span className="text-zinc-400">{col.icon}</span>
-              <span className="text-[11px] text-zinc-400 font-medium truncate">{col.label}</span>
+              <span className="text-slate-500 dark:text-zinc-400">{col.icon}</span>
+              <span className="text-[11px] text-slate-600 dark:text-zinc-400 font-medium truncate">{col.label}</span>
             </div>
-            <div className="flex-1 h-5 bg-zinc-900 rounded-full overflow-hidden">
+            <div className="flex-1 h-5 rounded-full overflow-hidden bg-slate-100 dark:bg-indigo-950/70">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${pct}%` }}
@@ -70,7 +79,7 @@ function FunnelChart({ applications }: { applications: any[] }) {
                 className={`h-full rounded-full ${col.color} opacity-80`}
               />
             </div>
-            <span className="text-xs font-bold text-white w-6 text-right shrink-0">{n}</span>
+            <span className="text-xs font-bold text-slate-800 dark:text-white w-6 text-right shrink-0">{n}</span>
           </div>
         );
       })}
@@ -253,7 +262,7 @@ export default function CandidateDashboardPage() {
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-3xl border border-indigo-100 bg-gradient-to-r from-indigo-100 via-white to-slate-100 p-7 shadow-xl shadow-slate-200/50 dark:border-white/10 dark:from-indigo-950/40 dark:via-[#08080d] dark:to-slate-900/60 dark:shadow-2xl"
+          className="relative overflow-hidden rounded-3xl border border-indigo-100 bg-gradient-to-r from-indigo-100 via-white to-slate-100 p-7 shadow-xl shadow-slate-200/50 dark:border-indigo-300/15 dark:from-indigo-950/60 dark:via-[#0e1630] dark:to-violet-950/50 dark:shadow-2xl"
         >
           <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
           <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
@@ -356,38 +365,42 @@ export default function CandidateDashboardPage() {
                   </span>
                 )}
               </div>
-              <div className="relative pt-3 pb-1 px-2">
-                <div
+              <div className="relative px-2 pb-1 pt-2">
+                <div aria-hidden="true" className="absolute left-6 right-6 top-5 h-2 overflow-hidden rounded-full border border-indigo-100 bg-indigo-50/80 dark:border-indigo-400/20 dark:bg-indigo-950/70" />
+                <motion.div
                   aria-hidden="true"
-                  className="absolute top-[38px] left-8 right-8 h-px rounded-full bg-slate-200 dark:bg-zinc-700 pointer-events-none"
+                  initial={{ scaleX: 0 }}
+                  animate={{ scaleX: activePipelineStep / 3 }}
+                  transition={{ duration: 0.7, ease: 'easeOut' }}
+                  className="cc-liquid-flow absolute left-6 right-6 top-5 h-2 origin-left rounded-full bg-gradient-to-r from-sky-400 via-indigo-500 to-violet-500 shadow-[0_0_12px_rgba(99,102,241,0.42)]"
                 />
-                <div
-                  aria-hidden="true"
-                  className="absolute top-[38px] left-8 h-[2px] bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-full transition-all duration-1000 pointer-events-none"
-                  style={{ width: `${(activePipelineStep / 3) * 88}%` }}
-                />
-                <div className="relative z-10 flex justify-between items-center">
-                  {[
-                    { label: 'Applied',    desc: 'Resume sent' },
-                    { label: 'In Review',  desc: 'ATS aligned' },
-                    { label: 'Interview',  desc: 'Slot booked' },
-                    { label: 'Offer',      desc: 'Accepted' },
-                  ].map((node, i) => {
-                    const done   = i < activePipelineStep;
+                <div className="relative z-10 flex justify-between">
+                  {PIPELINE_STAGES.map((node, i) => {
+                    const done = i < activePipelineStep;
                     const active = i === activePipelineStep;
+                    const fillHeight = done ? '100%' : active ? '56%' : '0%';
+
                     return (
-                      <div key={node.label} className="flex flex-col items-center text-center gap-2">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
-                          active ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-500/30 scale-110 animate-pulse'
-                                 : done  ? 'bg-[#0B0F19] border-cyan-400 text-cyan-300'
-                          : 'bg-zinc-950 border-zinc-700 text-zinc-500'
+                      <div key={node.label} className="flex w-20 flex-col items-center text-center sm:w-24">
+                        <div className={`relative flex h-8 w-8 overflow-hidden rounded-full border-2 text-xs font-bold transition-all ${
+                          active || done ? 'border-indigo-300 bg-indigo-50 shadow-lg shadow-indigo-500/20 dark:border-indigo-400/60 dark:bg-indigo-950'
+                                         : 'border-slate-200 bg-white dark:border-indigo-300/25 dark:bg-[#151f3b]'
                         }`}>
-                          {done ? '✓' : i + 1}
+                          <motion.div
+                            aria-hidden="true"
+                            initial={{ height: 0 }}
+                            animate={{ height: fillHeight }}
+                            transition={{ duration: 0.65, ease: 'easeOut' }}
+                            className="cc-liquid-flow absolute inset-x-0 bottom-0 bg-gradient-to-r from-sky-400 via-indigo-500 to-violet-500"
+                          >
+                            <span className="absolute -top-px left-0 h-1 w-full bg-white/40" />
+                          </motion.div>
+                          <span className={`relative z-10 flex h-full w-full items-center justify-center ${active || done ? 'text-white' : 'text-slate-500 dark:text-indigo-200/70'}`}>
+                            {done ? <CheckCircle aria-label="Completed" className="h-4 w-4" /> : i + 1}
+                          </span>
                         </div>
-                        <div>
-                          <span className={`text-[10px] font-bold block ${active ? 'text-indigo-300' : done ? 'text-zinc-200' : 'text-zinc-400'}`}>{node.label}</span>
-                          <span className="text-[8px] text-zinc-500 block">{node.desc}</span>
-                        </div>
+                        <p className={`mt-2 text-[10px] font-bold ${active ? 'text-indigo-600 dark:text-indigo-300' : done ? 'text-slate-700 dark:text-indigo-100' : 'text-slate-500 dark:text-indigo-200/70'}`}>{node.label}</p>
+                        <p className="mt-0.5 text-[8px] text-slate-500 dark:text-indigo-200/55">{node.desc}</p>
                       </div>
                     );
                   })}
@@ -404,9 +417,9 @@ export default function CandidateDashboardPage() {
                 { name: 'AI Practice',     href: '/candidate/interview/practice',icon: <Mic className="w-4 h-4 text-purple-400" />,    color: 'hover:border-purple-500/50' },
               ].map(act => (
                 <Link key={act.name} href={act.href}
-                  className={`min-h-[128px] justify-between bg-slate-900/30 border border-white/8 p-4 rounded-2xl transition flex flex-col gap-3 group ${act.color}`}>
-                  <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">{act.icon}</div>
-                  <span className="text-xs font-bold text-white group-hover:text-indigo-300 transition leading-tight">{act.name}</span>
+                  className={`min-h-[128px] justify-between bg-white/85 border border-slate-200 p-4 rounded-2xl transition flex flex-col gap-3 group dark:bg-indigo-950/30 dark:border-indigo-300/15 ${act.color}`}>
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 dark:bg-white/5 dark:border-white/10 flex items-center justify-center">{act.icon}</div>
+                  <span className="text-xs font-bold text-slate-800 dark:text-white group-hover:text-indigo-500 transition leading-tight">{act.name}</span>
                   <ChevronRight className="w-3.5 h-3.5 text-indigo-400 group-hover:translate-x-0.5 transition-transform" />
                 </Link>
               ))}
@@ -427,7 +440,7 @@ export default function CandidateDashboardPage() {
                   {completion.score}%
                 </span>
               </div>
-              <div className="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden">
+              <div className="w-full bg-slate-100 dark:bg-indigo-950/70 rounded-full h-1.5 overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${completion.score}%` }}
@@ -439,7 +452,7 @@ export default function CandidateDashboardPage() {
                 <div className="space-y-1.5 pt-1">
                   {completion.missing.slice(0, 3).map(item => (
                     <div key={item} className="flex items-center gap-2 text-[11px] text-zinc-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-300 dark:bg-indigo-400 shrink-0" />
                       {item}
                     </div>
                   ))}
@@ -460,7 +473,7 @@ export default function CandidateDashboardPage() {
               <div className="flex flex-col items-center gap-3">
                 <div className="relative w-28 h-28">
                   <svg className="w-28 h-28 -rotate-90">
-                    <circle cx="56" cy="56" r="48" className="stroke-slate-900" strokeWidth="7" fill="transparent" />
+                    <circle cx="56" cy="56" r="48" className="stroke-slate-100 dark:stroke-indigo-900" strokeWidth="7" fill="transparent" />
                     <circle cx="56" cy="56" r="48"
                       className={`transition-all duration-1000 ${getAtsGlow(atsScore)}`}
                       strokeWidth="7" fill="transparent"
@@ -516,9 +529,9 @@ export default function CandidateDashboardPage() {
                   };
                   return (
                     <Link href="/candidate/applications" key={app.id}
-                      className="flex items-center justify-between p-2.5 bg-zinc-950/40 border border-white/5 rounded-xl hover:border-indigo-500/20 transition">
+                      className="flex items-center justify-between p-2.5 bg-white/80 border border-slate-100 rounded-xl hover:border-indigo-500/30 transition dark:bg-indigo-950/30 dark:border-indigo-300/10">
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{app.jobTitle}</p>
+                        <p className="text-xs font-bold text-slate-800 dark:text-white truncate">{app.jobTitle}</p>
                         <p className="text-[9px] text-zinc-500 truncate">{app.company}</p>
                       </div>
                       <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full border shrink-0 ml-2 ${sc[ns] ?? sc['Applied']}`}>

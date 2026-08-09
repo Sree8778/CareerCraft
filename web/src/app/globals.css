@@ -22,17 +22,17 @@
 }
 
 .dark {
-  /* Dark theme (default) */
-  --cc-bg: #08080d;
-  --cc-surface: rgba(20, 20, 30, 0.55);
-  --cc-surface-solid: #14141e;
-  --cc-border: rgba(255, 255, 255, 0.09);
-  --cc-text: #f2f2f7;
-  --cc-text-muted: #9b9bad;
-  --cc-accent: #8b7bff;
-  --cc-accent-2: #c96bff;
-  --cc-accent-3: #ff6cb5;
-  --cc-glow: rgba(139, 123, 255, 0.35);
+  /* Ink-navy, rather than black: a calm professional dark surface. */
+  --cc-bg: #0c1226;
+  --cc-surface: rgba(20, 31, 59, 0.78);
+  --cc-surface-solid: #151f3b;
+  --cc-border: rgba(145, 158, 223, 0.18);
+  --cc-text: #eef2ff;
+  --cc-text-muted: #a9b5d6;
+  --cc-accent: #8392ff;
+  --cc-accent-2: #ad82ff;
+  --cc-accent-3: #ec8bd2;
+  --cc-glow: rgba(118, 137, 255, 0.3);
 }
 
 /* Global body styles */
@@ -63,16 +63,16 @@ body {
 }
 .cc-workspace-shell > div > main { max-width: 100%; }
 .dark .cc-workspace-shell {
-  --cc-bg: #08080d;
-  --cc-surface: rgba(20, 20, 30, 0.55);
-  --cc-surface-solid: #14141e;
-  --cc-border: rgba(255, 255, 255, 0.09);
-  --cc-text: #f2f2f7;
-  --cc-text-muted: #9b9bad;
-  --cc-accent: #8b7bff;
-  --cc-accent-2: #c96bff;
-  --cc-accent-3: #ff6cb5;
-  --cc-glow: rgba(139, 123, 255, 0.35);
+  --cc-bg: #0c1226;
+  --cc-surface: rgba(20, 31, 59, 0.78);
+  --cc-surface-solid: #151f3b;
+  --cc-border: rgba(145, 158, 223, 0.18);
+  --cc-text: #eef2ff;
+  --cc-text-muted: #a9b5d6;
+  --cc-accent: #8392ff;
+  --cc-accent-2: #ad82ff;
+  --cc-accent-3: #ec8bd2;
+  --cc-glow: rgba(118, 137, 255, 0.3);
 }
 .cc-workspace-shell [class*="bg-slate-950"],
 .cc-workspace-shell [class*="bg-zinc-950"],
@@ -122,8 +122,8 @@ body {
 .cc-workspace-shell tbody tr:hover { background: color-mix(in srgb, var(--cc-accent) 4%, transparent); }
 .dark .cc-workspace-shell [class*="bg-slate-950"],
 .dark .cc-workspace-shell [class*="bg-zinc-950"],
-.dark .cc-workspace-shell [class*="bg-[#0B0F19"] { background-color: rgba(8, 8, 13, 0.68) !important; border-color: rgba(255, 255, 255, 0.09) !important; box-shadow: none; }
-.dark .cc-workspace-shell [class*="border-white/"] { border-color: rgba(255, 255, 255, 0.09) !important; }
+.dark .cc-workspace-shell [class*="bg-[#0B0F19"] { background-color: rgba(18, 29, 57, 0.82) !important; border-color: rgba(145, 158, 223, 0.18) !important; box-shadow: none; }
+.dark .cc-workspace-shell [class*="border-white/"] { border-color: rgba(145, 158, 223, 0.18) !important; }
 .dark .cc-workspace-shell [class*="text-white"],
 .dark .cc-workspace-shell [class*="text-zinc-200"],
 .dark .cc-workspace-shell [class*="text-zinc-300"] { color: #f2f2f7 !important; }
@@ -131,12 +131,12 @@ body {
 .dark .cc-workspace-shell [class~="bg-white/5"],
 .dark .cc-workspace-shell [class~="bg-white/[0.03]"],
 .dark .cc-workspace-shell [class~="bg-white/[0.02]"],
-.dark .cc-workspace-shell [class~="bg-black/30"] { background-color: rgba(255, 255, 255, 0.05) !important; }
+.dark .cc-workspace-shell [class~="bg-black/30"] { background-color: rgba(120, 136, 214, 0.08) !important; }
 .dark .cc-workspace-shell input,
 .dark .cc-workspace-shell select,
-.dark .cc-workspace-shell textarea { background: rgba(8, 8, 13, 0.75) !important; color: #f2f2f7 !important; border-color: rgba(255, 255, 255, 0.12) !important; }
-.dark .cc-workspace-shell th { background: rgba(255, 255, 255, 0.035); }
-.dark .cc-workspace-shell tbody tr:hover { background: rgba(255, 255, 255, 0.035); }
+.dark .cc-workspace-shell textarea { background: rgba(14, 23, 47, 0.88) !important; color: #eef2ff !important; border-color: rgba(145, 158, 223, 0.24) !important; }
+.dark .cc-workspace-shell th { background: rgba(120, 136, 214, 0.09); }
+.dark .cc-workspace-shell tbody tr:hover { background: rgba(120, 136, 214, 0.09); }
 
 ::selection { background: color-mix(in srgb, var(--cc-accent) 30%, transparent); }
 
@@ -362,6 +362,16 @@ body {
   transition: transform 160ms ease;
 }
 .cc-skip-link:focus { transform: translateY(0); }
+
+/* Subtle moving highlight used by the application-stage liquid progress flow. */
+.cc-liquid-flow {
+  background-size: 180% 100%;
+  animation: cc-liquid-flow 2.4s linear infinite;
+}
+@keyframes cc-liquid-flow {
+  from { background-position: 100% 50%; }
+  to { background-position: -80% 50%; }
+}
 
 /* ── Reduced motion ────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {

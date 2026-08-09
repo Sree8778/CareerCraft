@@ -102,7 +102,7 @@ export default function RecruiterDashboardPage() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="relative overflow-hidden rounded-3xl border border-purple-100 bg-gradient-to-r from-purple-100 via-white to-slate-100 p-8 shadow-xl shadow-slate-200/50 dark:border-white/10 dark:from-purple-950/40 dark:via-[#08080d] dark:to-slate-900/60 dark:shadow-2xl"
+          className="relative overflow-hidden rounded-3xl border border-purple-100 bg-gradient-to-r from-purple-100 via-white to-slate-100 p-8 shadow-xl shadow-slate-200/50 dark:border-indigo-300/15 dark:from-purple-950/60 dark:via-[#0e1630] dark:to-indigo-950/50 dark:shadow-2xl"
         >
           {/* Glass background glowing spots */}
           <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-purple-500/10 blur-3xl pointer-events-none" />
