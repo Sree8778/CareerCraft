@@ -136,16 +136,29 @@ export default function JobListingsPage() {
   }, [isAuthenticated, user, router, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── derived / filtered / sorted / paginated ────────────────────────────────
-  const baseJobs = semanticJobs ?? allJobs;
-
   const processedJobs = useMemo(() => {
-    // 1. keyword filter (skip when semantic results are active)
-    let jobs = semanticJobs
-      ? semanticJobs
-      : allJobs.filter(j => {
-          const q = searchTerm.toLowerCase();
-          return !q || j.title.toLowerCase().includes(q) || j.company.toLowerCase().includes(q) || j.location.toLowerCase().includes(q);
-        });
+    // 1. keyword filter — search across all meaningful fields, multi-word aware
+    let jobs: any[];
+    if (semanticJobs) {
+      jobs = semanticJobs;
+    } else if (!searchTerm.trim()) {
+      jobs = allJobs;
+    } else {
+      const terms = searchTerm.toLowerCase().split(/\s+/).filter(Boolean);
+      jobs = allJobs.filter(j => {
+        const haystack = [
+          j.title,
+          j.company,
+          j.location,
+          j.description,
+          j.employmentType,
+          j.salary,
+          ...(j.requirements || []),
+          ...(j.benefits    || []),
+        ].join(' ').toLowerCase();
+        return terms.every(term => haystack.includes(term));
+      });
+    }
 
     // 2. date filter
     if (dateFilter !== 'any') {
