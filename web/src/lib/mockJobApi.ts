@@ -13,4 +13,5 @@ export type Job = {
   postedDate: string;
   employmentType: string;
   emoji: string;
+  companyLogo?: string;
 };
