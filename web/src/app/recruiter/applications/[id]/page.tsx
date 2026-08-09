@@ -43,7 +43,7 @@ export default function ApplicationDetailPage() {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [actioning, setActioning] = useState(false);
-  const [activeTab, setActiveTab] = useState<'resume' | 'cover-letter' | 'pipeline' | 'ai-screen' | 'schedule'>('resume');
+  const [activeTab, setActiveTab] = useState<'resume' | 'cover-letter' | 'pipeline' | 'ai-screen' | 'schedule' | 'ai-interview'>('resume');
   const [resumeData, setResumeData] = useState<any>(null);
   const [loadingResume, setLoadingResume] = useState(false);
   const [messagingLoading, setMessagingLoading] = useState(false);
@@ -360,6 +360,7 @@ export default function ApplicationDetailPage() {
                 { id: 'ai-screen', label: 'AI Screen', icon: Sparkles },
                 { id: 'schedule', label: 'Schedule', icon: Calendar },
                 { id: 'pipeline', label: 'Move Stage', icon: TrendingUp },
+                ...(app.aiInterviewEnabled ? [{ id: 'ai-interview', label: 'AI Interview', icon: Video }] : []),
               ].map(({ id: tid, label, icon: Icon }) => (
                 <button key={tid} onClick={() => setActiveTab(tid as any)}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
@@ -850,6 +851,88 @@ export default function ApplicationDetailPage() {
                   </div>
                 </motion.div>
               )}
+              {/* AI INTERVIEW TAB */}
+              {activeTab === 'ai-interview' && (
+                <motion.div key="ai-interview" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                  className="space-y-4">
+                  {!app.aiInterviewEnabled ? (
+                    <div className="glass rounded-xl p-10 border border-white/10 text-center text-zinc-500 space-y-3">
+                      <Video className="w-10 h-10 mx-auto text-zinc-700" />
+                      <p className="font-semibold">No AI Interview for this application</p>
+                      <p className="text-xs">The job posting does not have AI Interview screening enabled.</p>
+                    </div>
+                  ) : app.interviewStatus === 'completed' && app.interviewResult ? (
+                    <>
+                      <div className="glass rounded-xl p-6 border border-emerald-500/20 flex items-center gap-6">
+                        <div className="relative w-20 h-20 shrink-0">
+                          <svg viewBox="0 0 36 36" className="w-20 h-20 -rotate-90">
+                            <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
+                            <circle cx="18" cy="18" r="15.9" fill="none"
+                              stroke={app.interviewResult.score >= 70 ? '#22c55e' : app.interviewResult.score >= 45 ? '#eab308' : '#f43f5e'}
+                              strokeWidth="3" strokeDasharray={`${app.interviewResult.score} 100`} strokeLinecap="round" />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-xl font-black">{app.interviewResult.score}</span>
+                            <span className="text-[8px] text-zinc-500">/100</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs text-zinc-500 uppercase tracking-widest font-bold mb-1">AI Interview Score</p>
+                          <p className="text-sm text-zinc-300 leading-relaxed">{app.interviewResult.summary}</p>
+                          <p className="text-[10px] text-zinc-600 mt-2">
+                            Completed {new Date(app.interviewResult.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        </div>
+                      </div>
+                      {app.interviewResult.responses?.length > 0 && (
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-bold uppercase tracking-widest text-violet-400 flex items-center gap-2">
+                            <Video className="w-3.5 h-3.5" />Response Breakdown
+                          </h4>
+                          {app.interviewResult.responses.map((r: any, i: number) => (
+                            <div key={i} className="glass rounded-xl p-4 border border-white/10 space-y-2">
+                              <div className="flex items-start justify-between gap-3">
+                                <p className="text-sm font-semibold text-zinc-200 flex-1">{i + 1}. {r.question}</p>
+                                <span className={`text-sm font-black shrink-0 ${r.score >= 7 ? 'text-emerald-400' : r.score >= 4 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                  {r.score}/10
+                                </span>
+                              </div>
+                              {r.answer && (
+                                <p className="text-xs text-zinc-400 leading-relaxed bg-white/3 rounded-lg px-3 py-2 border border-white/8">
+                                  {r.answer}
+                                </p>
+                              )}
+                              {r.feedback && (
+                                <p className="text-[11px] text-zinc-500 italic">{r.feedback}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="glass rounded-xl p-10 border border-white/10 flex flex-col items-center gap-4 text-center">
+                      <div className="w-14 h-14 rounded-2xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center">
+                        <Video className="w-7 h-7 text-violet-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold mb-1">
+                          {app.interviewStatus === 'pending' ? 'Waiting for Candidate' : 'Interview Not Started'}
+                        </h3>
+                        <p className="text-sm text-zinc-400">
+                          {app.aiInterviewMandatory ? 'This is a mandatory interview.' : 'This is an optional interview.'}
+                        </p>
+                        {app.interviewDeadline && (
+                          <p className="text-xs text-zinc-500 mt-1">
+                            Deadline: {new Date(app.interviewDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
             </AnimatePresence>
           </div>
 

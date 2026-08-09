@@ -1,4 +1,4 @@
-# backend/routes.py
+﻿# backend/routes.py
 from flask import request, jsonify, send_file, Blueprint
 import io
 
@@ -1400,7 +1400,7 @@ def update_job(job_id):
     allowed = {'title', 'description', 'jobType', 'department', 'location', 'status', 'company',
                'requirements', 'benefits', 'skills', 'workMode', 'experienceLevel',
                'salaryMin', 'salaryMax', 'salaryVisible', 'visaSponsorship', 'screeningQuestions',
-               'companyLogo'}
+               'companyLogo', 'aiInterview'}
     update_data = {k: v for k, v in data.items() if k in allowed and v is not None}
     valid_statuses = {'Draft', 'Open', 'Paused', 'In Review', 'Closed', 'Archived'}
     if 'status' in update_data and update_data['status'] not in valid_statuses:
@@ -1472,6 +1472,7 @@ def post_job_v1():
             "visaSponsorship": bool(data.get('visaSponsorship', False)),
             "screeningQuestions": data.get('screeningQuestions', []),
             "companyLogo": data.get('companyLogo', ''),
+            "aiInterview": data.get('aiInterview', None),
         }
         if db:
             doc_ref = db.collection('jobs').add(new_job)
@@ -1929,6 +1930,23 @@ def apply_to_job(job_id):
             except Exception as snap_err:
                 print(f"[apply] resume snapshot error: {snap_err}")
 
+            # Set AI interview status when the job has it enabled
+            ai_interview_cfg = jd.get('aiInterview') or {}
+            if ai_interview_cfg.get('enabled'):
+                try:
+                    deadline_days = int(ai_interview_cfg.get('deadlineDays', 7))
+                    interview_deadline = (datetime.datetime.utcnow() + datetime.timedelta(days=deadline_days)).strftime('%Y-%m-%d')
+                    interview_patch = {
+                        'interviewStatus': 'pending',
+                        'interviewDeadline': interview_deadline,
+                        'aiInterviewEnabled': True,
+                        'aiInterviewMandatory': bool(ai_interview_cfg.get('mandatory', False)),
+                    }
+                    db.collection('applications').document(app_data['id']).update(interview_patch)
+                    app_data.update(interview_patch)
+                except Exception as iv_err:
+                    print(f"[apply] interview status error: {iv_err}")
+
             # Launch background analysis â€” uses candidate's own API key, zero platform cost
             try:
                 import threading
@@ -1957,6 +1975,122 @@ def apply_to_job(job_id):
         return jsonify({"status": "success", "application": app_data}), 201
     except Exception as e:
         print(f"Error applying to job: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/applications/<app_id>/interview', methods=['GET'])
+@require_auth
+def get_interview_questions(app_id):
+    try:
+        from firebase_utils import db, firebase_initialized
+        if not firebase_initialized or not db:
+            return jsonify({"error": "Firebase unavailable"}), 503
+        app_doc = db.collection('applications').document(app_id).get()
+        if not app_doc.exists:
+            return jsonify({"error": "Application not found"}), 404
+        app_data = app_doc.to_dict()
+        if app_data.get('candidateId') != request.user.get('uid', ''):
+            return jsonify({"error": "Forbidden"}), 403
+        if not app_data.get('aiInterviewEnabled'):
+            return jsonify({"error": "No AI interview for this application"}), 400
+        if app_data.get('interviewStatus') == 'completed':
+            return jsonify({
+                "status": "completed",
+                "result": app_data.get('interviewResult', {}),
+            }), 200
+        job_id = app_data.get('jobId', '')
+        job_doc = db.collection('jobs').document(job_id).get()
+        if not job_doc.exists:
+            return jsonify({"error": "Job not found"}), 404
+        job_data = job_doc.to_dict()
+        ai_cfg = job_data.get('aiInterview') or {}
+        mode = ai_cfg.get('mode', 'auto')
+        count = int(ai_cfg.get('questionCount', 5))
+        if app_data.get('interviewQuestions'):
+            questions = app_data['interviewQuestions']
+        else:
+            from ollama_utils import generate_job_interview_questions, generate_job_interview_questions_from_topics
+            if mode == 'custom':
+                topics = ai_cfg.get('topics', [])
+                questions = generate_job_interview_questions_from_topics(
+                    topics, job_data.get('title', ''), job_data.get('description', ''), count
+                )
+            else:
+                questions = generate_job_interview_questions(
+                    job_data.get('title', ''), job_data.get('description', ''),
+                    job_data.get('skills', ''), job_data.get('requirements', []), count
+                )
+            db.collection('applications').document(app_id).update({'interviewQuestions': questions})
+        return jsonify({
+            "questions": questions,
+            "jobTitle": job_data.get('title', ''),
+            "company": job_data.get('company', ''),
+            "mandatory": bool(ai_cfg.get('mandatory', False)),
+            "deadline": app_data.get('interviewDeadline', ''),
+            "status": app_data.get('interviewStatus', 'pending'),
+        }), 200
+    except Exception as e:
+        print(f"[interview] get questions error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/applications/<app_id>/interview/complete', methods=['POST'])
+@require_auth
+def complete_interview(app_id):
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+    data = request.json
+    responses = data.get('responses', [])
+    try:
+        from firebase_utils import db, firebase_initialized
+        if not firebase_initialized or not db:
+            return jsonify({"error": "Firebase unavailable"}), 503
+        app_doc = db.collection('applications').document(app_id).get()
+        if not app_doc.exists:
+            return jsonify({"error": "Application not found"}), 404
+        app_data = app_doc.to_dict()
+        if app_data.get('candidateId') != request.user.get('uid', ''):
+            return jsonify({"error": "Forbidden"}), 403
+        if app_data.get('interviewStatus') == 'completed':
+            return jsonify({"error": "Interview already completed"}), 409
+        from ollama_utils import evaluate_interview_response, summarize_interview
+        scored = []
+        total = 0
+        for resp in responses:
+            try:
+                s = evaluate_interview_response(
+                    resp.get('question', ''), resp.get('answer', ''),
+                    app_data.get('jobTitle', ''),
+                )
+                scored.append({
+                    'question': resp.get('question', ''),
+                    'answer': resp.get('answer', ''),
+                    'score': s.get('score', 5),
+                    'feedback': s.get('feedback', ''),
+                })
+                total += s.get('score', 5)
+            except Exception:
+                scored.append({'question': resp.get('question', ''), 'answer': resp.get('answer', ''), 'score': 5, 'feedback': 'Answer noted.'})
+                total += 5
+        avg_score = round((total / len(scored)) * 10) if scored else 50
+        avg_score = min(100, max(0, avg_score))
+        try:
+            summary = summarize_interview(scored, app_data.get('jobTitle', ''))
+        except Exception:
+            summary = f"Candidate answered {len([r for r in scored if r.get('answer', '').strip()])} of {len(scored)} questions."
+        result = {
+            'completedAt': datetime.datetime.utcnow().isoformat() + 'Z',
+            'score': avg_score,
+            'summary': summary,
+            'responses': scored,
+        }
+        db.collection('applications').document(app_id).update({
+            'interviewStatus': 'completed',
+            'interviewResult': result,
+        })
+        return jsonify({"status": "success", "score": avg_score, "summary": summary}), 200
+    except Exception as e:
+        print(f"[interview] complete error: {e}")
         return jsonify({"error": str(e)}), 500
 
 

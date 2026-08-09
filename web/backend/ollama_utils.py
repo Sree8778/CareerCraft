@@ -555,6 +555,95 @@ JSON:"""
     }
 
 
+# ── 6d. AI Interview — job-specific question generation & scoring ──────────────
+
+def generate_job_interview_questions(title: str, description: str, skills: str,
+                                      requirements: list, count: int) -> list:
+    reqs_text = "\n".join(f"- {r}" for r in requirements[:10]) if requirements else ""
+    prompt = f"""You are a senior hiring manager building an AI interview.
+Generate exactly {count} interview questions for this role.
+
+Job Title: {title}
+Description: {(description or '')[:800]}
+Skills: {skills}
+Requirements:
+{reqs_text}
+
+Return ONLY a valid JSON array of question strings.
+Mix technical knowledge, problem-solving, and role-specific experience.
+
+JSON array:"""
+    result = _call(prompt, json_mode=True)
+    if isinstance(result, list) and all(isinstance(q, str) for q in result):
+        return result[:count]
+    return [
+        f"Tell me about your relevant experience for the {title} role.",
+        "Describe a challenging project and how you approached it.",
+        "How do you stay current with industry trends and best practices?",
+        "What is your greatest professional achievement so far?",
+        "Where do you see yourself in the next 3-5 years?",
+    ][:count]
+
+
+def generate_job_interview_questions_from_topics(topics: list, title: str,
+                                                  description: str, count: int) -> list:
+    topics_text = "\n".join(f"- {t}" for t in topics)
+    prompt = f"""You are a senior hiring manager building an AI interview for a {title} role.
+Generate exactly {count} interview questions based on these specific topics:
+{topics_text}
+
+Context: {(description or '')[:400]}
+
+Return ONLY a valid JSON array of question strings. Distribute the questions across the topics.
+
+JSON array:"""
+    result = _call(prompt, json_mode=True)
+    if isinstance(result, list) and all(isinstance(q, str) for q in result):
+        return result[:count]
+    return [f"Tell me about your experience with {t}." for t in topics[:count]]
+
+
+def evaluate_interview_response(question: str, answer: str, job_title: str = "") -> dict:
+    if not answer or not answer.strip():
+        return {"score": 0, "feedback": "No answer provided."}
+    prompt = f"""You are an experienced interviewer scoring a candidate's response.
+
+Job: {job_title}
+Question: "{question}"
+Answer: "{(answer or '')[:1000]}"
+
+Return ONLY this JSON:
+{{
+  "score": <integer 1-10>,
+  "feedback": "<one concise sentence of constructive feedback>"
+}}
+
+JSON:"""
+    result = _call(prompt, json_mode=True, max_tokens=256)
+    if isinstance(result, dict) and "score" in result:
+        return result
+    return {"score": 5, "feedback": "Answer received and noted."}
+
+
+def summarize_interview(scored_responses: list, job_title: str = "") -> str:
+    qa_text = "\n".join(
+        f"Q: {r['question']}\nA: {(r.get('answer') or '')[:300]}\nScore: {r.get('score', 5)}/10"
+        for r in scored_responses
+    )
+    prompt = f"""You are a hiring manager reviewing an AI interview for a {job_title} candidate.
+
+Interview responses:
+{qa_text}
+
+Write a 2-3 sentence factual summary of the candidate's performance.
+Highlight key strengths and one area for improvement. Do not include raw scores."""
+    result = _call(prompt, max_tokens=256)
+    if result and isinstance(result, str):
+        return result.strip()
+    answered = len([r for r in scored_responses if (r.get("answer") or "").strip()])
+    return f"Candidate answered {answered} of {len(scored_responses)} questions."
+
+
 # ── 7. Semantic job search ─────────────────────────────────────────────────────
 
 def semantic_job_search(query: str, jobs_list: list) -> list:

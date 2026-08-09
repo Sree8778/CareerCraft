@@ -11,7 +11,7 @@ import { API_BASE, authHeader, jsonHeaders } from '@/lib/api';
 import {
   Briefcase, Calendar, ExternalLink, Search, FileText,
   Send, Eye, Mic, Star, X, TrendingUp, BarChart2,
-  RefreshCw, ChevronRight,
+  RefreshCw, ChevronRight, Video, CheckCircle2, Clock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -28,6 +28,10 @@ interface Application {
   jobUrl?: string;
   source?: string;
   coverLetter?: string;
+  interviewStatus?: 'pending' | 'completed' | 'expired';
+  interviewDeadline?: string;
+  aiInterviewEnabled?: boolean;
+  aiInterviewMandatory?: boolean;
 }
 
 type KanbanStatus = 'Applied' | 'In Review' | 'Interview' | 'Offer' | 'Rejected';
@@ -125,10 +129,20 @@ function normalizeApp(raw: any): Application {
     jobUrl: raw.jobUrl || raw.url || '',
     source: raw.source || '',
     coverLetter: raw.coverLetter || raw.cover_letter || '',
+    interviewStatus: raw.interviewStatus,
+    interviewDeadline: raw.interviewDeadline,
+    aiInterviewEnabled: raw.aiInterviewEnabled || false,
+    aiInterviewMandatory: raw.aiInterviewMandatory || false,
   };
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
+
+function daysUntil(dateStr?: string): number | null {
+  if (!dateStr) return null;
+  const diff = new Date(dateStr).getTime() - Date.now();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
 
 export default function CandidateApplicationsPage() {
   const { user, isAuthenticated, getToken, loading: authLoading } = useAuth();
@@ -330,6 +344,7 @@ export default function CandidateApplicationsPage() {
                           onToggle={() => setExpandedCard(prev => prev === app.id ? null : app.id)}
                           onDragStart={() => onDragStart(app.id)}
                           onMoveTo={updateStatus}
+                          onStartInterview={id => router.push(`/candidate/applications/${id}/interview`)}
                         />
                       ))}
                     </AnimatePresence>
@@ -353,15 +368,18 @@ interface KanbanCardProps {
   onToggle: () => void;
   onDragStart: () => void;
   onMoveTo: (id: string, status: KanbanStatus) => void;
+  onStartInterview: (id: string) => void;
 }
 
 const SOURCE_COLORS: Record<string, string> = {
   supervised: 'bg-sky-500/15 text-sky-300 border-sky-500/25',
 };
 
-function KanbanCard({ app, col, expanded, onToggle, onDragStart, onMoveTo }: KanbanCardProps) {
+function KanbanCard({ app, col, expanded, onToggle, onDragStart, onMoveTo, onStartInterview }: KanbanCardProps) {
   const sourceLabel = app.source ? 'Manual' : '';
   const sourceColor = SOURCE_COLORS[app.source ?? ''] ?? 'bg-white/5 text-zinc-400 border-white/10';
+  const daysLeft = daysUntil(app.interviewDeadline);
+  const interviewExpired = app.aiInterviewEnabled && app.interviewStatus === 'pending' && daysLeft !== null && daysLeft <= 0;
 
   const otherCols = COLUMNS.filter(c => c.id !== col.id);
 
@@ -394,6 +412,16 @@ function KanbanCard({ app, col, expanded, onToggle, onDragStart, onMoveTo }: Kan
         {app.appliedDate && (
           <span className="flex items-center gap-0.5 text-[9px] text-zinc-500 font-mono">
             <Calendar className="w-2.5 h-2.5" /> {app.appliedDate}
+          </span>
+        )}
+        {app.aiInterviewEnabled && app.interviewStatus === 'completed' && (
+          <span className="flex items-center gap-0.5 text-[9px] font-bold text-emerald-400 border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
+            <CheckCircle2 className="w-2.5 h-2.5" /> Interview done
+          </span>
+        )}
+        {app.aiInterviewEnabled && app.interviewStatus === 'pending' && !interviewExpired && (
+          <span className="flex items-center gap-0.5 text-[9px] font-bold text-violet-300 border border-violet-500/25 bg-violet-500/10 px-1.5 py-0.5 rounded-full">
+            <Video className="w-2.5 h-2.5" /> Interview pending
           </span>
         )}
         {sourceLabel && (
@@ -442,6 +470,39 @@ function KanbanCard({ app, col, expanded, onToggle, onDragStart, onMoveTo }: Kan
                 ))}
               </div>
             </div>
+            {app.aiInterviewEnabled && (
+              <div className="mt-2 pt-2 border-t border-white/5">
+                {app.interviewStatus === 'completed' ? (
+                  <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-400">
+                    <CheckCircle2 className="w-3 h-3" /> Interview complete
+                  </span>
+                ) : interviewExpired ? (
+                  <span className="flex items-center gap-1 text-[9px] font-bold text-red-400">
+                    <Clock className="w-3 h-3" /> Interview deadline passed
+                  </span>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <Video className="w-2.5 h-2.5 text-violet-400" />
+                        AI Interview {app.aiInterviewMandatory ? '· Required' : '· Optional'}
+                      </span>
+                      {daysLeft !== null && (
+                        <span className={`text-[9px] font-mono ${daysLeft <= 2 ? 'text-red-400' : 'text-zinc-500'}`}>
+                          {daysLeft}d left
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => onStartInterview(app.id)}
+                      className="w-full text-[9px] font-bold px-2 py-1 rounded-lg bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition flex items-center justify-center gap-1"
+                    >
+                      <Video className="w-2.5 h-2.5" /> Start Interview
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

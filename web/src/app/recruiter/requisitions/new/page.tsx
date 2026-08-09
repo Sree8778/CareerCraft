@@ -14,7 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 import {
   ArrowLeft, ArrowRight, RefreshCw, Briefcase, Sparkles, Plus, X, Eye,
-  MapPin, Clock, CheckCircle2, FileText, ListChecks, Rocket, Save, Upload, ImageIcon,
+  MapPin, Clock, CheckCircle2, FileText, ListChecks, Rocket, Save, Upload, ImageIcon, Video,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE as API } from '@/lib/api';
@@ -79,6 +79,11 @@ function NewRequisitionContent() {
   });
   const [logoPreview,   setLogoPreview]   = useState('');
   const [logoUploading, setLogoUploading] = useState(false);
+  const [aiInterview, setAiInterview] = useState<{
+    enabled: boolean; mandatory: boolean; mode: 'auto' | 'custom';
+    topics: string[]; deadlineDays: number; questionCount: number;
+  }>({ enabled: false, mandatory: false, mode: 'auto', topics: [], deadlineDays: 7, questionCount: 5 });
+  const [newTopic, setNewTopic] = useState('');
   const [requirements, setRequirements] = useState<string[]>([]);
   const [benefits, setBenefits] = useState<string[]>([]);
   const [questions, setQuestions] = useState<ScreeningQ[]>([]);
@@ -152,6 +157,7 @@ function NewRequisitionContent() {
         setRequirements(job.requirements || []);
         setBenefits(job.benefits || []);
         setQuestions(job.screeningQuestions || []);
+        setAiInterview(job.aiInterview || { enabled: false, mandatory: false, mode: 'auto', topics: [], deadlineDays: 7, questionCount: 5 });
         setExistingStatus(job.status || 'Open');
       } catch { toast.error('Failed to load job.'); }
       finally { setLoadingExisting(false); }
@@ -228,6 +234,7 @@ function NewRequisitionContent() {
     requirements, benefits,
     screeningQuestions: questions,
     companyLogo: formData.companyLogo,
+    aiInterview: aiInterview.enabled ? aiInterview : null,
     ...(status ? { status } : {}),
   });
 
@@ -551,6 +558,98 @@ function NewRequisitionContent() {
                   className="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-zinc-300 transition"><Plus className="w-4 h-4" /></button>
               </div>
             </div>
+
+            {/* AI Interview */}
+            <div className="glass rounded-xl p-6 border border-white/10 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-500/25 flex items-center justify-center shrink-0">
+                    <Video className="w-4 h-4 text-violet-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-zinc-200">AI Interview Screening</h2>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">Automatically interview candidates after they apply</p>
+                  </div>
+                </div>
+                <button type="button"
+                  onClick={() => setAiInterview(p => ({ ...p, enabled: !p.enabled }))}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${aiInterview.enabled ? 'bg-violet-600' : 'bg-zinc-700'}`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiInterview.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              {aiInterview.enabled && (
+                <div className="space-y-4 pt-3 border-t border-white/8">
+                  <div>
+                    <p className="text-xs font-medium text-zinc-400 mb-2">Interview requirement</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setAiInterview(p => ({ ...p, mandatory: false }))}
+                        className={!aiInterview.mandatory ? chipOn : chipOff}>Optional</button>
+                      <button type="button" onClick={() => setAiInterview(p => ({ ...p, mandatory: true }))}
+                        className={aiInterview.mandatory ? chipOn : chipOff}>Mandatory</button>
+                    </div>
+                    <p className="text-[10px] text-zinc-600 mt-1.5">
+                      {aiInterview.mandatory ? 'Candidates must complete the interview to be considered.' : 'Candidates can skip the interview without penalty.'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-zinc-400 mb-2">Question source</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setAiInterview(p => ({ ...p, mode: 'auto' }))}
+                        className={aiInterview.mode === 'auto' ? chipOn : chipOff}>Auto from JD</button>
+                      <button type="button" onClick={() => setAiInterview(p => ({ ...p, mode: 'custom' }))}
+                        className={aiInterview.mode === 'custom' ? chipOn : chipOff}>Custom topics</button>
+                    </div>
+                    <p className="text-[10px] text-zinc-600 mt-1.5">
+                      {aiInterview.mode === 'auto' ? 'AI generates questions from your job description and requirements.' : 'AI builds questions around specific topics you provide.'}
+                    </p>
+                  </div>
+
+                  {aiInterview.mode === 'custom' && (
+                    <div>
+                      <p className="text-xs font-medium text-zinc-400 mb-2">Topics to cover</p>
+                      <ul className="space-y-1.5 mb-2">
+                        {aiInterview.topics.map((topic, i) => (
+                          <li key={i} className="flex items-center gap-2 text-sm text-zinc-300 bg-white/3 border border-white/8 rounded-lg px-3 py-2">
+                            <span className="flex-1">{topic}</span>
+                            <button type="button" onClick={() => setAiInterview(p => ({ ...p, topics: p.topics.filter((_, j) => j !== i) }))}
+                              className="text-zinc-600 hover:text-red-400 transition shrink-0"><X className="w-3.5 h-3.5" /></button>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="flex gap-2">
+                        <input value={newTopic} onChange={e => setNewTopic(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (newTopic.trim()) { setAiInterview(p => ({ ...p, topics: [...p.topics, newTopic.trim()] })); setNewTopic(''); } } }}
+                          placeholder="e.g. System design, React hooks, STAR method…"
+                          className={`${inputCls} flex-1`} />
+                        <button type="button" onClick={() => { if (newTopic.trim()) { setAiInterview(p => ({ ...p, topics: [...p.topics, newTopic.trim()] })); setNewTopic(''); } }}
+                          className="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-zinc-300 transition">
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="Number of questions">
+                      <select value={aiInterview.questionCount}
+                        onChange={e => setAiInterview(p => ({ ...p, questionCount: Number(e.target.value) }))}
+                        className={inputCls}>
+                        {[3, 5, 7, 10].map(n => <option key={n} value={n}>{n} questions</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Completion deadline">
+                      <select value={aiInterview.deadlineDays}
+                        onChange={e => setAiInterview(p => ({ ...p, deadlineDays: Number(e.target.value) }))}
+                        className={inputCls}>
+                        {[3, 7, 14, 30].map(d => <option key={d} value={d}>{d} days after applying</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -600,6 +699,19 @@ function NewRequisitionContent() {
                 <div>
                   <h3 className="text-sm font-bold text-zinc-300 mb-1.5">You&apos;ll be asked</h3>
                   <ul className="space-y-1">{questions.map(q => <li key={q.id} className="text-sm text-zinc-400 flex gap-2"><span className="text-indigo-400">?</span>{q.question}</li>)}</ul>
+                </div>
+              )}
+              {aiInterview.enabled && (
+                <div className="p-3 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-start gap-3">
+                  <Video className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-bold text-violet-300">
+                      AI Interview {aiInterview.mandatory ? '· Mandatory' : '· Optional'}
+                    </p>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      {aiInterview.questionCount} questions · Complete within {aiInterview.deadlineDays} days of applying
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
