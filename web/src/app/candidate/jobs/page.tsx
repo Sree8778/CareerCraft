@@ -108,8 +108,12 @@ export default function JobListingsPage() {
           fetch(`${API_BASE}/jobs`, { headers: { 'Authorization': `Bearer ${await getToken()}` } }),
           fetch(`${API_BASE}/applications?candidateId=${user.id}`, { headers: { 'Authorization': `Bearer ${await getToken()}` } }),
         ]);
-        const jobsData = await jobsRes.json();
-        const appsData = await appsRes.json();
+        if (!jobsRes.ok) {
+          const body = await jobsRes.json().catch(() => ({}));
+          toast.error(body.error || `Failed to load jobs (${jobsRes.status})`);
+        }
+        const jobsData = jobsRes.ok ? await jobsRes.json() : {};
+        const appsData = appsRes.ok ? await appsRes.json() : {};
 
         const normalized: Job[] = (jobsData.jobs || []).map((job: any) => ({
           id:             job.id,

@@ -1381,7 +1381,7 @@ def get_jobs():
             docs = query.stream()
             jobs = []
             for doc in docs:
-                j = doc.to_dict()
+                j = _json_safe(doc.to_dict())
                 j['id'] = doc.id
                 jobs.append(j)
             # Candidates only see live postings; recruiters see all their own jobs
@@ -1402,7 +1402,7 @@ def get_job_by_id(job_id):
         if db:
             doc = db.collection('jobs').document(job_id).get()
             if doc.exists:
-                j = doc.to_dict()
+                j = _json_safe(doc.to_dict())
                 j['id'] = doc.id
                 return jsonify(j), 200
             return jsonify({"error": "Job not found"}), 404
@@ -1433,7 +1433,7 @@ def update_job(job_id):
             jdoc = db.collection('jobs').document(job_id).get()
             if not jdoc.exists:
                 return jsonify({"error": "Job not found"}), 404
-            jd = jdoc.to_dict()
+            jd = _json_safe(jdoc.to_dict())
             from firebase_utils import is_admin_user as _adm
             if jd.get('recruiterId') and jd.get('recruiterId') != request.user.get('uid', '') and not _adm(request.user):
                 return jsonify({"error": "Unauthorized"}), 403
