@@ -279,6 +279,7 @@ def generate_next_interview_question(resume_data: dict, conversation_history: li
         description = (interview_context.get("description") or "")[:600]
         company_str = f" at {company}" if company else ""
         topics_str = "\n".join(f"- {t}" for t in topics) if topics else ""
+        topics_line = ("Topics to cover (rotate through them, follow up naturally):\n" + topics_str) if topics_str else "Focus on skills most relevant to the role and the candidate's background."
         prompt = f"""You are an expert interviewer conducting a live voice interview for a {job_title} position{company_str}.
 Your job: evaluate this specific candidate for this specific role and probe their real depth.
 
@@ -287,7 +288,7 @@ Candidate Resume:
 
 Role: {job_title}{company_str}
 {f"Job context: {description}" if description else ""}
-{f"Topics to cover (rotate through them, follow up naturally):\n{topics_str}" if topics_str else "Focus on skills most relevant to the role and the candidate's background."}
+{topics_line}
 
 Elapsed: {elapsed_mins:.1f} / 30 minutes
 
