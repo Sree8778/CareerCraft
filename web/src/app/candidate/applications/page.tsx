@@ -167,14 +167,21 @@ export default function CandidateApplicationsPage() {
     if (!user?.id) return;
     setLoading(true);
     try {
+      const token = await getToken();
       const res = await fetch(`${API_BASE}/applications?candidateId=${user.id}`, {
-        headers: await authHeader(getToken),
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
         setApplications((data.applications || []).map(normalizeApp));
+      } else {
+        const body = await res.json().catch(() => ({}));
+        toast.error(body.error || `Failed to load applications (${res.status})`);
       }
-    } catch { /* silent */ }
+    } catch (err) {
+      console.error('[applications] fetch error:', err);
+      toast.error('Could not reach the server. Check your connection and try again.');
+    }
     finally { setLoading(false); }
   }, [user?.id, getToken]);
 

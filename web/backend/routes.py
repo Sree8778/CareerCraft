@@ -70,7 +70,7 @@ def _is_no_keys(e: Exception) -> bool:
 
 def _no_keys_resp(e: Exception = None):
     msg = str(e).replace("NO_API_KEYS:", "").strip() if e else \
-          "Add your API keys in Profile â†’ Settings to unlock AI-powered features."
+          "Add your API keys in Profile â†' Settings to unlock AI-powered features."
     return jsonify({
         "error": "no_api_keys",
         "message": msg,
@@ -101,11 +101,29 @@ def _json_safe(value):
     """Convert Firestore timestamps and nested values into JSON-safe data."""
     if isinstance(value, datetime.datetime):
         return value.isoformat()
+    # Firestore DatetimeWithNanoseconds / Timestamp (has to_pydatetime or isoformat)
+    if hasattr(value, 'isoformat'):
+        try:
+            return value.isoformat()
+        except Exception:
+            return str(value)
+    if hasattr(value, '_seconds'):
+        # Firestore Timestamp proto
+        try:
+            return datetime.datetime.utcfromtimestamp(value._seconds).isoformat()
+        except Exception:
+            return str(value)
     if isinstance(value, dict):
         return {key: _json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_safe(item) for item in value]
-    return value
+    # Reject any remaining non-serializable object types
+    try:
+        import json as _json
+        _json.dumps(value)
+        return value
+    except (TypeError, ValueError):
+        return str(value)
 
 def _validate_webhook_url(url):
     """Allow only public HTTPS webhook endpoints to prevent SSRF."""
@@ -132,7 +150,7 @@ def configure_dynamic_api_key():
     set_api_key("")
     set_request_wallet([])
 
-    # Inline wallet via header (signup flow â€” user's own keys before Firestore registration).
+    # Inline wallet via header (signup flow  -" user's own keys before Firestore registration).
     import json as _json
     inline_wallet_json = request.headers.get('X-API-Wallet', '').strip()
     if inline_wallet_json:
@@ -181,7 +199,7 @@ def configure_dynamic_api_key():
             return
         wallet = user_doc.to_dict().get('apiKeysWallet', [])
 
-        # Status-change callback â€” persists key state changes back to Firestore.
+        # Status-change callback  -" persists key state changes back to Firestore.
         def _on_status_change(entry):
             try:
                 update = {'status': entry.status}
@@ -445,7 +463,7 @@ def evaluate_response_route():
 @api_bp.route('/practice-interview/ai-turn', methods=['POST'])
 @require_auth
 def practice_ai_turn():
-    """Conversational AI interviewer turn â€” returns natural speech text."""
+    """Conversational AI interviewer turn  -" returns natural speech text."""
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
     data = request.json
@@ -607,10 +625,10 @@ def _get_all_candidates_helper():
                     exp_items = []
                     for e in experience_list:
                         if isinstance(e, dict):
-                            exp_items.append(f"{e.get('jobTitle', '')} at {e.get('company', '')} ({e.get('dates', '')}) â€¢ {e.get('description', '')}")
+                            exp_items.append(f"{e.get('jobTitle', '')} at {e.get('company', '')} ({e.get('dates', '')})  -¢ {e.get('description', '')}")
                         else:
                             exp_items.append(str(e))
-                    experience_str = " â€¢ ".join(filter(None, exp_items))
+                    experience_str = "  -¢ ".join(filter(None, exp_items))
                 
                 education_list = resume_data.get('education', [])
                 education_str = ""
@@ -621,7 +639,7 @@ def _get_all_candidates_helper():
                             edu_items.append(f"{ed.get('degree', '')} from {ed.get('institution', '')} ({ed.get('graduationYear', '')})")
                         else:
                             edu_items.append(str(ed))
-                    education_str = " â€¢ ".join(filter(None, edu_items))
+                    education_str = "  -¢ ".join(filter(None, edu_items))
                 
                 candidates.append({
                     "id": uid,
@@ -1021,7 +1039,7 @@ def analyze_resume_quality_route():
     """
     Rule-based resume completeness/quality check.
     Accepts { resumeData } in body, or loads from Firestore for authenticated user.
-    No AI cost â€” instant response.
+    No AI cost  -" instant response.
     """
     configure_dynamic_api_key()
     uid = request.user.get('uid')
@@ -1270,7 +1288,7 @@ def schedule_interview_route():
                     'read': False,
                 })
 
-        # Attempt Google Calendar event â€” graceful fallback
+        # Attempt Google Calendar event  -" graceful fallback
         cal_link = meeting_link
         try:
             clean_time = scheduled_at.split('.')[0].replace('Z', '')
@@ -1279,7 +1297,7 @@ def schedule_interview_route():
             attendees = [e for e in [candidate_email, recruiter_email] if e]
             if attendees:
                 cal_link = create_calendar_event(
-                    summary=f"{interview_type.title()} Interview â€“ {job_title}",
+                    summary=f"{interview_type.title()} Interview - {job_title}",
                     description=notes or f"Interview for {job_title} at {company}",
                     start_time=start_dt,
                     end_time=end_dt,
@@ -1296,7 +1314,7 @@ def schedule_interview_route():
                         meet_link=cal_link,
                     )
         except FileNotFoundError:
-            pass  # Calendar credentials not configured â€” use stored meetingLink
+            pass  # Calendar credentials not configured  -" use stored meetingLink
         except Exception as cal_err:
             print(f"[schedule] calendar/email non-fatal error: {cal_err}")
 
@@ -1456,13 +1474,13 @@ def post_job_v1():
             "jobType": job_type or 'Full-time',
             "department": data.get('department', ''),
             "location": data.get('location', 'Remote'),
-            # The company on a posting is what the recruiter typed â€” never
+            # The company on a posting is what the recruiter typed  -" never
             # silently replace it with the recruiter's personal name.
             "company": data.get('company') or request.user.get('name', 'Confidential Employer'),
             "recruiterId": recruiter_id,
             "postedDate": datetime.datetime.utcnow().strftime('%Y-%m-%d'),
             "status": status,
-            # Recruiter intake â€” previously collected by the UI and dropped here.
+            # Recruiter intake  -" previously collected by the UI and dropped here.
             "requirements": data.get('requirements', []),
             "benefits": data.get('benefits', []),
             "skills": data.get('skills', ''),
@@ -1480,7 +1498,7 @@ def post_job_v1():
             doc_ref = db.collection('jobs').add(new_job)
             new_job['id'] = doc_ref[1].id
         else:
-            return jsonify({"error": "Firebase not initialized â€” cannot post job"}), 503
+            return jsonify({"error": "Firebase not initialized - cannot post job"}), 503
 
         return jsonify({"status": "success", "job": new_job}), 201
     except Exception as e:
@@ -1580,7 +1598,7 @@ def verify_key_route():
         if provider == 'Gemini':
             try:
                 import requests as _req
-                # Use ListModels â€” doesn't depend on any specific model name being available
+                # Use ListModels  -" doesn't depend on any specific model name being available
                 resp = _req.get(
                     'https://generativelanguage.googleapis.com/v1beta/models',
                     params={'key': key, 'pageSize': 1},
@@ -1610,7 +1628,7 @@ def verify_key_route():
             else:
                 return jsonify({"valid": False, "error": "Invalid OpenAI key format (must start with sk-)."}), 200
         elif provider == 'NVIDIA NIM':
-            # Live check â€” NVIDIA free credits expire, so format-only is not enough
+            # Live check  -" NVIDIA free credits expire, so format-only is not enough
             if not key.startswith('nvapi-'):
                 return jsonify({"valid": False, "error": "NVIDIA NIM keys must start with nvapi-"}), 200
             try:
@@ -1632,7 +1650,7 @@ def verify_key_route():
                 if resp.status_code in (401, 403):
                     return jsonify({"valid": False, "error": f"NVIDIA key rejected ({resp.status_code}): {detail}. Get a fresh key at build.nvidia.com"}), 200
                 if resp.status_code == 429:
-                    # Quota hit but key is valid â€” accept it
+                    # Quota hit but key is valid  -" accept it
                     return jsonify({"valid": True, "message": "NVIDIA NIM key accepted (quota limit hit, will reset)."}), 200
                 return jsonify({"valid": False, "error": f"NVIDIA API error {resp.status_code}: {detail}"}), 200
             except Exception as e:
@@ -1776,7 +1794,7 @@ def wallet_remove_key():
         return jsonify({"error": str(e)}), 500
 
 
-# â”€â”€ APPLICATION SYSTEM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ APPLICATION SYSTEM â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 def _run_match_analysis(app_id: str, resume_data: dict, job_details: dict, wallet: list):
     """Background thread: compute job match score and persist it on the application document."""
@@ -1786,7 +1804,7 @@ def _run_match_analysis(app_id: str, resume_data: dict, job_details: dict, walle
         if not (firebase_initialized and db):
             return
 
-        # Rule-based score â€” fast, no tokens needed
+        # Rule-based score  -" fast, no tokens needed
         rule_based: dict = {}
         rule_score = 0
         try:
@@ -1867,7 +1885,7 @@ def apply_to_job(job_id):
     candidate_name = data.get('candidateName') or request.user.get('name', 'Candidate')
     candidate_email = data.get('candidateEmail') or request.user.get('email', '')
     cover_letter = data.get('coverLetter', '')
-    # Capture wallet now â€” Flask g is not accessible from background threads
+    # Capture wallet now  -" Flask g is not accessible from background threads
     from ollama_utils import get_request_wallet
     candidate_wallet = get_request_wallet()
     try:
@@ -1949,7 +1967,7 @@ def apply_to_job(job_id):
                 except Exception as iv_err:
                     print(f"[apply] interview status error: {iv_err}")
 
-            # Launch background analysis â€” uses candidate's own API key, zero platform cost
+            # Launch background analysis  -" uses candidate's own API key, zero platform cost
             try:
                 import threading
                 job_details_for_analysis = {
@@ -2115,7 +2133,7 @@ def get_applications():
                 for jid in job_ids:
                     for adoc in db.collection('applications').where('jobId', '==', jid).stream():
                         if adoc.id not in seen_ids:
-                            a = adoc.to_dict(); a['id'] = adoc.id
+                            a = _json_safe(adoc.to_dict()); a['id'] = adoc.id
                             apps.append(a); seen_ids.add(adoc.id)
                 print(f"[get_applications] returning {len(apps)} applications for recruiter {recruiter_id!r}")
                 return jsonify({"applications": apps}), 200
@@ -2123,16 +2141,9 @@ def get_applications():
                 docs = db.collection('applications').where('candidateId', '==', candidate_id).stream()
                 apps = []
                 for doc in docs:
-                    a = doc.to_dict(); a['id'] = doc.id
-                    # Normalize appliedAt â†’ appliedDate string for the frontend
-                    applied_at = a.get('appliedAt')
-                    if applied_at is not None and not isinstance(applied_at, str):
-                        try:
-                            dt = applied_at if isinstance(applied_at, datetime.datetime) else applied_at.datetime
-                            a['appliedDate'] = f"{dt.strftime('%b')} {dt.day}" if hasattr(dt, 'strftime') else str(applied_at)
-                        except Exception:
-                            a['appliedDate'] = ''
+                    a = _json_safe(doc.to_dict()); a['id'] = doc.id
                     apps.append(a)
+                print(f"[get_applications] returning {len(apps)} applications for candidate {candidate_id!r}")
                 return jsonify({"applications": apps}), 200
             return jsonify({"applications": []}), 200
         return jsonify({"applications": []}), 200
@@ -2150,7 +2161,7 @@ def get_job_applications(job_id):
             docs = db.collection('applications').where('jobId', '==', job_id).stream()
             apps = []
             for doc in docs:
-                a = doc.to_dict(); a['id'] = doc.id; apps.append(a)
+                a = _json_safe(doc.to_dict()); a['id'] = doc.id; apps.append(a)
             return jsonify({"applications": apps}), 200
         return jsonify({"applications": []}), 200
     except Exception as e:
@@ -2166,7 +2177,7 @@ def get_application_by_id(app_id):
         if firebase_initialized and db:
             doc = db.collection('applications').document(app_id).get()
             if doc.exists:
-                a = doc.to_dict(); a['id'] = doc.id
+                a = _json_safe(doc.to_dict()); a['id'] = doc.id
                 return jsonify(a), 200
             return jsonify({"error": "Application not found"}), 404
         return jsonify({"error": "Database unavailable"}), 503
@@ -2337,7 +2348,7 @@ def get_chats():
         if firebase_initialized and db:
             seen_ids = set()
             chats = []
-            # Query both fields â€” a user can appear in either candidateId or recruiterId
+            # Query both fields  -" a user can appear in either candidateId or recruiterId
             # (same-role connections store one user in the "wrong" role field)
             for query_docs in [
                 db.collection('chats').where('candidateId', '==', uid).stream(),
@@ -2395,7 +2406,7 @@ def create_chat():
             chat_data['id'] = ref[1].id
             return jsonify({"status": "success", "chat": chat_data}), 201
 
-        return jsonify({"error": "Firebase not initialized â€” cannot create chat"}), 503
+        return jsonify({"error": "Firebase not initialized - cannot create chat"}), 503
     except Exception as e:
         print(f"Error creating chat: {e}")
         return jsonify({"error": str(e)}), 500
@@ -2453,7 +2464,7 @@ def send_chat_message(chat_id):
             })
             return jsonify({"status": "success", "message": msg_data}), 201
 
-        return jsonify({"error": "Firebase not initialized â€” cannot send message"}), 503
+        return jsonify({"error": "Firebase not initialized - cannot send message"}), 503
     except Exception as e:
         print(f"Error sending message: {e}")
         return jsonify({"error": str(e)}), 500
@@ -2855,13 +2866,13 @@ def get_users():
         from firebase_utils import db, firebase_initialized
         if firebase_initialized and db:
             def _mask_email(addr):
-                # jane.doe@gmail.com -> jâ€¢â€¢â€¢@gmail.com â€” enough to disambiguate,
+                # jane.doe@gmail.com -> j -¢ -¢ -¢@gmail.com  -" enough to disambiguate,
                 # not enough to harvest. Full contact info is only shared after
                 # a connection is accepted.
                 if not addr or '@' not in addr:
                     return ''
                 local, _, domain = addr.partition('@')
-                return f"{local[0]}â€¢â€¢â€¢@{domain}"
+                return f"{local[0]} -¢ -¢ -¢@{domain}"
 
             docs = db.collection('users').stream()
             for doc in docs:
@@ -2940,7 +2951,7 @@ def request_connection():
                 receiver_email = r_data.get('email', receiver_email)
                 receiver_role = r_data.get('role', receiver_role)
         else:
-            return jsonify({"error": "Firebase not initialized â€” cannot request connection"}), 503
+            return jsonify({"error": "Firebase not initialized - cannot request connection"}), 503
 
         now_str = datetime.datetime.utcnow().isoformat() + "Z"
         conn_data = {
@@ -3034,7 +3045,7 @@ def respond_connection(connection_id):
                 return jsonify({"error": "Connection record not found"}), 404
             conn_data = snap.to_dict()
         else:
-            return jsonify({"error": "Firebase not initialized â€” cannot respond to connection"}), 503
+            return jsonify({"error": "Firebase not initialized - cannot respond to connection"}), 503
 
         # Ensure only the receiver can respond
         if conn_data.get('receiverId') != current_uid:
@@ -3627,7 +3638,7 @@ def get_profile_completion(uid):
 
 
 # =============================================================================
-# EMAIL OTP â€” signup verification via Resend
+# EMAIL OTP  -" signup verification via Resend
 # =============================================================================
 
 @api_bp.route('/auth/send-email-otp', methods=['POST'])
@@ -3722,7 +3733,7 @@ def setup_2fa():
         else:
             user_email = uid
         uri = totp.provisioning_uri(name=user_email, issuer_name='CareerCraft')
-        # Store secret temporarily (unverified) â€” confirmed on /verify
+        # Store secret temporarily (unverified)  -" confirmed on /verify
         if firebase_initialized and db:
             db.collection('users').document(uid).set({'totp_secret_pending': secret}, merge=True)
         return jsonify({'secret': secret, 'uri': uri}), 200
@@ -3751,7 +3762,7 @@ def verify_2fa_setup():
             return jsonify({'error': '2FA setup not initiated'}), 400
         totp = pyotp.TOTP(secret)
         if not totp.verify(otp, valid_window=1):
-            return jsonify({'error': 'Invalid OTP â€” please try again'}), 401
+            return jsonify({'error': 'Invalid OTP  -" please try again'}), 401
         # Promote pending secret to active
         if firebase_initialized and db:
             db.collection('users').document(uid).set({
@@ -3782,7 +3793,7 @@ def validate_2fa():
             return jsonify({'valid': True}), 200  # bypass in mock mode
         secret = user_data.get('totp_secret', '')
         if not secret:
-            return jsonify({'valid': True}), 200   # 2FA not enabled â€” allow through
+            return jsonify({'valid': True}), 200   # 2FA not enabled  -" allow through
         totp = pyotp.TOTP(secret)
         valid = totp.verify(otp, valid_window=1)
         return jsonify({'valid': valid}), 200 if valid else 401
@@ -3862,7 +3873,7 @@ def auto_apply_log():
         return jsonify({"error": str(e)}), 500
 
 
-# â”€â”€â”€ Browser Extension Plugin Token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€ Browser Extension Plugin Token â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 @api_bp.route('/plugin/token', methods=['GET'])
 @require_auth
@@ -4018,7 +4029,7 @@ def record_plugin_applied():
         return jsonify({"error": str(e)}), 500
 
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# SUPER ADMIN MODULE â€” feature flags, platform stats, user & job management
+# SUPER ADMIN MODULE  -" feature flags, platform stats, user & job management
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 from firebase_utils import require_admin, is_admin_user
 
@@ -4064,7 +4075,7 @@ def feature_enabled(name: str) -> bool:
 @api_bp.route('/platform/config', methods=['GET'])
 @require_auth
 def platform_config():
-    """Public (authenticated) â€” the frontend uses this to hide disabled features."""
+    """Public (authenticated)  -" the frontend uses this to hide disabled features."""
     return jsonify({"features": get_platform_features()}), 200
 
 @api_bp.route('/admin/me', methods=['GET'])
@@ -4176,7 +4187,7 @@ def admin_list_jobs():
 
 
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# SOCIAL FEED â€” LinkedIn-style posts (behind the "feed" feature flag)
+# SOCIAL FEED  -" LinkedIn-style posts (behind the "feed" feature flag)
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def _feed_guard():
