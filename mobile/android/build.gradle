@@ -1,3 +1,11 @@
+// Expose flutter SDK values so plugin library subprojects can reference flutter.compileSdkVersion etc.
+ext.flutter = [
+    compileSdkVersion: 36,
+    targetSdkVersion : 36,
+    minSdkVersion    : 23,
+    ndkVersion       : '27.0.12077973',
+]
+
 allprojects {
     repositories {
         google()
