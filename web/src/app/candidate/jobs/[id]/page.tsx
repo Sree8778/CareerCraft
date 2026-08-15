@@ -7,7 +7,7 @@ import {
   MapPin, Briefcase, Clock, Sparkles,
   CheckCircle, RefreshCw, AlertCircle, ChevronLeft,
   Copy, Download, Check, X, TrendingUp, BookOpen, Code2,
-  PenLine, Plus, Zap, Save, ArrowRight,
+  PenLine, Plus, Zap, Save, ArrowRight, ListChecks,
 } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -100,6 +100,8 @@ export default function JobDetailPage() {
   const [coverLetter, setCoverLetter] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [screeningQuestions, setScreeningQuestions] = useState<any[]>([]);
+  const [screeningAnswers, setScreeningAnswers] = useState<Record<string, string>>({});
 
   // ATS analysis state
   const [atsScore, setAtsScore] = useState<number | null>(null);
@@ -146,6 +148,7 @@ export default function JobDetailPage() {
           emoji: d.emoji || '💼',
           companyLogo: d.companyLogo || '',
         });
+        setScreeningQuestions(d.screeningQuestions || []);
       } catch { toast.error('Failed to load job.'); }
       finally { setLoading(false); }
     })();
@@ -260,13 +263,17 @@ export default function JobDetailPage() {
       const r = await fetch(`${API}/jobs/${id}/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...await authHeader() },
-        body: JSON.stringify({ coverLetter, jobTitle: job?.title, company: job?.company, candidateName: user?.name, candidateEmail: user?.email, atsScore, resumeData }),
+        body: JSON.stringify({ coverLetter, jobTitle: job?.title, company: job?.company, candidateName: user?.name, candidateEmail: user?.email, atsScore, resumeData, screeningAnswers }),
       });
       const result = await r.json();
       if (r.status === 409) { toast.error('You already applied to this job.'); return; }
       if (!r.ok) throw new Error(result.error || 'Submission failed');
       setSubmitted(true);
-      toast.success('Application submitted!');
+      if (result.knocked_out) {
+        toast.error(`Application received, but you did not meet a required criterion: ${result.knockout_reason}`);
+      } else {
+        toast.success('Application submitted!');
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to submit.');
     } finally { setIsSubmitting(false); }
@@ -768,6 +775,54 @@ export default function JobDetailPage() {
 
                   {/* Cover letter + quick apply */}
                   <form onSubmit={handleApply} className="space-y-3">
+
+                    {/* Screening questions */}
+                    {screeningQuestions.length > 0 && (
+                      <div className="space-y-3">
+                        <p className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                          <ListChecks className="w-3.5 h-3.5 text-indigo-400" />
+                          Screening Questions
+                        </p>
+                        {screeningQuestions.map((q: any) => (
+                          <div key={q.id} className="bg-white/5 border border-white/10 rounded-xl p-3 space-y-2">
+                            <p className="text-xs text-zinc-200 font-medium leading-snug">
+                              {q.question}
+                              {q.knockout && <span className="ml-2 text-[10px] text-rose-400 font-bold uppercase tracking-wide">Required</span>}
+                            </p>
+                            {q.type === 'yesno' && (
+                              <div className="flex gap-2">
+                                {['yes', 'no'].map(opt => (
+                                  <button key={opt} type="button"
+                                    onClick={() => setScreeningAnswers(prev => ({ ...prev, [q.id]: opt }))}
+                                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                                      screeningAnswers[q.id] === opt
+                                        ? 'bg-indigo-600/30 border-indigo-500/60 text-indigo-200'
+                                        : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
+                                    }`}>
+                                    {opt === 'yes' ? 'Yes' : 'No'}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {q.type === 'number' && (
+                              <input type="number" min="0"
+                                value={screeningAnswers[q.id] || ''}
+                                onChange={e => setScreeningAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                                placeholder="Enter a number"
+                                className="w-full bg-white/5 border border-white/10 focus:border-indigo-500/60 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none transition" />
+                            )}
+                            {q.type === 'text' && (
+                              <input type="text"
+                                value={screeningAnswers[q.id] || ''}
+                                onChange={e => setScreeningAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                                placeholder="Your answer…"
+                                className="w-full bg-white/5 border border-white/10 focus:border-indigo-500/60 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none transition" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label className="text-xs font-semibold text-zinc-300">Cover Letter</label>

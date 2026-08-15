@@ -1885,6 +1885,7 @@ def apply_to_job(job_id):
     candidate_name = data.get('candidateName') or request.user.get('name', 'Candidate')
     candidate_email = data.get('candidateEmail') or request.user.get('email', '')
     cover_letter = data.get('coverLetter', '')
+    screening_answers = data.get('screeningAnswers', {})
     # Capture wallet now  -" Flask g is not accessible from background threads
     from ollama_utils import get_request_wallet
     candidate_wallet = get_request_wallet()
@@ -1894,6 +1895,7 @@ def apply_to_job(job_id):
         company = data.get('company', '')
         recruiter_id = ''
         jd: dict = {}
+        knockout_reason = None
         if firebase_initialized and db:
             # Always fetch the job from Firestore to get the authoritative recruiterId
             jdoc = db.collection('jobs').document(job_id).get()
@@ -1912,13 +1914,40 @@ def apply_to_job(job_id):
             if already:
                 return jsonify({"error": "You have already applied to this job."}), 409
 
+            # Knockout check — reject immediately if a required question has wrong answer
+            knockout_reason = None
+            for q in jd.get('screeningQuestions', []):
+                if not q.get('knockout'):
+                    continue
+                qid = q.get('id', '')
+                answer = str(screening_answers.get(qid, '')).lower().strip()
+                if q.get('type') == 'yesno':
+                    ideal = str(q.get('idealAnswer', '')).lower()
+                    if ideal and answer and answer != ideal:
+                        knockout_reason = f"Does not meet minimum requirement: {q.get('question', 'screening question')}"
+                        break
+                elif q.get('type') == 'number':
+                    min_val = q.get('minValue', '')
+                    try:
+                        if min_val and answer and float(answer) < float(min_val):
+                            knockout_reason = f"Does not meet minimum requirement: {q.get('question', 'screening question')}"
+                            break
+                    except ValueError:
+                        pass
+
+            initial_status = 'Rejected' if knockout_reason else 'Applied'
             app_data = {
                 "candidateId": candidate_id, "candidateName": candidate_name,
                 "candidateEmail": candidate_email, "jobId": job_id,
                 "jobTitle": job_title, "company": company, "recruiterId": recruiter_id,
-                "coverLetter": cover_letter, "status": "Applied",
-                "appliedDate": datetime.datetime.utcnow().strftime('%Y-%m-%d'), "recruiterNotes": ""
+                "coverLetter": cover_letter, "status": initial_status,
+                "appliedDate": datetime.datetime.utcnow().strftime('%Y-%m-%d'),
+                "recruiterNotes": knockout_reason or "",
+                "screeningAnswers": screening_answers,
             }
+            if knockout_reason:
+                app_data["knockedOut"] = True
+                app_data["knockoutReason"] = knockout_reason
             ref = db.collection('applications').add(app_data)
             app_data['id'] = ref[1].id
             print(f"[apply] saved application {app_data['id']} with recruiterId={recruiter_id!r}")
@@ -1990,9 +2019,14 @@ def apply_to_job(job_id):
                 "id": str(uuid.uuid4()), "candidateId": candidate_id, "candidateName": candidate_name,
                 "candidateEmail": candidate_email, "jobId": job_id, "jobTitle": job_title,
                 "company": company, "recruiterId": recruiter_id, "coverLetter": cover_letter,
-                "status": "Applied", "appliedDate": datetime.datetime.utcnow().strftime('%Y-%m-%d'), "recruiterNotes": ""
+                "status": "Applied", "appliedDate": datetime.datetime.utcnow().strftime('%Y-%m-%d'),
+                "recruiterNotes": "", "screeningAnswers": screening_answers,
             }
-        return jsonify({"status": "success", "application": app_data}), 201
+        resp = {"status": "success", "application": app_data}
+        if knockout_reason:
+            resp["knocked_out"] = True
+            resp["knockout_reason"] = knockout_reason
+        return jsonify(resp), 201
     except Exception as e:
         print(f"Error applying to job: {e}")
         return jsonify({"error": str(e)}), 500
